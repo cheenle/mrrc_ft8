@@ -83,6 +83,11 @@ body {
 .candidate:hover { background: var(--edge); }
 .candidate.selected { background: #22405c; }
 .candidate.stale { opacity: 0.4; }
+.separator {
+  padding: 4px 12px; text-align: center; color: var(--dim);
+  border-bottom: 1px solid var(--edge); font-size: 0.85em;
+  letter-spacing: 0.05em; user-select: none;
+}
 .candidate .snr { color: var(--dim); font-variant-numeric: tabular-nums; }
 
 /* ---- bottom state bar (NFR-063: safety state never hidden) ---- */

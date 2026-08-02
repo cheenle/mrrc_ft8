@@ -93,16 +93,19 @@ def test_waterfall_resize_compares_floored_dimensions() -> None:
     assert "canvas.height !== rect.height" not in js
 
 
-def test_decode_dedup_scopes_to_callsign() -> None:
-    """Band Activity keeps one row per station, newest decode wins (WSJT-X
-    style). Keying by raw text alone would freeze stations whose CQ text
-    repeats verbatim every slot, and rows without fresh timestamps would
-    stop scrolling; replayed history batches must refresh rows too."""
+def test_decode_feed_is_chronological_with_slot_separators() -> None:
+    """The decode list is a chronological feed (WSJT-X main window style):
+    every message is a row, each 15 s slot is headed by a separator carrying
+    the slot UTC and the dial frequency, and a re-applied slot replaces
+    rather than duplicates its rows (live batch + reconnect replay)."""
 
-    js = (STATIC / "js" / "state.js").read_text()
-    assert "m.call || m.text" in js  # per-station identity, not raw text
-    assert "slot_id" in js           # rows keep their slot for the UTC column
-    assert "_t" in js                # newest-wins ordering key
+    state = (STATIC / "js" / "state.js").read_text()
+    assert "slot_id * 15_000" in state             # row time from the slot itself
+    assert "c.slot_id !== batch.slot_id" in state  # slot replacement, not dup
+    candidates = (STATIC / "js" / "candidates.js").read_text()
+    assert "separator" in candidates and "freq_hz" in candidates
+    css = (STATIC / "css" / "app.css").read_text()
+    assert ".separator" in css
 
 
 def test_service_worker_cache_is_versioned() -> None:

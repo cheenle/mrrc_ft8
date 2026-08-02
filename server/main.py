@@ -475,6 +475,24 @@ def create_server(
 
         tasks.append(asyncio.create_task(lease_watchdog()))
         tasks.append(asyncio.create_task(maintenance()))
+
+        RIG_POLL_S = 5.0
+
+        async def rig_poll() -> None:
+            # Slow dial-frequency poll feeding the snapshot's radio view;
+            # poll failures keep the last value and never fault (§12
+            # monitor-only posture for display-only data).
+            while True:
+                await asyncio.sleep(RIG_POLL_S)
+                try:
+                    freq_hz, _ = await state.rig.get_frequency()
+                    if freq_hz != state.radio_freq_hz:
+                        state.radio_freq_hz = freq_hz
+                        state.state_broadcast.publish(_snapshot(state, None))
+                except Exception:
+                    log.debug("rig frequency poll failed", exc_info=True)
+
+        tasks.append(asyncio.create_task(rig_poll()))
         try:
             yield
         finally:

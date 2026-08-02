@@ -103,6 +103,7 @@ class AppState:
     idempotency: IdempotencyCache = field(default_factory=IdempotencyCache)
     selected: ParsedMessage | None = None
     selected_snr_db: int | None = None
+    radio_freq_hz: int | None = None  # last polled dial frequency, if rig is up
 
     def bump(self) -> int:
         self.revision += 1
@@ -575,6 +576,7 @@ def _snapshot(state: AppState, session: Session | None) -> dict[str, Any]:
             if state.selected is None
             else {"call": state.selected.from_call, "grid": state.selected.grid}
         ),
+        "radio": {"freq_hz": state.radio_freq_hz},
     }
     if state.orchestrator is not None:
         counters = state.orchestrator.counters

@@ -18,24 +18,40 @@ function rowText(c) {
 export function createCandidates(listElement) {
   const STALE_AFTER_MS = 10 * 60_000;
 
+  function separatorText(slotId, freqHz) {
+    const utc = slotUtc(slotId);
+    return freqHz
+      ? `── ${(freqHz / 1e6).toFixed(3)} MHz ─ ${utc} UTC ──`
+      : `── ${utc} UTC ──`;
+  }
+
   function render() {
-    const { candidates, selected } = getState();
+    const { candidates, selected, radio } = getState();
     const now = Date.now();
-    listElement.replaceChildren(
-      ...candidates.map((candidate) => {
-        const item = document.createElement("li");
-        item.className = "candidate";
-        if (candidate.is_cq) item.classList.add("cq");
-        if (candidate.to_me) item.classList.add("to-me");
-        if (candidate.late) item.classList.add("late");
-        if (now - (candidate._t || 0) > STALE_AFTER_MS) item.classList.add("stale");
-        if (selected && selected.call === candidate.call) item.classList.add("selected");
-        item.textContent = rowText(candidate);
-        item.addEventListener("click", () => select(candidate));
-        item.addEventListener("dblclick", () => reply(candidate));
-        return item;
-      }),
-    );
+    const freqHz = radio && radio.freq_hz;
+    const items = [];
+    let previousSlot = null;
+    for (const candidate of candidates) {
+      if (candidate.slot_id !== previousSlot) {
+        previousSlot = candidate.slot_id;
+        const separator = document.createElement("li");
+        separator.className = "separator";
+        separator.textContent = separatorText(candidate.slot_id, freqHz);
+        items.push(separator);
+      }
+      const item = document.createElement("li");
+      item.className = "candidate";
+      if (candidate.is_cq) item.classList.add("cq");
+      if (candidate.to_me) item.classList.add("to-me");
+      if (candidate.late) item.classList.add("late");
+      if (now - (candidate._t || 0) > STALE_AFTER_MS) item.classList.add("stale");
+      if (selected && selected.call === candidate.call) item.classList.add("selected");
+      item.textContent = rowText(candidate);
+      item.addEventListener("click", () => select(candidate));
+      item.addEventListener("dblclick", () => reply(candidate));
+      items.push(item);
+    }
+    listElement.replaceChildren(...items);
   }
 
   async function select(candidate) {
