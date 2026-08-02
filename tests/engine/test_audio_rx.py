@@ -364,3 +364,18 @@ def test_capture_anchors_blocks_to_adc_hardware_time() -> None:
     stream.callback(block, 48_000, adc_time_info(506.0), None)
     assert ring.metrics.gaps == 1
     assert ring.high_water == first_base + 5 * 12_000 + 12_000
+
+
+def test_capture_resolves_device_name_to_index(monkeypatch) -> None:
+    """Name-opened CoreAudio streams die ~60-90 s in on the FT-710 UAC
+    (2026-08-03 A/B); names must be resolved to indexes before opening."""
+
+    import sys
+
+    fake_sd = SimpleNamespace(
+        InputStream=lambda **kwargs: FakeStream(**kwargs),
+        query_devices=lambda name: {"index": 4},
+    )
+    monkeypatch.setitem(sys.modules, "sounddevice", fake_sd)
+    capture = AudioCapture(UtcRing(), device="USB Audio Device")
+    assert capture._stream_kwargs["device"] == 4

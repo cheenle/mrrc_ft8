@@ -196,6 +196,15 @@ class AudioCapture:
             import sounddevice
 
             stream_factory = sounddevice.InputStream
+            if isinstance(device, str):
+                # Resolve name → index once here.  Field finding 2026-08-03:
+                # on this Mac (FT-710 UAC), a stream opened *by name* dies
+                # ~60-90 s in (content goes stale, decodes die) while the
+                # same device opened *by index* runs for hours — reproduced
+                # A/B within the same minute.  The morning-healthy server
+                # used device=None (index path); the curse began when .env
+                # started passing the name.
+                device = sounddevice.query_devices(device)["index"]
         self._ring = ring
         self._converter = converter or RxConverter()
         self._clock = clock

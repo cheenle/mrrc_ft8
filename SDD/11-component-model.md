@@ -127,6 +127,7 @@ signal and is never part of the production surface.
 | `cq_loop.py` | Automatic CQ loop: DONE/retry/partner-loss re-arm, lease/idle/manual/fault stop |
 | `qso_log.py` | Sequencer log record → canonical QSO store offload |
 | `audio_rx.py` | 48 kHz capture, one 4:1 conversion, UTC ring and overrun metrics |
+| `capture_proc.py` | Isolated capture subprocess + parent supervisor (fresh-session restart on stall/death) |
 | `audio_tx.py` | Bounded 48 kHz playback with cancellation |
 | `waterfall.py` | Spectrum frames and lossy fan-out input |
 | `rig.py` | Async rigctld TCP client only |

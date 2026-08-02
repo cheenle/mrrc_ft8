@@ -119,7 +119,9 @@ epoch wiring anchored to the CoreAudio ADC hardware timestamp (a delivery
 stall becomes one recorded gap, never a permanent time shift of every
 later slot), overflow
 counting, idempotent stop, and stop→start stream recreation (the degraded-
-session bounce). The capture-health monitor is pinned for cold-band silence,
+session bounce). The isolated-capture suites pin the child frame contract
+(seq/epoch/payload over the pipe), parent consumption into ring and tap,
+and watchdog restart of a dead child with generation increments. The capture-health monitor is pinned for cold-band silence,
 healthy decodes, the once-per-episode hot-but-silent streak edge, recovery
 reset and the threshold boundary. The production-decoder suite runs a fake
 supervisor that validates every frame against the real Protocol v1 schema,

@@ -30,7 +30,8 @@ import numpy as np
 from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 
-from .engine.audio_rx import AudioCapture, CaptureHealthMonitor, UtcRing
+from .engine.audio_rx import CaptureHealthMonitor, UtcRing
+from .engine.capture_proc import CaptureProcess
 from .engine.dsp_decode import SupervisorDecoder
 from .engine.latency import LatencyHistogram
 from .engine.orchestrator import Orchestrator
@@ -264,7 +265,7 @@ def create_server(
         on_audit=cq_loop_audit,
     )
 
-    capture: AudioCapture | None = None
+    capture: CaptureProcess | None = None
     orchestrator: Orchestrator | None = None
     supervisor: Any = None
     supervisor_decoder: SupervisorDecoder | None = None
@@ -280,7 +281,7 @@ def create_server(
             for frame in computer.push(samples, epoch):
                 state.waterfall_fanout.publish(frame)
 
-        capture = AudioCapture(ring, device=config.audio_device, tap=waterfall_tap)
+        capture = CaptureProcess(ring, device=config.audio_device, tap=waterfall_tap)
 
     if start_dsp:
         from .core.models import DecodeConfig, auto_thread_count
@@ -330,12 +331,11 @@ def create_server(
             )
             if capture_bounces <= MAX_CAPTURE_BOUNCES:
                 log.critical(
-                    "reopening capture stream (%d/%d)",
+                    "restarting capture process (%d/%d)",
                     capture_bounces,
                     MAX_CAPTURE_BOUNCES,
                 )
-                await asyncio.to_thread(capture.stop)
-                await asyncio.to_thread(capture.start)
+                await asyncio.to_thread(capture.restart)
             else:
                 log.critical(
                     "capture bounce limit reached; manual intervention required"
@@ -351,14 +351,14 @@ def create_server(
                 )
             if log.isEnabledFor(logging.DEBUG):
                 log.debug(
-                    "ring slot %d: %s base=%s high=%s gaps=%d dropped=%d overruns=%d",
+                    "ring slot %d: %s base=%s high=%s gaps=%d dropped=%d caprestarts=%d",
                     slot_id,
                     "hit" if data is not None else "MISS",
                     slot_ring.base,
                     slot_ring.high_water,
                     slot_ring.gap_count,
                     slot_ring.metrics.dropped_samples,
-                    capture.overruns if capture is not None else -1,
+                    capture.restart_count if capture is not None else -1,
                 )
             return data
 
@@ -366,6 +366,12 @@ def create_server(
             nonlocal capture_bounces
             if capture is not None:
                 rms = slot_rms.get(slot_decode.slot_id, 0.0)
+                log.debug(
+                    "monitor feed: slot %d rms=%.0f msgs=%d",
+                    slot_decode.slot_id,
+                    rms,
+                    len(slot_decode.messages),
+                )
                 if slot_decode.messages:
                     capture_bounces = 0  # healthy session: reset self-heal budget
                 if capture_health.observe(rms, len(slot_decode.messages)):

@@ -1,5 +1,9 @@
 # 14. Version History
 
+## Unreleased — 2026-08-03 — Isolated Capture Process
+
+- Audio capture moved into a supervised subprocess (`capture_proc.py`), mirroring the DSP Worker isolation. Overnight A/B evidence: the server process's own CoreAudio stream silently degrades ~60 s in (content permanently ~10.5 s stale, decodes die, ring metrics stay green) and in-process stream recreation never heals it, while any fresh process — direct or spawn child — captures the same device indefinitely. The child reuses `AudioCapture` verbatim and forwards every converted block as a `(seq, epoch, payload)` tuple; the parent's reader thread feeds the unchanged `UtcRing` and waterfall tap (moving the FFT off the audio callback thread); a watchdog restarts a dead or stalled child with bounded backoff. The `CaptureHealthMonitor` recovery action is now a child-process restart — a guaranteed-fresh capture session — with the AUDIO interlock latch and three-per-episode budget unchanged.
+
 ## Unreleased — 2026-08-03 — RX Timestamp Root Cause
 
 - Decode list UX rework per operator request: the candidate list is now a chronological feed (WSJT-X main window style) — every message a row, newest slot on top, each 15 s slot headed by a separator carrying the slot UTC and the dial frequency. The dial frequency comes from a new 5 s rig poll feeding `radio.freq_hz` in the state snapshot (display-only; poll failures never fault). Re-applied slots replace their rows, so reconnect replay can no longer duplicate entries; stale-row aging is unchanged.
