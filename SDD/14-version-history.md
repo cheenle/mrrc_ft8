@@ -1,5 +1,9 @@
 # 14. Version History
 
+## Unreleased — 2026-08-03 — FT8 Band Selector (7/14/21/28 MHz)
+
+- Added a band `<select>` in the cockpit top bar (left of the decode-counter hourglass): 7/14/21/28 MHz, tuned to the FT8 dial frequencies (7.074 / 14.074 / 21.074 / 28.074 MHz) via the existing lease-gated `/radio/band` mutation. Selection acquires a free control lease implicitly (UC-002, same as a candidate tap), rejects while TX is armed, toasts failures and reverts to the last known rig frequency. The control reflects the rig's polled dial frequency when it lands on one of the four bands; `band.js` populates the options so `index.html` stays logic-free.
+
 ## Unreleased — 2026-08-03 — Waterfall Bandwidth = 3 kHz
 
 - `SpectrumComputer` emitted the full `0..rate/2` (0..6 kHz) spectrum, so the upper half of the waterfall canvas was always blank (the FT8 passband is ~0..3 kHz). The frame now emits only `DISPLAY_BANDWIDTH_HZ` (3.0 kHz) of bins; the client maps whatever bins it receives across the full canvas, so the span fills with no blank half (and the frame payload halves). Configurable via `display_bandwidth_hz`; validated to stay within `0..rate/2`. Regression: emitted span is ~3 kHz, not 6 kHz.

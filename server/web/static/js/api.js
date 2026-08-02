@@ -56,6 +56,12 @@ export const api = {
   reply: () => request("/operation/reply", { method: "POST", idempotencyKey: key() }),
   cq: (loop = false) =>
     request("/operation/cq", { method: "POST", idempotencyKey: key(), body: { loop } }),
+  band: (freqHz) =>
+    request("/radio/band", {
+      method: "POST",
+      idempotencyKey: key(),
+      body: { freq_hz: freqHz },
+    }),
   txOff: () => request("/operation/enable_tx_off", { method: "POST", idempotencyKey: key() }),
   stop: () => request("/operation/stop", { method: "POST", idempotencyKey: key() }),
   clearFault: (interlock) =>
