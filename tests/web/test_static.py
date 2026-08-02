@@ -204,3 +204,20 @@ def test_all_js_modules_parse_as_esm() -> None:
         text = module.read_text()
         assert "export " in text or module.name == "main.js"
         assert "require(" not in text  # no CommonJS in the build-step-free PWA
+
+
+def test_stale_display_is_visibly_marked() -> None:
+    """A dead stream must not look live: the waterfall canvas dims while its
+    WS is offline (a frozen canvas impersonates a live band — 2026-08-02
+    field confusion), candidate rows age into a stale class, and row time is
+    the slot's own time so replayed history cannot re-float to the top."""
+
+    wf = (STATIC / "js" / "waterfall.js").read_text()
+    assert 'classList.toggle("offline"' in wf and "connected" in wf
+    css = (STATIC / "css" / "app.css").read_text()
+    assert "#waterfall-canvas.offline" in css
+    assert ".candidate.stale" in css
+    candidates = (STATIC / "js" / "candidates.js").read_text()
+    assert "STALE_AFTER_MS" in candidates
+    state = (STATIC / "js" / "state.js").read_text()
+    assert "slot_id * 15_000" in state

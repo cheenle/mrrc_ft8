@@ -16,8 +16,11 @@ function rowText(c) {
 }
 
 export function createCandidates(listElement) {
+  const STALE_AFTER_MS = 10 * 60_000;
+
   function render() {
     const { candidates, selected } = getState();
+    const now = Date.now();
     listElement.replaceChildren(
       ...candidates.map((candidate) => {
         const item = document.createElement("li");
@@ -25,6 +28,7 @@ export function createCandidates(listElement) {
         if (candidate.is_cq) item.classList.add("cq");
         if (candidate.to_me) item.classList.add("to-me");
         if (candidate.late) item.classList.add("late");
+        if (now - (candidate._t || 0) > STALE_AFTER_MS) item.classList.add("stale");
         if (selected && selected.call === candidate.call) item.classList.add("selected");
         item.textContent = rowText(candidate);
         item.addEventListener("click", () => select(candidate));
@@ -65,5 +69,7 @@ export function createCandidates(listElement) {
   }
 
   subscribe(render);
+  // Re-render on a slow tick so quiet-band rows visibly age into "stale".
+  setInterval(render, 30_000);
   render();
 }

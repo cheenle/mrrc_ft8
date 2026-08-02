@@ -71,6 +71,7 @@ body {
 }
 #waterfall-pane { position: relative; min-width: 0; }
 #waterfall-canvas { position: absolute; inset: 0; width: 100%; height: 100%; }
+#waterfall-canvas.offline { opacity: 0.25; filter: grayscale(1); }
 #candidates-pane {
   background: var(--panel); border-left: 1px solid var(--edge); overflow-y: auto;
 }
@@ -81,6 +82,7 @@ body {
 }
 .candidate:hover { background: var(--edge); }
 .candidate.selected { background: #22405c; }
+.candidate.stale { opacity: 0.4; }
 .candidate .snr { color: var(--dim); font-variant-numeric: tabular-nums; }
 
 /* ---- bottom state bar (NFR-063: safety state never hidden) ---- */

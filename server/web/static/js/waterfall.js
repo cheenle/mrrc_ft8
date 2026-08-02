@@ -1,5 +1,7 @@
 // Waterfall canvas renderer for compact WF01 binary frames (§10.2).
 
+import { subscribe } from "./state.js";
+
 const HEADER_BYTES = 22; // "<4sIQfH": magic, seq, epoch_ms, bin_hz, count
 
 export function parseFrame(buffer) {
@@ -31,6 +33,13 @@ function colorFor(value) {
 export function createWaterfall(canvas) {
   const ctx = canvas.getContext("2d");
   let lastSeq = null;
+
+  // A dead waterfall stream leaves the canvas frozen on the last frames,
+  // which looks exactly like a live band (2026-08-02 field confusion).
+  // Dim it so stale pixels are obviously not live.
+  subscribe(({ connected }) => {
+    canvas.classList.toggle("offline", !(connected && connected.waterfall));
+  });
 
   function resize() {
     const rect = canvas.getBoundingClientRect();

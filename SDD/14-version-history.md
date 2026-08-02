@@ -2,6 +2,7 @@
 
 ## Unreleased — 2026-08-02 — Capture Self-Healing and Debug Logging
 
+- Stale-display hardening on the cockpit: the waterfall canvas now dims and desaturates while its WebSocket is offline (a frozen canvas used to impersonate a live band), candidate rows age into a dimmed `stale` class after ten minutes on a slow re-render tick, and row time is derived from the slot itself so replayed decode history can no longer re-float old stations to the top as if freshly decoded.
 - Added RX-chain debug logging (`MRRC_FT8_LOG_LEVEL`, `restart.sh` defaults to DEBUG): per-slot ring state (base/high_water/gaps/dropped/overruns), per-message decode detail, decode-broadcast publish/replay counts, and capture re-anchor/overflow events.
 - Root-caused the recurring dead-decode incidents with that evidence: a USB capture session can silently degrade mid-run — slot content time-shifted by a constant (~6 s/~10.5 s measured), zero-tailed, or looping a stale buffer — while ring metrics stay perfect and PortAudio reports no overflow. Fresh streams on the same device are always clean; degraded sessions never recover by themselves.
 - Added `CaptureHealthMonitor` (four consecutive hot-band, zero-decode slots) wired in the composition root: on detection it latches the AUDIO interlock (TX disarms; manual clear/re-arm still required, §12) and automatically reopens the capture stream in monitor state, at most three bounces per episode. `AudioCapture.start()` now recreates a stopped stream.

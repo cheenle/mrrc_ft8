@@ -187,8 +187,11 @@ loop flag on the CQ intent. The candidate-tap contract pins that a tap on a
 decode row never fails silently: a free control lease is taken implicitly
 (WSJT-X-style single tap) and every rejection surfaces through the toast,
 whose element/styles/module are pinned into the app shell; the login form is
-pinned to carry a visually-hidden username field for password managers. The
-composition suite runs the
+pinned to carry a visually-hidden username field for password managers. A
+stale-display contract pins that dead streams cannot impersonate a live
+band: the waterfall canvas dims while its WS is offline, candidate rows age
+into a stale class on a slow tick, and row time derives from the slot
+itself so replayed history never re-floats to the top. The composition suite runs the
 real lifespan through TestClient: monitor-only startup with PTT-off,
 `ABORTED_RESTART` marking of seeded interrupted QSOs, dead-man wiring from
 lease disconnect to priority STOP, STOP-first shutdown and static shell
