@@ -1,0 +1,33 @@
+{
+  "version": 2,
+  "description": "MRRC-FT8 routing index. References resolve live from SDD/; no duplicated SDD content.",
+  "chapters": {
+    "1": {"file":"SDD/01-executive-summary.md","title":"Executive Summary"},
+    "2": {"file":"SDD/02-business-direction.md","title":"Business Direction"},
+    "3": {"file":"SDD/03-project-definition.md","title":"Project Definition"},
+    "4": {"file":"SDD/04-system-context.md","title":"System Context"},
+    "5": {"file":"SDD/05-non-functional-requirements.md","title":"Non-Functional Requirements"},
+    "6": {"file":"SDD/06-use-case-model.md","title":"Use Cases"},
+    "7": {"file":"SDD/07-subject-area-model.md","title":"Subject Area Model"},
+    "8": {"file":"SDD/08-architecture-decisions.md","title":"Architecture Decisions"},
+    "9": {"file":"SDD/09-architecture-overview.md","title":"Architecture Overview"},
+    "10":{"file":"SDD/10-service-model.md","title":"Service Model"},
+    "11":{"file":"SDD/11-component-model.md","title":"Component Model"},
+    "12":{"file":"SDD/12-operational-model.md","title":"Operational Model"},
+    "13":{"file":"SDD/13-feasibility-assessment.md","title":"Feasibility Assessment"},
+    "14":{"file":"SDD/14-version-history.md","title":"Version History"},
+    "15":{"file":"SDD/15-ptt-safety-architecture.md","title":"PTT Safety Architecture"}
+  },
+  "topics": [
+    {"id":"dsp-worker","globs":["dsp/**","server/core/**"],"keywords":["dsp","fortran","ft8var","openmp","abi","worker","解码","编码"],"refs":["ad:AD-002","ad:AD-003","ad:AD-005","nfr:NFR-001","nfr:NFR-007","nfr:NFR-021","nfr:NFR-081","risk:R1","risk:R2","risk:R3","risk:R4","sc:SC1","sc:SC3"]},
+    {"id":"audio-timing","globs":["server/engine/audio_rx.py","server/engine/audio_tx.py","server/engine/orchestrator.py","server/engine/waterfall.py"],"keywords":["audio","waterfall","slot","utc","timing","sample","音频","瀑布","时隙"],"refs":["ad:AD-004","ad:AD-006","nfr:NFR-004","nfr:NFR-006","nfr:NFR-007","nfr:NFR-008","nfr:NFR-009","risk:R5","risk:R6"]},
+    {"id":"rig-ptt-safety","globs":["server/engine/rig.py","server/engine/safety.py","server/engine/sequencer.py"],"keywords":["rig","rigctld","ptt","tx","stop","watchdog","lease","发射","安全"],"refs":["ad:AD-007","ad:AD-008","ad:AD-010","ad:AD-012","ch:15","nfr:NFR-050","nfr:NFR-051","nfr:NFR-052","nfr:NFR-055","nfr:NFR-056","uc:UC-005","uc:UC-006","uc:UC-007","sc:SC4","sc:SC5","sc:SC6"]},
+    {"id":"auth-lease-api","globs":["server/web/**/*.py","server/main.py"],"keywords":["auth","password","cookie","origin","caddy","lease","websocket","api","认证","租约","公网"],"refs":["ad:AD-009","ad:AD-010","ad:AD-013","nfr:NFR-030","nfr:NFR-033","nfr:NFR-034","nfr:NFR-035","nfr:NFR-037","nfr:NFR-038","uc:UC-001","uc:UC-002","uc:UC-006","risk:R7","risk:R8","sc:SC5","sc:SC8"]},
+    {"id":"frontend","globs":["server/web/static/**"],"keywords":["frontend","mobile","landscape","ui","touch","pwa","横屏","界面","菜单"],"refs":["ad:AD-011","ad:AD-013","nfr:NFR-060","nfr:NFR-061","nfr:NFR-062","nfr:NFR-063","nfr:NFR-065","sc:SC7"]},
+    {"id":"persistence-diagnostics","globs":["server/engine/repository.py","server/engine/adif.py"],"keywords":["sqlite","adif","log","audit","diagnostic","retention","日志","诊断","保留"],"refs":["ad:AD-014","nfr:NFR-071","nfr:NFR-072","nfr:NFR-073","nfr:NFR-074","nfr:NFR-075","uc:UC-009","uc:UC-010","risk:R10"]},
+    {"id":"deployment","globs":["packaging/**","Caddyfile*","**/*.service","**/*.plist"],"keywords":["deploy","caddy","launchagent","systemd","linux","macos","部署"],"refs":["ad:AD-015","ch:12","nfr:NFR-030","nfr:NFR-031","nfr:NFR-083","risk:R9","sc:SC9","sc:SC10"]},
+    {"id":"testing","globs":["tests/**"],"keywords":["test","pytest","regression","fault","测试","回归"],"refs":["sc:SC1","sc:SC3","sc:SC4","sc:SC5","sc:SC6","sc:SC8","sc:SC9","sc:SC10","sec:13.6"]},
+    {"id":"sdd-docs","globs":["SDD/**","docs/superpowers/**",".agents/skills/sdd-guardian/**"],"keywords":["sdd","spec","design","plan","guardian","设计","计划"],"refs":["nfr:NFR-084","ch:14"]},
+    {"id":"scope","globs":[],"keywords":["scope","milestone","requirement","feature","范围","里程碑","需求"],"refs":["sec:3.2","sec:3.3","sec:3.4","sec:3.5","sec:13.6"]}
+  ]
+}

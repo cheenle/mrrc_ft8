@@ -1,0 +1,138 @@
+{
+  "version": 2,
+  "sdd_version": "V1.0",
+  "description": "Machine-readable MRRC-FT8 constraints distilled from SDD V1.0 and AGENTS.md.",
+  "rules": [
+    {
+      "id": "vendor-readonly",
+      "title": "WSJT-X vendor tree is immutable",
+      "severity": "block",
+      "sdd_ref": "NFR-080; AD-002",
+      "scope": ["wsjtx-3.0.2/**"],
+      "exclude_scope": [],
+      "patterns": ["."],
+      "message": "Do not modify wsjtx-3.0.2/. Put required copies under dsp/patched/ and register the difference in SDD chapter 11 and AGENTS.md."
+    },
+    {
+      "id": "no-direct-ctypes",
+      "title": "ctypes DSP loading only in binding.py",
+      "severity": "block",
+      "sdd_ref": "AD-003; AD-005; NFR-081",
+      "scope": ["server/**/*.py"],
+      "exclude_scope": ["server/core/binding.py", "tests/**", ".agents/**"],
+      "patterns": ["ctypes\\.(CDLL|PyDLL|WinDLL)", "from\\s+ctypes\\s+import\\s+(CDLL|PyDLL|WinDLL)"],
+      "message": "All shared-library loading and ABI calls belong in server/core/binding.py and execute only inside the DSP Worker."
+    },
+    {
+      "id": "decoder-forbidden-rates",
+      "title": "Decoder input is 12 kHz int16 mono",
+      "severity": "block",
+      "sdd_ref": "AD-004; NFR-007",
+      "scope": ["server/core/**/*.py", "dsp/**/*.f90", "dsp/**/*.c", "dsp/**/*.cpp"],
+      "exclude_scope": ["tests/**", ".agents/**"],
+      "patterns": ["decode[^\\n]{0,80}(16000|44100|48000|96000)", "(16000|44100|48000|96000)[^\\n]{0,80}decode"],
+      "message": "No non-12 kHz rate may cross the decode ABI. TX 48 kHz belongs to waveform generation, not decode input."
+    },
+    {
+      "id": "no-direct-serial",
+      "title": "rigctld is the sole serial owner",
+      "severity": "block",
+      "sdd_ref": "AD-008",
+      "scope": ["server/**/*.py"],
+      "exclude_scope": ["tests/**", ".agents/**"],
+      "patterns": ["serial\\.Serial\\(", "from\\s+serial\\s+import", "open\\([^\\n]{0,40}[\"']/dev/(cu|tty)"],
+      "message": "Application modules speak Hamlib TCP through server/engine/rig.py; they never open the CAT serial device."
+    },
+    {
+      "id": "ptt-authority",
+      "title": "PTT is controlled only by rig and safety components",
+      "severity": "block",
+      "sdd_ref": "AD-007; NFR-050; chapter 15",
+      "scope": ["server/**/*.py"],
+      "exclude_scope": ["server/engine/rig.py", "server/engine/safety.py", "tests/**", ".agents/**"],
+      "patterns": ["\\bset_ptt\\s*\\(", "\\bptt_(on|off)\\s*\\("],
+      "message": "No Web, DSP or sequencer module may key PTT directly. Route intent through the central safety controller."
+    },
+    {
+      "id": "no-url-token",
+      "title": "Authentication credentials never appear in URLs",
+      "severity": "block",
+      "sdd_ref": "AD-009; NFR-034",
+      "scope": ["server/web/**/*.py", "server/web/static/**/*.js", "server/web/static/**/*.html"],
+      "exclude_scope": ["tests/**", ".agents/**"],
+      "patterns": ["[?&]token=", "query_params\\s*\\.get\\(\\s*[\"']token", "searchParams\\.get\\(\\s*[\"']token"],
+      "message": "Use the Secure HttpOnly session cookie and validate Host/Origin; do not put auth tokens in REST or WebSocket URLs."
+    },
+    {
+      "id": "secrets-hardcoded",
+      "title": "No hardcoded secrets",
+      "severity": "block",
+      "sdd_ref": "NFR-032; AGENTS.md",
+      "scope": ["server/**/*.py", "server/web/static/**/*.js", "server/web/static/**/*.html", "**/*.toml"],
+      "exclude_scope": ["tests/**", ".agents/**", "venv/**", "**/venv/**"],
+      "patterns": ["password\\s*=\\s*[\"'][^\"'\\s]{6,}[\"']", "secret(_key)?\\s*=\\s*[\"'][^\"'\\s]{8,}[\"']"],
+      "message": "Passwords and secret keys come from protected configuration/bootstrap input and are stored as hashes, never source literals."
+    },
+    {
+      "id": "index-no-inline-js",
+      "title": "No inline application logic in index.html",
+      "severity": "block",
+      "sdd_ref": "NFR-082; AGENTS.md",
+      "scope": ["server/web/static/index.html"],
+      "exclude_scope": [],
+      "patterns": ["<script(?![^>]*\\bsrc=)[^>]*>\\s*[^<\\s]", "on(click|change|submit|load)="],
+      "message": "index.html is a shell. Put vanilla JS behavior in modules under server/web/static/."
+    },
+    {
+      "id": "deployment-device-literal",
+      "title": "Deployment device paths are configuration",
+      "severity": "warn",
+      "sdd_ref": "NFR-083; chapter 12",
+      "scope": ["server/**/*.py"],
+      "exclude_scope": ["tests/**", ".agents/**"],
+      "patterns": ["/dev/cu\\.", "/dev/tty(USB|ACM)", "COM[0-9]+"],
+      "message": "Audio/serial/device deployment values belong in configuration, not application source."
+    },
+    {
+      "id": "utc-slot-discipline",
+      "title": "Slot identity uses UTC epoch floor",
+      "severity": "info",
+      "sdd_ref": "AD-006; NFR-006; NFR-009",
+      "scope": ["server/engine/orchestrator.py", "server/engine/sequencer.py"],
+      "exclude_scope": [],
+      "patterns": [],
+      "message": "Use floor(epoch/TRperiod) for slot identity. Relative timers may wake tasks but may not define protocol phase; late actions are skipped."
+    },
+    {
+      "id": "dsp-batch-lock",
+      "title": "DSP Worker uses binding lock and batched results",
+      "severity": "info",
+      "sdd_ref": "AD-003; AD-005; NFR-081",
+      "scope": ["server/core/**/*.py", "dsp/**"],
+      "exclude_scope": [],
+      "patterns": [],
+      "message": "All DSP calls occur in the worker through binding.py's global lock. OpenMP threads aggregate in Fortran and never call Python."
+    },
+    {
+      "id": "waterfall-backpressure",
+      "title": "Waterfall may drop; safety state may not",
+      "severity": "info",
+      "sdd_ref": "AD-013; NFR-004; SC8",
+      "scope": ["server/web/ws.py", "server/web/static/**/*.js"],
+      "exclude_scope": [],
+      "patterns": [],
+      "message": "Keep waterfall on a separate bounded queue and drop old spectrum frames. Never let it block state, lease heartbeat or STOP TX."
+    },
+    {
+      "id": "docs-sync",
+      "title": "Behavior changes update the SDD",
+      "severity": "info",
+      "sdd_ref": "NFR-084; chapter 14",
+      "scope": ["server/**", "dsp/**", "tests/**", "packaging/**"],
+      "exclude_scope": [".agents/**"],
+      "patterns": [],
+      "message": "Update affected SDD chapters and SDD/14-version-history.md with every behavior change; keep AGENTS.md and tests documentation current."
+    }
+  ],
+  "context_map": []
+}

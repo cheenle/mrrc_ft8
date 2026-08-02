@@ -1,0 +1,30 @@
+# Python
+venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+mrrc_ft8.egg-info/
+
+# Build
+dsp/build/
+build/
+
+# Runtime data
+*.adi
+*.wav
+*.log
+config.local.toml
+data/
+
+# Secrets
+.env
+
+# OS
+.DS_Store
+
+# Local design companion
+.superpowers/
+artifacts/dsp-benchmark.json
+
+# Accidental recursive self-copy inside the skills dir (6+ GB of nested duplicates)
+.agents/skills/.agents/

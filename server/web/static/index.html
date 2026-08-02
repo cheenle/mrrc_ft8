@@ -1,0 +1,63 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#101418">
+  <title>MRRC-FT8</title>
+  <link rel="manifest" href="/static/manifest.webmanifest">
+  <link rel="stylesheet" href="/static/css/app.css">
+</head>
+<body>
+  <div id="login-view" class="overlay" hidden>
+    <form id="login-form" class="login-card" autocomplete="off">
+      <h1>MRRC-FT8</h1>
+      <input id="login-password" type="password" placeholder="Station password"
+             autocomplete="current-password" required>
+      <button type="submit">Log in</button>
+      <p id="login-error" class="error" role="alert"></p>
+    </form>
+  </div>
+
+  <div id="cockpit" hidden>
+    <header id="top-bar">
+      <span id="station-id">—</span>
+      <span id="slot-clock">--:--:--</span>
+      <span id="revision-badge">r0</span>
+    </header>
+
+    <main id="workspace">
+      <section id="waterfall-pane" aria-label="Waterfall">
+        <canvas id="waterfall-canvas"></canvas>
+      </section>
+      <section id="candidates-pane" aria-label="Candidates">
+        <ul id="candidate-list"></ul>
+      </section>
+    </main>
+
+    <footer id="state-bar">
+      <div id="interlocks" class="state-group">
+        <span class="lamp" id="lamp-cat" title="CAT">CAT</span>
+        <span class="lamp" id="lamp-audio" title="Audio">AUD</span>
+        <span class="lamp" id="lamp-dsp" title="DSP">DSP</span>
+        <span class="lamp" id="lamp-clock" title="Clock">CLK</span>
+      </div>
+      <div class="state-group">
+        <span id="lease-state">OBSERVER</span>
+        <span id="sequencer-state">idle</span>
+        <span id="ptt-state" class="lamp">PTT</span>
+      </div>
+      <div class="state-group actions">
+        <button id="btn-cq" class="cmd">CQ</button>
+        <button id="btn-reply" class="cmd" disabled>Reply</button>
+        <button id="btn-tx-off" class="cmd">TX off</button>
+        <button id="btn-clear-fault" class="cmd" hidden>CLEAR FAULT</button>
+        <button id="btn-lease" class="cmd">Take control</button>
+        <button id="btn-stop" class="stop">STOP TX</button>
+      </div>
+    </footer>
+  </div>
+
+  <script type="module" src="/static/js/main.js"></script>
+</body>
+</html>

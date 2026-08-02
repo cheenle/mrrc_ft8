@@ -1,0 +1,38 @@
+# MRRC-FT8 systemd unit (SDD §12.3).
+#
+# Install:
+#   sudo install -m 0644 deploy/mrrc-ft8.service /etc/systemd/system/
+#   sudo useradd --system --groups audio,dialout mrrcft8
+#   sudo install -m 0600 /dev/null /etc/mrrc-ft8.env   # then edit (secrets!)
+#   sudo systemctl daemon-reload && sudo systemctl enable --now mrrc-ft8
+#
+# /etc/mrrc-ft8.env must define MRRC_FT8_PASSWORD_HASH, MRRC_FT8_MY_CALL and
+# MRRC_FT8_MY_GRID (plus optional overrides); the service refuses to start
+# without them (§12.6).  Generate the hash with:
+#   venv/bin/python -m server.main --hash-password
+
+[Unit]
+Description=MRRC-FT8 headless FT8 server
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=mrrcft8
+Group=mrrcft8
+SupplementaryGroups=audio dialout
+WorkingDirectory=/opt/mrrc-ft8
+Environment=OMP_STACKSIZE=10M
+Environment=PYTHONUNBUFFERED=1
+EnvironmentFile=/etc/mrrc-ft8.env
+ExecStart=/opt/mrrc-ft8/venv/bin/python -m server.main
+Restart=on-failure
+RestartSec=5
+# The app binds loopback only; Caddy owns the public edge (§12.1).
+NoNewPrivileges=true
+ProtectSystem=full
+ProtectHome=true
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target

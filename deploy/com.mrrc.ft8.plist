@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- MRRC-FT8 user LaunchAgent (SDD §12.2).  Install per user:
+       cp deploy/com.mrrc.ft8.plist ~/Library/LaunchAgents/
+       launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.mrrc.ft8.plist
+     Adjust WorkingDirectory / interpreter path, and add the MRRC_FT8_*
+     environment variables locally (secrets are never committed). -->
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>Label</key>
+	<string>com.mrrc.ft8</string>
+	<key>ProgramArguments</key>
+	<array>
+		<string>/Users/USER/HAM/ft8/venv/bin/python</string>
+		<string>-m</string>
+		<string>server.main</string>
+	</array>
+	<key>WorkingDirectory</key>
+	<string>/Users/USER/HAM/ft8</string>
+	<key>EnvironmentVariables</key>
+	<dict>
+		<key>OMP_STACKSIZE</key>
+		<string>10M</string>
+		<!-- Required locally: MRRC_FT8_PASSWORD_HASH / MRRC_FT8_MY_CALL /
+		     MRRC_FT8_MY_GRID; optional MRRC_FT8_ALLOWED_HOSTS etc. -->
+	</dict>
+	<key>RunAtLoad</key>
+	<true/>
+	<key>KeepAlive</key>
+	<true/>
+	<key>StandardOutPath</key>
+	<string>/tmp/mrrc-ft8.out.log</string>
+	<key>StandardErrorPath</key>
+	<string>/tmp/mrrc-ft8.err.log</string>
+</dict>
+</plist>

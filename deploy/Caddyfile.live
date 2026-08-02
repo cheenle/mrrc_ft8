@@ -1,0 +1,9 @@
+# MRRC-FT8 live edge instance (see deploy/Caddyfile for the repo template).
+# Inbound 80/443 are ISP/router-blocked, so ACME HTTP-01/TLS-ALPN-01 cannot
+# work here; the operator already issues radio.vlsc.net via acme.sh DNS-01
+# (renews in place — Caddy hot-reloads changed cert files).  Public entry is
+# https://radio.vlsc.net:9988 → loopback FastAPI.
+radio.vlsc.net:9988 {
+	tls /Users/cheenle/.acme.sh/radio.vlsc.net_ecc/fullchain.cer /Users/cheenle/.acme.sh/radio.vlsc.net_ecc/radio.vlsc.net.key
+	reverse_proxy 127.0.0.1:8000
+}

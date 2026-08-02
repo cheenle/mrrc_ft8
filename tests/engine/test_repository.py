@@ -1,0 +1,173 @@
+"""Persistence regressions: canonical QSO, audited void, retention (AD-014)."""
+
+from __future__ import annotations
+
+from pathlib import Path
+
+import pytest
+
+from server.engine.repository import (
+    AUDIT_RETENTION_S,
+    DECODE_RETENTION_S,
+    QsoStatus,
+    Repository,
+    VoidWindowExpired,
+)
+from server.engine.sequencer import QSORecord
+
+
+class FakeClock:
+    def __init__(self, now: float = 1_700_000_000.0) -> None:
+        self.now = now
+
+    def __call__(self) -> float:
+        return self.now
+
+    def advance(self, seconds: float) -> None:
+        self.now += seconds
+
+
+def sample_record(dx_call: str = "K1ABC") -> QSORecord:
+    return QSORecord(
+        my_call="M0XX",
+        my_grid="IO91",
+        dx_call=dx_call,
+        dx_grid="FN42",
+        report_sent=-12,
+        report_rcvd=-8,
+        started_utc="120000",
+        mode="FT8",
+        freq_hz=14_074_000,
+        band="20m",
+    )
+
+
+@pytest.fixture()
+def clock() -> FakeClock:
+    return FakeClock()
+
+
+@pytest.fixture()
+def repo(clock: FakeClock) -> Repository:
+    return Repository(":memory:", clock=clock)
+
+
+def test_fresh_database_migrates_and_reopen_preserves(tmp_path: Path) -> None:
+    path = str(tmp_path / "qso.db")
+    clock = FakeClock()
+    first = Repository(path, clock=clock)
+    qso_id = first.record_qso(sample_record())
+    first.close()
+
+    second = Repository(path, clock=clock)
+    stored = second.get_qso(qso_id)
+    assert stored is not None
+    assert stored.dx_call == "K1ABC"
+    assert stored.status is QsoStatus.COMPLETED
+    second.close()
+
+
+def test_record_qso_round_trip_all_fields(repo: Repository, clock: FakeClock) -> None:
+    qso_id = repo.record_qso(sample_record())
+    stored = repo.get_qso(qso_id)
+    assert stored is not None
+    assert (stored.my_call, stored.my_grid) == ("M0XX", "IO91")
+    assert (stored.dx_call, stored.dx_grid) == ("K1ABC", "FN42")
+    assert (stored.report_sent, stored.report_rcvd) == (-12, -8)
+    assert (stored.mode, stored.freq_hz, stored.band) == ("FT8", 14_074_000, "20m")
+    assert stored.completed_epoch == clock.now
+    assert stored.void_actor is None
+    events = repo.qso_events(qso_id)
+    assert [e[1] for e in events] == ["completed"]
+
+
+def test_audited_void_within_window(repo: Repository, clock: FakeClock) -> None:
+    qso_id = repo.record_qso(sample_record())
+    clock.advance(15.0)  # inside the 30 s undo window
+    repo.void_qso(qso_id, actor="session-abc", reason="wrong grid logged")
+
+    stored = repo.get_qso(qso_id)
+    assert stored is not None
+    assert stored.status is QsoStatus.VOID
+    assert stored.void_actor == "session-abc"
+    assert stored.void_reason == "wrong grid logged"
+    # the void QSO stays auditable: trail plus audit entry
+    assert [e[1] for e in repo.qso_events(qso_id)] == ["completed", "void"]
+    assert repo.count_rows("audit_event") == 1
+    # ...but hidden from the non-void listing used for ADIF
+    assert repo.list_qsos(include_void=False) == []
+    assert len(repo.list_qsos(include_void=True)) == 1
+
+
+def test_void_after_window_is_refused(repo: Repository, clock: FakeClock) -> None:
+    qso_id = repo.record_qso(sample_record())
+    clock.advance(31.0)
+    with pytest.raises(VoidWindowExpired):
+        repo.void_qso(qso_id, actor="session-abc", reason="too late")
+    assert repo.get_qso(qso_id).status is QsoStatus.COMPLETED  # type: ignore[union-attr]
+
+
+def test_void_rejects_non_completed_and_unknown(repo: Repository) -> None:
+    qso_id = repo.record_qso(sample_record(), status=QsoStatus.ACTIVE)
+    with pytest.raises(ValueError, match="completed"):
+        repo.void_qso(qso_id, actor="a", reason="r")
+    with pytest.raises(KeyError):
+        repo.void_qso(999, actor="a", reason="r")
+
+
+def test_double_void_is_refused(repo: Repository, clock: FakeClock) -> None:
+    qso_id = repo.record_qso(sample_record())
+    clock.advance(5.0)
+    repo.void_qso(qso_id, actor="a", reason="r")
+    with pytest.raises(ValueError, match="completed"):
+        repo.void_qso(qso_id, actor="a", reason="again")
+
+
+def test_abort_active_qsos_marks_aborted_restart(repo: Repository) -> None:
+    active = repo.record_qso(sample_record("W1AW"), status=QsoStatus.ACTIVE)
+    done = repo.record_qso(sample_record())
+    assert repo.abort_active_qsos() == 1
+    assert repo.get_qso(active).status is QsoStatus.ABORTED_RESTART  # type: ignore[union-attr]
+    assert repo.get_qso(done).status is QsoStatus.COMPLETED  # type: ignore[union-attr]
+    assert [e[1] for e in repo.qso_events(active)] == ["active", "aborted_restart"]
+    assert repo.abort_active_qsos() == 0  # idempotent
+
+
+def test_retention_deletes_only_expired_decode_and_audit(
+    repo: Repository, clock: FakeClock
+) -> None:
+    clock.now = 1_000_000.0
+    repo.record_decode_event(slot_id=1, message="CQ K1ABC FN42", snr_db=-15)
+    repo.record_audit(actor="a", operation="login_failure")
+    repo.record_qso(sample_record())
+    clock.now += DECODE_RETENTION_S + 1  # past decode retention, inside audit
+    repo.record_decode_event(slot_id=2, message="CQ W1AW FN31", snr_db=-10)
+
+    deleted = repo.enforce_retention()
+    assert deleted == {"decode_event": 1, "audit_event": 0}  # audit lives 90 d
+    assert repo.count_rows("decode_event") == 1
+    assert repo.count_rows("audit_event") == 1
+    assert repo.count_rows("qso") == 1  # QSO data never expires
+
+    clock.now += AUDIT_RETENTION_S  # far past both windows
+    assert repo.enforce_retention() == {"decode_event": 1, "audit_event": 1}
+
+
+def test_settings_round_trip_json(repo: Repository) -> None:
+    assert repo.get_setting("profile") is None
+    repo.set_setting("profile", 3)
+    repo.set_setting("band_table", {"20m": 14_074_000})
+    assert repo.get_setting("profile") == 3
+    assert repo.get_setting("band_table") == {"20m": 14_074_000}
+    repo.set_setting("profile", 1)  # overwrite
+    assert repo.get_setting("profile") == 1
+
+
+def test_count_rows_rejects_unknown_table(repo: Repository) -> None:
+    with pytest.raises(ValueError):
+        repo.count_rows("qso; DROP TABLE qso")
+
+
+def test_close_is_idempotent(repo: Repository) -> None:
+    repo.close()
+    repo.close()

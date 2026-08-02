@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Caddy edge daemon (SDD §12.1).  Root is required to bind 80/443.
+     Install:
+       sudo install -m 0644 deploy/com.caddyserver.caddy.plist /Library/LaunchDaemons/
+       sudo install -m 0644 deploy/Caddyfile.live /etc/caddy/Caddyfile   # create /etc/caddy first
+       sudo launchctl bootstrap system /Library/LaunchDaemons/com.caddyserver.caddy.plist
+     Caddy data (certs) lives under /var/lib/caddy (HOME is pinned there so
+     the root daemon does not try to write ./caddy on the read-only root);
+     the Homebrew service alternative runs unprivileged and cannot bind 80/443. -->
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>Label</key>
+	<string>com.caddyserver.caddy</string>
+	<key>ProgramArguments</key>
+	<array>
+		<string>/opt/homebrew/bin/caddy</string>
+		<string>run</string>
+		<string>--config</string>
+		<string>/etc/caddy/Caddyfile</string>
+	</array>
+	<key>RunAtLoad</key>
+	<true/>
+	<key>KeepAlive</key>
+	<true/>
+	<key>EnvironmentVariables</key>
+	<dict>
+		<key>HOME</key>
+		<string>/var/lib/caddy</string>
+	</dict>
+	<key>StandardOutPath</key>
+	<string>/tmp/caddy.out.log</string>
+	<key>StandardErrorPath</key>
+	<string>/tmp/caddy.err.log</string>
+</dict>
+</plist>

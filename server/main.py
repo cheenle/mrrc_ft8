@@ -1,0 +1,453 @@
+"""Lifespan composition and Uvicorn entry point (§11.3, §12.3).
+
+Startup order (§12.3): interrupted QSOs become ``ABORTED_RESTART``, the
+safety controller starts monitor-only with best-effort PTT-off, audio and
+the UTC orchestrator start in monitor mode, and only then does the web
+layer serve.  Shutdown runs priority STOP before audio/rig/worker teardown.
+The dead-man callback and lease events are wired to the safety controller
+and the state stream here, at the one composition root.
+"""
+
+from __future__ import annotations
+
+import os
+
+os.environ.setdefault("OMP_STACKSIZE", "10M")  # before NumPy/OpenMP loads
+
+import asyncio
+import logging
+import time
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager, suppress
+from dataclasses import dataclass
+from typing import Any
+
+import uvicorn
+from fastapi import FastAPI
+from fastapi.staticfiles import StaticFiles
+
+from .engine.audio_rx import AudioCapture, UtcRing
+from .engine.dsp_decode import SupervisorDecoder
+from .engine.latency import LatencyHistogram
+from .engine.orchestrator import Orchestrator
+from .engine.repository import Repository
+from .engine.rig import RigClient
+from .engine.safety import Interlock, SafetyController
+from .engine.sequencer import DisarmReason, Sequencer
+from .engine.audio_tx import TxPlayer
+from .engine.waterfall import SpectrumComputer, SpectrumFanout
+from .web.api import AppState, create_app, _snapshot
+from .web.auth import AuthService
+from .web.lease import LeaseEventKind, LeaseService
+from .web.ws import DecodeBroadcaster, StateBroadcaster
+
+LEASE_POLL_S = 1.0
+MAINTENANCE_S = 3_600.0
+
+log = logging.getLogger(__name__)
+
+
+class _NullEncoder:
+    """TX encoder placeholder when DSP is disabled; every encode fails fast."""
+
+    async def encode(self, message: str, frequency: float, *, slot_id: int) -> Any:
+        from .engine.dsp_encode import TxEncodeError
+
+        raise TxEncodeError("dsp_unavailable", "TX encoder requires the DSP worker")
+
+
+@dataclass(frozen=True, slots=True)
+class ServerConfig:
+    """Runtime configuration (§12.6); secrets arrive via the environment."""
+
+    password_hash: str
+    my_call: str
+    my_grid: str
+    allowed_hosts: frozenset[str]
+    db_path: str = "mrrc-ft8.db"
+    rigctld_host: str = "127.0.0.1"
+    rigctld_port: int = 4532
+    audio_device: int | str | None = None
+    decoder_profile: int = 3
+    decoder_threads: int = 0  # 0 = Auto: clamp(cpu_count - 1, 1, 12) (I9, §12.6)
+
+    @classmethod
+    def from_env(cls) -> ServerConfig:
+        """Load configuration; safety-impacting gaps fail startup (§12.6)."""
+
+        password_hash = os.environ.get("MRRC_FT8_PASSWORD_HASH", "")
+        my_call = os.environ.get("MRRC_FT8_MY_CALL", "").upper()
+        my_grid = os.environ.get("MRRC_FT8_MY_GRID", "").upper()
+        missing = [
+            name
+            for name, value in (
+                ("MRRC_FT8_PASSWORD_HASH", password_hash),
+                ("MRRC_FT8_MY_CALL", my_call),
+                ("MRRC_FT8_MY_GRID", my_grid),
+            )
+            if not value
+        ]
+        if missing:
+            raise RuntimeError(f"missing required configuration: {', '.join(missing)}")
+        hosts = frozenset(
+            h.strip().lower()
+            for h in os.environ.get("MRRC_FT8_ALLOWED_HOSTS", "localhost").split(",")
+            if h.strip()
+        )
+        rig_host, _, rig_port = os.environ.get(
+            "MRRC_FT8_RIGCTLD", "127.0.0.1:4532"
+        ).partition(":")
+        audio_raw = os.environ.get("MRRC_FT8_AUDIO_DEVICE", "")
+        audio_device: int | str | None = None
+        if audio_raw:
+            audio_device = int(audio_raw) if audio_raw.isdigit() else audio_raw
+        try:
+            profile = int(os.environ.get("MRRC_FT8_DECODER_PROFILE", "3"))
+        except ValueError:
+            raise ValueError("MRRC_FT8_DECODER_PROFILE must be an integer 0..4")
+        if not 0 <= profile <= 4:
+            raise ValueError("MRRC_FT8_DECODER_PROFILE must be 0..4")
+        threads_raw = os.environ.get("MRRC_FT8_DECODER_THREADS", "auto").lower()
+        if threads_raw == "auto":
+            threads = 0
+        else:
+            try:
+                threads = int(threads_raw)
+            except ValueError:
+                raise ValueError(
+                    "MRRC_FT8_DECODER_THREADS must be 'auto' or an integer 1..12"
+                )
+            if not 1 <= threads <= 12:
+                raise ValueError("MRRC_FT8_DECODER_THREADS must be 1..12")
+        return cls(
+            password_hash=password_hash,
+            my_call=my_call,
+            my_grid=my_grid,
+            allowed_hosts=hosts or frozenset({"localhost"}),
+            db_path=os.environ.get("MRRC_FT8_DB_PATH", "mrrc-ft8.db"),
+            rigctld_host=rig_host,
+            rigctld_port=int(rig_port or 4532),
+            audio_device=audio_device,
+            decoder_profile=profile,
+            decoder_threads=threads,
+        )
+
+
+def decode_message_view(message: Any, my_call: str = "") -> dict[str, Any]:
+    """One decode message → wire payload (Band Activity columns)."""
+
+    from .engine.msgparse import addressed_to
+
+    parsed = message.parsed
+    return {
+        "text": message.result.text,
+        "snr": message.result.snr,
+        "dt": message.result.dt,
+        "freq": message.result.frequency,
+        "call": parsed.from_call,
+        "grid": parsed.grid,
+        "is_cq": parsed.is_cq,
+        "to_me": addressed_to(parsed, my_call),
+    }
+
+
+def create_server(
+    config: ServerConfig,
+    *,
+    rig: Any = None,
+    start_dsp: bool = True,
+    start_audio: bool = True,
+) -> FastAPI:
+    """Compose the full application around one :class:`AppState`."""
+
+    repository = Repository(config.db_path)
+    rig_client = rig if rig is not None else RigClient(
+        host=config.rigctld_host, port=config.rigctld_port
+    )
+    sequencer = Sequencer(my_call=config.my_call, my_grid=config.my_grid)
+    player = TxPlayer(device=config.audio_device)
+    safety = SafetyController(rig_client, player, sequencer=sequencer)
+    state = AppState(
+        auth=AuthService(config.password_hash),
+        lease=LeaseService(),
+        safety=safety,
+        sequencer=sequencer,
+        repository=repository,
+        rig=rig_client,
+        allowed_hosts=config.allowed_hosts,
+        state_broadcast=StateBroadcaster(),
+        decode_broadcast=DecodeBroadcaster(),
+        waterfall_fanout=SpectrumFanout(),
+    )
+
+    # Dead-man and lease audit wiring (§15.4, §10.6).  Callbacks may fire
+    # from any thread, so coroutines are scheduled onto the lifespan loop.
+    main_loop: list[asyncio.AbstractEventLoop] = []
+
+    def schedule(coro: Any) -> None:
+        if main_loop:
+            main_loop[0].call_soon_threadsafe(lambda: asyncio.create_task(coro))
+        else:
+            coro.close()  # before startup: nothing to schedule on
+
+    def on_dead_man(_session_id: str, reason: str) -> None:
+        schedule(safety.stop_tx(reason))
+
+    def on_lease_event(event: Any) -> None:
+        state.state_broadcast.publish(_snapshot(state, None))
+        if event.kind == LeaseEventKind.RELEASE:
+            # A deliberate release must not leave TX armed and unattended
+            # (I1): drop the armed flag and stop the sequencer.  Expiry and
+            # disconnect already run the dead-man priority STOP, so only
+            # RELEASE needs this; ``disarm`` is synchronous and never
+            # touches PTT, so no scheduling is required.
+            safety.disarm(DisarmReason.MANUAL)
+        schedule(
+            asyncio.to_thread(
+                repository.record_audit,
+                actor=f"session-{event.session_id[:8]}",
+                operation=f"lease_{event.kind.value}",
+                target="",
+                detail="",
+            )
+        )
+
+    state.lease = LeaseService(on_dead_man=on_dead_man, on_event=on_lease_event)
+
+    def report_dsp_fault(context: str, error: Exception) -> None:
+        # DSP faults latch in the safety controller: a dead Worker failing
+        # every slot is reported once, not once per slot (I2).
+        schedule(safety.report_fault(Interlock.DSP, f"{context}: {error}"))
+
+    # CQ loop wiring (§6 auto-CQ): polls on the lease watchdog; idle timeout
+    # is an operator setting, audit entries go through the repository.
+    from .engine.cq_loop import DEFAULT_IDLE_TIMEOUT_S, CqLoopController
+
+    def cq_loop_idle_timeout() -> int:
+        value = repository.get_setting("cq_loop_idle_timeout_s")
+        return int(value) if isinstance(value, int) else DEFAULT_IDLE_TIMEOUT_S
+
+    def cq_loop_audit(operation: str, detail: str) -> None:
+        schedule(
+            asyncio.to_thread(
+                repository.record_audit,
+                actor="system",
+                operation=operation,
+                target="",
+                detail=detail,
+            )
+        )
+
+    state.cq_loop = CqLoopController(
+        sequencer,
+        arm=safety.arm,
+        lease_alive=lambda: state.lease.current() is not None,
+        clock=time.monotonic,
+        idle_timeout=cq_loop_idle_timeout,
+        on_audit=cq_loop_audit,
+    )
+
+    capture: AudioCapture | None = None
+    orchestrator: Orchestrator | None = None
+    supervisor: Any = None
+    supervisor_decoder: SupervisorDecoder | None = None
+    encoder: Any = None
+    ring: UtcRing | None = None
+    tasks: list[asyncio.Task[Any]] = []
+
+    if start_audio:
+        ring = UtcRing()
+        computer = SpectrumComputer()
+
+        def waterfall_tap(samples: Any, epoch: float) -> None:
+            for frame in computer.push(samples, epoch):
+                state.waterfall_fanout.publish(frame)
+
+        capture = AudioCapture(ring, device=config.audio_device, tap=waterfall_tap)
+
+    if start_dsp:
+        from .core.models import DecodeConfig, auto_thread_count
+        from .core.supervisor import WorkerSupervisor
+        from .engine.dsp_encode import SupervisorEncoder
+        from .engine.tx_driver import TxDriver
+
+        state.latency = LatencyHistogram()
+        supervisor = WorkerSupervisor()
+        decoder_config = DecodeConfig(
+            profile=config.decoder_profile,
+            threads=config.decoder_threads or auto_thread_count(),
+        )
+        supervisor_decoder = SupervisorDecoder(
+            supervisor, decoder_config, histogram=state.latency
+        )
+        encoder = SupervisorEncoder(supervisor)
+        state.tx_driver = TxDriver(sequencer, encoder, safety)
+        state.tx_driver.on_tx_error = lambda slot_id, error: report_dsp_fault(  # type: ignore[method-assign]
+            f"tx slot {slot_id}", error
+        )
+        slot_ring = ring if ring is not None else UtcRing()
+
+        def on_decode(slot_decode: Any) -> None:
+            batch = {
+                "slot_id": slot_decode.slot_id,
+                "late": slot_decode.late,
+                "messages": [
+                    decode_message_view(message, config.my_call)
+                    for message in slot_decode.messages
+                ],
+            }
+            state.decode_broadcast.publish(batch)
+            for message in slot_decode.messages:
+                asyncio.get_running_loop().create_task(
+                    asyncio.to_thread(
+                        repository.record_decode_event,
+                        slot_id=slot_decode.slot_id,
+                        message=message.result.text,
+                        snr_db=message.result.snr,
+                    )
+                )
+
+        orchestrator = Orchestrator(
+            supervisor_decoder,
+            slot_ring.read_slot,
+            sequencer,
+            on_decode=on_decode,
+            on_decode_error=lambda slot_id, error: report_dsp_fault(
+                f"decode slot {slot_id}", error
+            ),
+            # Per-slot TX tasks are intentionally untracked and uncancelled:
+            # the TX lifecycle is owned by the Sequencer (HaltTx / slot
+            # timeout), not by task bookkeeping here.
+            on_slot_start=lambda slot_id: asyncio.create_task(
+                state.tx_driver.on_slot_start(slot_id)
+            ),
+        )
+        state.orchestrator = orchestrator
+    else:
+        from .engine.tx_driver import TxDriver
+
+        state.tx_driver = TxDriver(sequencer, _NullEncoder(), safety)
+        state.tx_driver.on_tx_error = lambda slot_id, error: report_dsp_fault(  # type: ignore[method-assign]
+            f"tx slot {slot_id}", error
+        )
+
+    @asynccontextmanager
+    async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
+        from .engine.qso_log import record_qso
+
+        main_loop.append(asyncio.get_running_loop())
+        # §12.3: interrupted QSOs, then monitor-only safety with PTT off.
+        aborted = await asyncio.to_thread(repository.abort_active_qsos)
+        if aborted:
+            await asyncio.to_thread(
+                repository.record_audit,
+                actor="system",
+                operation="aborted_restart",
+                target=f"{aborted} qso(s)",
+                detail="interrupted by restart",
+            )
+        await safety.start()
+
+        if capture is not None:
+            await asyncio.to_thread(capture.start)
+        if orchestrator is not None:
+            await asyncio.to_thread(supervisor.start)
+            tasks.append(asyncio.create_task(orchestrator.run()))
+
+        async def lease_watchdog() -> None:
+            while True:
+                await asyncio.sleep(LEASE_POLL_S)
+                try:
+                    state.lease.check_expiry()
+                    # The sequencer is lock-free: pop on the loop thread and
+                    # offload only the blocking repository write.
+                    record = sequencer.pop_log_record()
+                    if record is not None:
+                        await record_qso(repository, record)
+                    if state.cq_loop is not None:
+                        state.cq_loop.tick()
+                except Exception:
+                    log.exception("lease watchdog tick failed")
+
+        async def maintenance() -> None:
+            while True:
+                await asyncio.sleep(MAINTENANCE_S)
+                try:
+                    state.auth.sweep_expired()
+                    await asyncio.to_thread(repository.enforce_retention)
+                except Exception:
+                    log.exception("maintenance tick failed")
+
+        tasks.append(asyncio.create_task(lease_watchdog()))
+        tasks.append(asyncio.create_task(maintenance()))
+        try:
+            yield
+        finally:
+            # §12.3: priority STOP before audio/rig/worker teardown.
+            await safety.stop_tx("shutdown")
+            if orchestrator is not None:
+                orchestrator.stop()
+            for task in tasks:
+                task.cancel()
+                with suppress(asyncio.CancelledError):
+                    await task
+            if capture is not None:
+                await asyncio.to_thread(capture.stop)
+            if encoder is not None:
+                await asyncio.to_thread(encoder.close)
+            if supervisor_decoder is not None:
+                await asyncio.to_thread(supervisor_decoder.close)
+            if supervisor is not None:
+                await asyncio.to_thread(supervisor.stop)
+            repository.close()
+
+    app = create_app(state)
+    app.router.lifespan_context = lifespan
+    app.mount("/static", StaticFiles(directory=_static_dir()), name="static")
+    return app
+
+
+def _static_dir() -> str:
+    from pathlib import Path
+
+    return str(Path(__file__).resolve().parent / "web" / "static")
+
+
+def main() -> None:
+    """CLI entry point; by default serves Uvicorn on loopback (§12.1).
+
+    ``--hash-password [PASSWORD]`` is the bootstrap tool for
+    ``MRRC_FT8_PASSWORD_HASH`` (§12.6): it prints an Argon2id hash and
+    exits.  Without a value it prompts via getpass so the password never
+    lands in shell history.
+    """
+
+    import argparse
+
+    parser = argparse.ArgumentParser(prog="server.main")
+    parser.add_argument(
+        "--hash-password",
+        nargs="?",
+        const="",
+        default=None,
+        metavar="PASSWORD",
+        help="print an Argon2id hash for MRRC_FT8_PASSWORD_HASH and exit; "
+        "prompts interactively when no value is given",
+    )
+    args = parser.parse_args()
+    if args.hash_password is not None:
+        from getpass import getpass
+
+        from .web.auth import hash_password
+
+        password = args.hash_password or getpass("password to hash: ")
+        print(hash_password(password))
+        return
+
+    config = ServerConfig.from_env()
+    app = create_server(config)
+    uvicorn.run(app, host="127.0.0.1", port=8000)
+
+
+if __name__ == "__main__":
+    main()

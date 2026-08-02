@@ -1,0 +1,75 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 620" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', monospace">
+  <defs>
+    <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#080c14"/>
+      <stop offset="100%" style="stop-color:#0d1220"/>
+    </linearGradient>
+    <linearGradient id="layerCard" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#0f1525"/>
+      <stop offset="100%" style="stop-color:#0a0f1a"/>
+    </linearGradient>
+    <filter id="sh"><feDropShadow dx="0" dy="1" stdDeviation="2" flood-color="#000" flood-opacity="0.5"/></filter>
+    <marker id="arr" markerWidth="6" markerHeight="5" refX="6" refY="2.5" orient="auto"><path d="M0,0 L6,2.5 L0,5 Z" fill="#5b9bd5"/></marker>
+    <marker id="arrRed" markerWidth="6" markerHeight="5" refX="6" refY="2.5" orient="auto"><path d="M0,0 L6,2.5 L0,5 Z" fill="#cf6a6a"/></marker>
+    <marker id="arrGreen" markerWidth="6" markerHeight="5" refX="6" refY="2.5" orient="auto"><path d="M0,0 L6,2.5 L0,5 Z" fill="#6bcf7f"/></marker>
+  </defs>
+
+  <rect width="900" height="620" fill="url(#bg)" rx="10"/>
+
+  <text x="450" y="28" text-anchor="middle" fill="#cf6a6a" font-size="16" font-weight="700">🛡️ PTT Safety — Defense in Depth</text>
+  <text x="450" y="44" text-anchor="middle" fill="#6a7a8a" font-size="10">8 independent layers · No single point of failure can trap the radio in TX · SDD Ch 15</text>
+
+  <!-- Layer cards -->
+  <rect x="15" y="58" width="870" height="58" rx="6" fill="url(#layerCard)" stroke="#6bcf7f" stroke-width="1.2" filter="url(#sh)"/>
+  <text x="30" y="78" fill="#6bcf7f" font-size="12" font-weight="700">❶ Touch UX</text>
+  <text x="150" y="78" fill="#9abfdf" font-size="9">touchstart → TXControl('start')</text>
+  <text x="360" y="78" fill="#cf6a6a" font-size="9">touchend → stop</text>
+  <text x="510" y="78" fill="#cf6a6a" font-size="9">touchmove-out → stop</text>
+  <text x="670" y="78" fill="#cf6a6a" font-size="9">touchcancel → stop</text>
+  <text x="830" y="78" fill="#cf6a6a" font-size="9">mouseleave</text>
+  <text x="30" y="100" fill="#5a7a8a" font-size="8">touchId tracking prevents cross-touch interference · { passive:false, capture:true } fires first · tx_button.js</text>
+
+  <rect x="15" y="122" width="870" height="58" rx="6" fill="url(#layerCard)" stroke="#6bcf7f" stroke-width="1.2" filter="url(#sh)"/>
+  <text x="30" y="142" fill="#6bcf7f" font-size="12" font-weight="700">❷ State Machine Lock</text>
+  <text x="190" y="142" fill="#9abfdf" font-size="9">TXState.isProcessing — prevents concurrent start/stop races</text>
+  <text x="590" y="142" fill="#cfaf4a" font-size="9">TXState.pendingStop — queue stop when start is in-flight</text>
+  <text x="30" y="164" fill="#cf6a6a" font-size="8">Lock leak detection: if isProcessing held >3s → force-unlock</text>
+
+  <rect x="15" y="186" width="870" height="58" rx="6" fill="url(#layerCard)" stroke="#cfaf4a" stroke-width="1.2" filter="url(#sh)"/>
+  <text x="30" y="206" fill="#cfaf4a" font-size="12" font-weight="700">❸ Hardware Watchdog</text>
+  <text x="200" y="206" fill="#9abfdf" font-size="9">30-second setTimeout started on every TX start</text>
+  <text x="500" y="206" fill="#cf6a6a" font-size="9">fires → force-release PTT + clear audio + reset UI</text>
+  <text x="30" y="228" fill="#5a7a8a" font-size="8">Ultimate frontend failsafe — triggers even if event loop frozen · tx_button.js</text>
+
+  <rect x="15" y="250" width="870" height="58" rx="6" fill="url(#layerCard)" stroke="#e8a840" stroke-width="1.2" filter="url(#sh)"/>
+  <text x="30" y="270" fill="#e8a840" font-size="12" font-weight="700">❹ Command ACK Retry</text>
+  <text x="200" y="270" fill="#9abfdf" font-size="9">sendTRXptt(false) → wait 1s for getPTT:false echo → retry 3×</text>
+  <text x="30" y="292" fill="#cf6a6a" font-size="8">Each retry also sends backup s: on TX audio WS · After 3 failures → onControlConnectionDead() force-reconnect · ptt_manager.js</text>
+  <text x="660" y="292" fill="#6bcf7f" font-size="8">setPTT:true (key) has NO ACK — lost key = safe</text>
+
+  <rect x="15" y="314" width="870" height="58" rx="6" fill="url(#layerCard)" stroke="#8a6acf" stroke-width="1.2" filter="url(#sh)"/>
+  <text x="30" y="334" fill="#8a6acf" font-size="12" font-weight="700">❺ Backup Channel (s:)</text>
+  <text x="200" y="334" fill="#9abfdf" font-size="9">wsAudioTX.send("s:") → independent TCP socket → server ws_audio_tx() → radio.set_ptt(False)</text>
+  <text x="30" y="356" fill="#6bcf7f" font-size="8">TX audio WS and control WS are separate connections — WiFi glitch rarely kills both · server broadcasts getPTT:false to ALL clients</text>
+
+  <rect x="15" y="378" width="870" height="58" rx="6" fill="url(#layerCard)" stroke="#cf6a6a" stroke-width="1.2" filter="url(#sh)"/>
+  <text x="30" y="398" fill="#cf6a6a" font-size="12" font-weight="700">❻ PING/PONG Health Check</text>
+  <text x="230" y="398" fill="#9abfdf" font-size="9">Every 5s: wsControlTRX.send("PING") → wait PONG_TIMEOUT → no reply? → onControlConnectionDead()</text>
+  <text x="30" y="420" fill="#5a7a8a" font-size="8">Catches TCP half-open dead connections · Forces backup s: release before reconnect · controls.js checklatency()</text>
+
+  <rect x="15" y="442" width="870" height="58" rx="6" fill="url(#layerCard)" stroke="#6bcf7f" stroke-width="1.2" filter="url(#sh)"/>
+  <text x="30" y="462" fill="#6bcf7f" font-size="12" font-weight="700">❼ Page Lifecycle</text>
+  <text x="160" y="462" fill="#9abfdf" font-size="9">visibilitychange → hidden → stop</text>
+  <text x="400" y="462" fill="#9abfdf" font-size="9">blur → stop</text>
+  <text x="560" y="462" fill="#cf6a6a" font-size="9">pagehide → stop</text>
+  <text x="30" y="484" fill="#5a7a8a" font-size="8">iOS suspends JS when app goes to background → touchend never delivered · tx_button.js</text>
+
+  <rect x="15" y="506" width="870" height="58" rx="6" fill="url(#layerCard)" stroke="#5b9bd5" stroke-width="1.2" filter="url(#sh)"/>
+  <text x="30" y="526" fill="#5b9bd5" font-size="12" font-weight="700">❽ Server Forced-RX</text>
+  <text x="190" y="526" fill="#9abfdf" font-size="9">ws_ctrl() s: handler → radio.set_ptt(False) + dsp_proc.demodulator.set_ptt(False) + broadcast getPTT:false</text>
+  <text x="30" y="548" fill="#6bcf7f" font-size="8">Always available · Handled identically to setPTT:false · server.py</text>
+
+  <!-- Bottom summary -->
+  <rect x="15" y="574" width="870" height="36" rx="5" fill="#0a0f1a" stroke="#2a3a4a" stroke-width="0.5"/>
+  <text x="30" y="596" fill="#8ab4e0" font-size="10" font-weight="700">🔑 Release is more safety-critical than keying. 8 independent paths to force RX. A lost setPTT:false must never leave the radio stuck in TX.</text>
+</svg>

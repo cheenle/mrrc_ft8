@@ -1,0 +1,17 @@
+# SDD-Guardian hooks for Kimi Code CLI.
+# Paste into ~/.kimi-code/config.toml (or run: python3 install_hooks.py).
+# Hook commands run with the session's project dir as cwd, so relative paths work.
+
+# BEGIN sdd-guardian
+[[hooks]]
+event = "SessionStart"
+matcher = "startup|resume"
+command = "python3 .agents/skills/sdd-guardian/harness/sdd_context.py prime"
+timeout = 10
+
+[[hooks]]
+event = "PreToolUse"
+matcher = "Edit|Write"
+command = "python3 .agents/skills/sdd-guardian/harness/sdd_context.py hook"
+timeout = 5
+# END sdd-guardian

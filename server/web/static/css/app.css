@@ -1,0 +1,126 @@
+:root {
+  color-scheme: dark;
+  --bg: #101418;
+  --panel: #1a2027;
+  --edge: #2c3641;
+  --text: #dfe6ee;
+  --dim: #8b98a5;
+  --accent: #35a3e8;
+  --danger: #e84040;
+  --ok: #3fbf6f;
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+/* Author `display` rules below (.overlay, #cockpit) would otherwise beat the
+   UA `[hidden] { display: none }` rule, leaving the login overlay and the
+   cockpit visible — and the absolutely-positioned waterfall canvas painting
+   over (and swallowing taps for) the login form. Restore hidden semantics. */
+[hidden] { display: none !important; }
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font: 14px/1.4 system-ui, sans-serif;
+  height: 100dvh;
+  overflow: hidden;
+}
+
+/* ---- login overlay ---- */
+.overlay {
+  position: fixed; inset: 0;
+  display: grid; place-items: center;
+  background: var(--bg);
+}
+.login-card {
+  display: grid; gap: 12px; width: min(320px, 90vw);
+  background: var(--panel); padding: 24px; border-radius: 10px;
+  border: 1px solid var(--edge);
+}
+.login-card h1 { font-size: 18px; text-align: center; }
+.login-card input, .login-card button {
+  padding: 12px; border-radius: 6px; border: 1px solid var(--edge);
+  background: var(--bg); color: var(--text); font-size: 16px;
+}
+.login-card button { background: var(--accent); border: none; font-weight: 600; }
+.error { color: var(--danger); min-height: 1.2em; text-align: center; }
+
+/* ---- cockpit grid (AD-011 landscape) ---- */
+/* Mobile browsers make form fields untypable under body-level
+   user-select:none, so the no-select rule lives on the cockpit only. */
+#cockpit {
+  display: grid; grid-template-rows: 36px 1fr 52px; height: 100dvh;
+  -webkit-user-select: none; user-select: none;
+}
+
+#top-bar {
+  display: flex; justify-content: space-between; align-items: center;
+  padding: 0 12px; background: var(--panel); border-bottom: 1px solid var(--edge);
+  font-variant-numeric: tabular-nums;
+}
+#revision-badge { color: var(--dim); }
+
+#workspace {
+  display: grid; grid-template-columns: 1fr 320px; min-height: 0;
+}
+#waterfall-pane { position: relative; min-width: 0; }
+#waterfall-canvas { position: absolute; inset: 0; width: 100%; height: 100%; }
+#candidates-pane {
+  background: var(--panel); border-left: 1px solid var(--edge); overflow-y: auto;
+}
+#candidate-list { list-style: none; }
+.candidate {
+  padding: 10px 12px; border-bottom: 1px solid var(--edge); cursor: pointer;
+  display: flex; justify-content: space-between; gap: 8px;
+}
+.candidate:hover { background: var(--edge); }
+.candidate.selected { background: #22405c; }
+.candidate .snr { color: var(--dim); font-variant-numeric: tabular-nums; }
+
+/* ---- bottom state bar (NFR-063: safety state never hidden) ---- */
+#state-bar {
+  display: flex; justify-content: space-between; align-items: center;
+  padding: 0 12px; gap: 12px;
+  background: var(--panel); border-top: 1px solid var(--edge);
+}
+.state-group { display: flex; align-items: center; gap: 8px; }
+.lamp {
+  padding: 2px 8px; border-radius: 4px; font-size: 12px; font-weight: 700;
+  background: var(--edge); color: var(--dim);
+}
+.lamp.ok { background: var(--ok); color: #06130b; }
+.lamp.bad { background: var(--danger); color: #1a0505; }
+.lamp.on { background: var(--danger); color: #fff; animation: pulse 1s infinite; }
+@keyframes pulse { 50% { opacity: 0.5; } }
+
+.actions { gap: 8px; }
+button.cmd, button.stop {
+  padding: 10px 16px; border-radius: 6px; border: 1px solid var(--edge);
+  background: var(--panel); color: var(--text); font-size: 15px; font-weight: 600;
+}
+button.cmd:disabled { opacity: 0.4; }
+button.stop {
+  background: var(--danger); border: none; color: #fff;
+  font-size: 17px; padding: 10px 22px;
+}
+
+/* ---- portrait: degraded observer + STOP view (AD-011) ---- */
+@media (orientation: portrait) {
+  #workspace { grid-template-columns: 1fr; }
+  #candidates-pane { display: none; }
+  #waterfall-pane { opacity: 0.6; }
+  .actions button.cmd { display: none; }
+  .actions button.stop { display: block; width: 100%; }
+  .actions { flex: 1; }
+}
+
+/* ---- Band Activity rows ---- */
+#candidate-list .candidate {
+  font: 12px/1.5 ui-monospace, monospace;
+  white-space: pre; padding: 6px 10px;
+}
+.candidate.cq { font-weight: 700; }
+.candidate.to-me { background: #3d2430; }
+.candidate.late { opacity: 0.55; }
+/* Selection must stay visible on addressed-to-me rows (same (0,2,0) tie otherwise). */
+#candidate-list .candidate.selected { background: #22405c; }

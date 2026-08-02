@@ -1,0 +1,10 @@
+# MRRC-FT8 public edge (SDD §12.1–12.3).
+#
+# Caddy is the only public service: it owns 80/443 with automatic TLS and
+# proxies to the loopback-only FastAPI app (127.0.0.1:8000).  Replace the
+# domain below with yours and set MRRC_FT8_ALLOWED_HOSTS to the same name
+# so the Host/Origin checks (NFR-035) accept it.
+
+ft8.example.com {
+	reverse_proxy 127.0.0.1:8000
+}
