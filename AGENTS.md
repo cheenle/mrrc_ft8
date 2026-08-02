@@ -1,7 +1,7 @@
 # MRRC-FT8 — Headless FT8/FT4 Server
 
 WSJT-X 3.0.2 (Improved fork) DSP Worker + Python FastAPI 服务器 + 横屏移动 Web 远程。
-设计记录见 `SDD/`（TeamSD 15 章）；旧 mrrc_ft710 设计归档于 `SDD-legacy-mrrc_ft710/`。
+设计记录见 `SDD/`（TeamSD 15 章）。
 
 ## 构建与运行
 
@@ -44,7 +44,7 @@ venv/bin/python -m pytest tests/
 | `server/web/` | FastAPI REST/WS + 移动 PWA 静态资源 |
 | `deploy/` | Caddyfile（模板+live 实例）、Caddy root LaunchDaemon、systemd unit、macOS LaunchAgent（密码哈希经 `python -m server.main --hash-password` bootstrap） |
 | `acceptance/` | 硬件验收脚本（FT-710 real-radio：preflight/monitor/`--tx`，不进 pytest） |
-| `wsjtx-3.0.2/` | vendor 参考源码（只读，禁止修改） |
+| `wsjtx-3.0.2/` | vendor 参考源码（只读，禁止修改；gitignore，仅本地构建/校验用，不入库） |
 | `tests/` | pytest；ft8sim/ft4sim 合成信号回归 |
 
 ## 铁律（constraints.json 强制）

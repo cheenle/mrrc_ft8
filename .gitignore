@@ -9,6 +9,10 @@ mrrc_ft8.egg-info/
 dsp/build/
 build/
 
+# WSJT-X 3.0.2 Improved vendor source: kept on disk for DSP builds and the
+# vendor-policy tests, but not tracked (98 MB third-party tree, v0.1 tidy).
+wsjtx-3.0.2/
+
 # Runtime data
 *.adi
 *.wav

@@ -33,7 +33,7 @@
 
 ## 2.5 Relationship to Legacy MRRC
 
-`SDD-legacy-mrrc_ft710/` 仅是历史资料。MRRC-FT8 是独立系统。二者可能使用同一电台，但音频与 CAT 资源不能被两个服务同时占用；`rigctld` 仍是串口唯一 owner。
+MRRC-FT8 是独立系统。音频与 CAT 资源不能被两个服务同时占用；`rigctld` 仍是串口唯一 owner。
 
 ## 2.6 Non-goals
 

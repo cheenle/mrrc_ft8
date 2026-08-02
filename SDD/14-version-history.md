@@ -1,5 +1,10 @@
 # 14. Version History
 
+## Unreleased — 2026-08-03 — Repo Tidy (v0.1.0)
+
+- Removed the legacy `SDD-legacy-mrrc_ft710/` archive (old design docs for the predecessor project; references in `AGENTS.md` and `SDD/02` updated).
+- Untracked `wsjtx-3.0.2/` (98 MB WSJT-X 3.0.2 Improved vendor source) from git and gitignored it, keeping it on disk so the DSP build (`dsp/CMakeLists.txt`), the vendor-policy tests and the `ALLCALL7.TXT`/`cty.dat` symlinks keep working. Tagged the first GitHub push as `v0.1.0`.
+
 ## Unreleased — 2026-08-03 — FT8 Band Selector (7/14/21/28 MHz)
 
 - Added a band `<select>` in the cockpit top bar (left of the decode-counter hourglass): 7/14/21/28 MHz, tuned to the FT8 dial frequencies (7.074 / 14.074 / 21.074 / 28.074 MHz) via the existing lease-gated `/radio/band` mutation. Selection acquires a free control lease implicitly (UC-002, same as a candidate tap), rejects while TX is armed, toasts failures and reverts to the last known rig frequency. The control reflects the rig's polled dial frequency when it lands on one of the four bands; `band.js` populates the options so `index.html` stays logic-free.
