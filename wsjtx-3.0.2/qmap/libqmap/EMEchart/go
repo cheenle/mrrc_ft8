@@ -1,0 +1,10 @@
+#!/bin/bash
+
+if [ "$#" -lt 1 ]; then
+  echo "Usage: EMEchart.sh <year>"
+  exit 1
+fi
+
+EMEchart $1
+gnuplot EMEchart.plt
+rm fort.* EMEchart.plt

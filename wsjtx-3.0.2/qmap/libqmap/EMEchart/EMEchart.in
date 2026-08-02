@@ -1,0 +1,93 @@
+set term pdf dashed size 7.5in,10in
+set ylabel "Declination (deg)" textcolor "red" font "Sans,12"
+set tics in
+set tics font "Sans,12"
+unset xtics
+set yrange [-30:30]
+set y2range [-2.4:0.0]
+set ytics -30, 10  textcolor "red"
+set y2tics -2.4, 0.4  textcolor "blue" border
+set y2label "Extra loss (dB)" textcolor "blue" font "Sans,12"
+set style line 100 lt 0 lw 2
+set grid linestyle 100
+unset key
+set clip
+unset clip points
+set multiplot layout 4,1 margins 0.075,0.925,0.1,0.9 spacing 0,0.05
+
+set xrange [1:91]                                           # Jan 1 to Apr 1
+set label 1 "January"  at 15,36 center font "Sans Bold,12"
+set label 2 "February" at 45,36 center font "Sans Bold,12"
+set label 3 "March"    at 75,36 center font "Sans Bold,12"
+set arrow 1 from 32,-30 to 32,30 nohead                     # Feb 1
+set arrow 2 from 60,-30 to 60,30 nohead                     # Mar 1
+
+# Weekend labels and objects for Jan, Feb, Mar here
+
+plot "fort.14" using 1:5 axes x1y1 with lines lw 2 lt rgb "red" notitle  ,\
+     "fort.14" using 1:6 axes x1y2 with lines lw 2 lt rgb "blue" notitle ,\
+     "fort.15" using 1:2 axes x1y1 with points pt 7 ps 1.2 lc rgb "orange" notitle ,\
+     "fort.16" using 1:2 axes x1y1 with points pt 7 ps 1.2 lc rgb "gray"
+
+unset title
+
+set xrange [91:182]                                         # Apr 1 to Jul 1
+set label 1 "April"    at 106,36 center font "Sans Bold,12"
+set label 2 "May"      at 136,36 center font "Sans Bold,12"
+set label 3 "June"     at 166,36 center font "Sans Bold,12"
+set arrow 1 from 121,-30 to 121,30 nohead                   # May 1
+set arrow 2 from 152,-30 to 152,30 nohead                   # Jun 1
+unset label 24
+unset object 14
+
+# Weekend labels and objects for Apr, May, Jun here
+
+plot "fort.14" using 1:5 with lines lw 2 lt rgb "red" notitle ,\
+     "fort.14" using 1:6 axes x1y2 with lines lw 2 lt rgb "blue" notitle ,\
+     "fort.15" using 1:2 axes x1y1 with points pt 7 ps 1.2 lc rgb "orange" notitle ,\
+     "fort.16" using 1:2 axes x1y1 with points pt 7 ps 1.2 lc rgb "gray"
+
+set xrange [182:274]                                        #Jul 1 to Oct 1
+set label 1 "July"      at 197,36 center font "Sans Bold,12"
+set label 2 "August"    at 227,36 center font "Sans Bold,12"
+set label 3 "September" at 257,36 center font "Sans Bold,12"
+set arrow 1 from 213,-30 to 213,30 nohead                     # Aug 1
+set arrow 2 from 244,-30 to 244,30 nohead                     # Sep 1
+unset label 24
+unset object 14
+
+# Weekend labels and objects for Jul, Aug, Sep here
+
+plot "fort.14" using 1:5 with lines lw 2 lt rgb "red" notitle ,\
+     "fort.14" using 1:6 axes x1y2 with lines lw 2 lt rgb "blue" notitle ,\
+     "fort.15" using 1:2 axes x1y1 with points pt 7 ps 1.2 lc rgb "orange" notitle ,\
+     "fort.16" using 1:2 axes x1y1 with points pt 7 ps 1.2 lc rgb "gray"
+
+set xrange [274:366]
+set label 1 "October"  at 289,36 center font "Sans Bold,12"
+set label 2 "November" at 319,36 center font "Sans Bold,12"
+set label 3 "December" at 349,36 center font "Sans Bold,12"
+set arrow 1 from 305,-30 to 305,30 nohead                     # Nov 1
+set arrow 2 from 335,-30 to 335,30 nohead                     # Dec 1
+unset label 24
+unset object 14
+
+# Weekend labels and objects for Oct, Nov, Dec here
+
+set arrow 3 from 280,-40 to 290,-40 nohead lw 2 lc rgb "red"
+set label 101 "Moon declination" at 292,-40 left font "Sans,12"
+set arrow 4 from 280,-47 to 290,-47 nohead lw 2 lc rgb "blue"
+set label 102 "Extra path loss" at 292,-47 left font "Sans,12"
+
+set label 103 "" at 317,-40 point pt 5 ps 1.2 lc rgb "green"
+set label 104 "Weekend" at 320,-40 left font "Sans,12"
+
+set label 105 "" at 340,-40 point pt 7 ps 1.2 lc rgb "orange"
+set label 106 "Moon close to Sun" at 343,-40 left font "Sans,12"
+set label 107 "" at 340,-47 point pt 7 ps 1.2 lc rgb "gray"
+set label 108 "Moon close to Sgr A" at 343,-47 left font "Sans,12"
+
+plot "fort.14" using 1:5 with lines lw 2 lt rgb "red" notitle ,\
+     "fort.14" using 1:6 axes x1y2 with lines lw 2 lt rgb "blue" notitle ,\
+     "fort.15" using 1:2 axes x1y1 with points pt 7 ps 1.2 lc rgb "orange" notitle ,\
+     "fort.16" using 1:2 axes x1y1 with points pt 7 ps 1.2 lc rgb "gray"

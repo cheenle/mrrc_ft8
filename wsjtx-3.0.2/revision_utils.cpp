@@ -1,0 +1,117 @@
+#include "revision_utils.hpp"
+
+#include <cstring>
+
+#include <QCoreApplication>
+#include <QRegularExpression>
+#include <QSysInfo>
+
+#include "scs_version.h"
+
+namespace
+{
+  QString revision_extract_number (QString const& s)
+  {
+    QString revision;
+
+    // try and match a number (hexadecimal allowed)
+    QRegularExpression re {R"(^[$:]\w+: (r?[\da-f]+[^$]*)\$$)"};
+    auto match = re.match (s);
+    if (match.hasMatch ())
+      {
+        revision = match.captured (1);
+      }
+    return revision;
+  }
+}
+
+QString revision (QString const& scs_rev_string)
+{
+  //  return "251203";
+  QString result;
+  auto revision_from_scs = revision_extract_number (scs_rev_string);
+
+#if defined (CMAKE_BUILD)
+  QString scs_info {":Rev: " SCS_VERSION_STR " $"};
+
+  auto revision_from_scs_info = revision_extract_number (scs_info);
+  if (!revision_from_scs_info.isEmpty ())
+    {
+      // we managed to get the revision number from svn info etc.
+      result = revision_from_scs_info;
+    }
+  else if (!revision_from_scs.isEmpty ())
+    {
+      // fall back to revision passed in if any
+      result = revision_from_scs;
+    }
+  else
+    {
+      // match anything
+      QRegularExpression re {R"(^[$:]\w+: ([^$]*)\$$)"};
+      auto match = re.match (scs_info);
+      if (match.hasMatch ())
+        {
+          result = match.captured (1);
+        }
+    }
+#else
+  if (!revision_from_scs.isEmpty ())
+    {
+      // not CMake build so all we have is revision passed
+      result = revision_from_scs;
+    }
+#endif
+  return result.trimmed ();
+}
+
+QString display_revision ()
+{
+  auto build_revision = revision ();
+
+#if defined (CMAKE_BUILD) && defined (WSJT_SOURCE_REVISION)
+  QString source_revision {WSJT_SOURCE_REVISION};
+  if (!source_revision.isEmpty ())
+    {
+      source_revision = source_revision.left (6);
+      if (source_revision != build_revision.left (6))
+        {
+          return QString {"source %1 (build %2)"}.arg (source_revision, build_revision);
+        }
+    }
+#endif
+
+  return build_revision;
+}
+
+QString version (bool include_patch)
+{
+#if defined (CMAKE_BUILD)
+  QString v {TO_STRING__ (PROJECT_VERSION_MAJOR) "." TO_STRING__ (PROJECT_VERSION_MINOR)};
+  if (include_patch)
+    {
+      v += "." TO_STRING__ (PROJECT_VERSION_PATCH) + QString {BUILD_TYPE_REVISION};
+    }
+#else
+  QString v {"Not for Release"};
+#endif
+  return v;
+}
+
+QString program_title (QString const& revision)
+{
+  QString id {QCoreApplication::applicationName () + "   v" + QCoreApplication::applicationVersion ()};
+  return id + " " + revision ;
+}
+
+QString http_user_agent ()
+{
+  // See User-Agent format definition https://www.rfc-editor.org/rfc/rfc9110#name-user-agent
+  QString const platform {
+    "(" + QSysInfo::prettyProductName () + "; "
+    + QSysInfo::productType () + " " + QSysInfo::productVersion () + "; "
+    + QSysInfo::currentCpuArchitecture () + "; "
+    + QString {"rv:%1"}.arg (QSysInfo::kernelVersion ()) + ")"};
+
+  return QString {"WSJT-X/" + version () + "_" + revision ()}.simplified () + " " + platform;
+}

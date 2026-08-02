@@ -1,0 +1,25 @@
+For *macOS* installers are provided for x86_64 (Intel)
+systems and for ARM64 (Apple silicon) systems. Download the correct
+package for your system from the {downloads}, double-click on the file
+name, and follow the on-screen prompts in the Installer
+app. 
+
+If you have already installed a previous version, you can retain it by
+changing its name in the *Applications* folder (such as from _WSJT-X_ to
+_WSJT-X_2.7.0_).  You can then proceed to the installation phase.
+
+Take note also of the following:
+
+* Use the Mac's *Audio MIDI Setup* utility to configure your sound
+card for 48000 Hz, two-channel, 16-bit format.
+
+NOTE: If you are using macOS with an external audio device and find
+that Tx audio spontaneously switches to the motherboard sound device
+after a few transmissions, try setting the sample rate to 44100 Hz
+rather than the otherwise recommended 48000 Hz.
+
+* Use *System Preferences* to select an external time source to keep
+your system clock synchronized to UTC.
+
+* To uninstall simply drag the _WSJT-X_ application from *Applications*
+to the *Trash Can*.

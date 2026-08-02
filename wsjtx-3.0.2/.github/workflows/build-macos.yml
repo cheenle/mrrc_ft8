@@ -1,0 +1,1187 @@
+name: Build macOS
+
+on:
+  workflow_call:
+    inputs:
+      version:
+        description: "WSJT-X version string"
+        required: true
+        type: string
+      hamlib_branch:
+        description: "Hamlib branch to build"
+        required: false
+        type: string
+        default: "4.7.1"
+      arch:
+        description: "Target architecture (arm64 or x86_64)"
+        required: true
+        type: string
+      runner:
+        description: "GitHub Actions runner label"
+        required: true
+        type: string
+      deployment_target:
+        description: "macOS deployment target version"
+        required: true
+        type: string
+      release_channel:
+        description: "Build release channel: DEVEL, RC, or GA"
+        required: false
+        type: string
+        default: "DEVEL"
+      rc_number:
+        description: "Release candidate number when release_channel is RC"
+        required: false
+        type: string
+        default: ""
+
+jobs:
+  build:
+    runs-on: ${{ inputs.runner }}
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Resolve source revision
+        id: source_revision
+        run: |
+          source_revision="${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || '' }}"
+          if [ -z "$source_revision" ]; then
+            source_revision="$(git rev-parse HEAD)"
+          fi
+          echo "sha=${source_revision}" >> "$GITHUB_OUTPUT"
+
+      - name: Verify macOS build tuple
+        run: |
+          case "${{ inputs.arch }}:${{ inputs.runner }}:${{ inputs.deployment_target }}" in
+            arm64:macos-15:11.0|x86_64:macos-15-intel:10.13)
+              echo "Using supported macOS build tuple: ${{ inputs.arch }} on ${{ inputs.runner }} targeting ${{ inputs.deployment_target }}"
+              ;;
+            *)
+              echo "::error::Unsupported macOS build tuple: arch=${{ inputs.arch }}, runner=${{ inputs.runner }}, deployment_target=${{ inputs.deployment_target }}"
+              echo "::error::Use arm64:macos-15:11.0 or x86_64:macos-15-intel:10.13. Do not use macos-latest for release artifacts."
+              exit 1
+              ;;
+          esac
+
+      - name: Check signing secrets
+        id: check_secrets
+        env:
+          APP_P12: ${{ secrets.DEVELOPER_ID_CERTIFICATE_P12 }}
+        run: |
+          if [ -n "$APP_P12" ]; then
+            echo "signing_enabled=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "signing_enabled=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::macOS signing skipped — secrets unavailable (Dependabot or fork PR context). Compile + tests + dylib bundling still validated."
+          fi
+
+      - name: Set Homebrew prefix
+        run: echo "HOMEBREW_PREFIX=$(brew --prefix)" >> "$GITHUB_ENV"
+
+      - name: Install dependencies
+        run: brew install cmake autoconf automake libtool asciidoctor
+
+      - name: Compute Qt cache key
+        id: qt-key
+        run: |
+          .github/scripts/macos-qt-cache-key.sh \
+            --arch "${{ inputs.arch }}" \
+            --runner "${{ inputs.runner }}" \
+            --deployment-target "${{ inputs.deployment_target }}" \
+            --github-output
+
+      - name: Restore Qt cache
+        id: qt-cache
+        uses: actions/cache/restore@v5
+        with:
+          path: qt-prefix
+          key: ${{ steps.qt-key.outputs.key }}
+          fail-on-cache-miss: true
+
+      - name: Verify cached Qt deployment target
+        run: |
+          .github/scripts/verify-macos-artifacts.sh \
+            --target "${{ inputs.deployment_target }}" \
+            --arch "${{ inputs.arch }}" \
+            --allow-prefix "${GITHUB_WORKSPACE}/qt-prefix" \
+            "${GITHUB_WORKSPACE}/qt-prefix"
+
+      - name: Install controlled ARM gfortran
+        id: controlled-arm-fc
+        if: inputs.arch == 'arm64'
+        run: |
+          .github/scripts/install-r-macos-gfortran.sh \
+            --target "${{ inputs.deployment_target }}" \
+            --arch "${{ inputs.arch }}" \
+            --work-dir "${RUNNER_TEMP}/r-macos-gfortran" \
+            --prefix "${GITHUB_WORKSPACE}/gfortran-prefix" \
+            --github-output
+
+      - name: Install controlled Intel gfortran
+        id: controlled-intel-fc
+        if: inputs.arch == 'x86_64'
+        run: |
+          .github/scripts/install-xpack-gfortran-macos.sh \
+            --target "${{ inputs.deployment_target }}" \
+            --arch "${{ inputs.arch }}" \
+            --work-dir "${RUNNER_TEMP}/xpack-gfortran" \
+            --prefix "${GITHUB_WORKSPACE}/gfortran-prefix" \
+            --github-output
+
+      - name: Select gfortran
+        id: fc
+        run: |
+          if [ "${{ inputs.arch }}" = "x86_64" ]; then
+            echo "Using controlled gfortran: ${{ steps.controlled-intel-fc.outputs.path }}"
+            {
+              echo "path=${{ steps.controlled-intel-fc.outputs.path }}"
+              echo "prefix=${{ steps.controlled-intel-fc.outputs.prefix }}"
+              echo "original_prefix=${{ steps.controlled-intel-fc.outputs.original_prefix }}"
+              echo "runtime_lib_dir=${{ steps.controlled-intel-fc.outputs.runtime_lib_dir }}"
+              echo "libgomp=${{ steps.controlled-intel-fc.outputs.libgomp }}"
+              echo "fortran_runtime_flags=${{ steps.controlled-intel-fc.outputs.fortran_runtime_flags }}"
+              echo "runtime_link_flags=${{ steps.controlled-intel-fc.outputs.runtime_link_flags }}"
+              echo "runtime_archives=${{ steps.controlled-intel-fc.outputs.runtime_archives }}"
+              echo "version=${{ steps.controlled-intel-fc.outputs.version }}"
+              echo "cache_key=${{ steps.controlled-intel-fc.outputs.cache_key }}"
+            } >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          echo "Using controlled gfortran: ${{ steps.controlled-arm-fc.outputs.path }}"
+          {
+            echo "path=${{ steps.controlled-arm-fc.outputs.path }}"
+            echo "prefix=${{ steps.controlled-arm-fc.outputs.prefix }}"
+            echo "original_prefix=${{ steps.controlled-arm-fc.outputs.original_prefix }}"
+            echo "runtime_lib_dir=${{ steps.controlled-arm-fc.outputs.runtime_lib_dir }}"
+            echo "libgomp=${{ steps.controlled-arm-fc.outputs.libgomp }}"
+            echo "fortran_runtime_flags=${{ steps.controlled-arm-fc.outputs.fortran_runtime_flags }}"
+            echo "runtime_link_flags=${{ steps.controlled-arm-fc.outputs.runtime_link_flags }}"
+            echo "runtime_archives=${{ steps.controlled-arm-fc.outputs.runtime_archives }}"
+            echo "version=${{ steps.controlled-arm-fc.outputs.version }}"
+            echo "cache_key=${{ steps.controlled-arm-fc.outputs.cache_key }}"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Verify static Fortran runtime deployment targets
+        run: |
+          .github/scripts/verify-macos-static-archives.sh \
+            --target "${{ inputs.deployment_target }}" \
+            --arch "${{ inputs.arch }}" \
+            --mode error \
+            ${{ steps.fc.outputs.runtime_archives }}
+
+      - name: Cache libusb
+        id: libusb-cache
+        uses: actions/cache/restore@v5
+        with:
+          path: libusb-prefix
+          key: libusb-macos-${{ inputs.arch }}-${{ inputs.runner }}-1.0.27-min${{ inputs.deployment_target }}-${{ hashFiles('.github/scripts/build-libusb-macos.sh') }}
+
+      - name: Build libusb
+        if: steps.libusb-cache.outputs.cache-hit != 'true'
+        run: |
+          .github/scripts/build-libusb-macos.sh \
+            1.0.27 \
+            "${{ inputs.deployment_target }}" \
+            "${GITHUB_WORKSPACE}/libusb-prefix"
+
+      - name: Save libusb cache
+        if: steps.libusb-cache.outputs.cache-hit != 'true'
+        continue-on-error: true
+        uses: actions/cache/save@v5
+        with:
+          path: libusb-prefix
+          key: libusb-macos-${{ inputs.arch }}-${{ inputs.runner }}-1.0.27-min${{ inputs.deployment_target }}-${{ hashFiles('.github/scripts/build-libusb-macos.sh') }}
+
+      - name: Cache Hamlib
+        id: hamlib-cache
+        uses: actions/cache/restore@v5
+        with:
+          path: hamlib-prefix
+          key: hamlib-macos-${{ inputs.arch }}-${{ inputs.runner }}-${{ inputs.hamlib_branch }}-min${{ inputs.deployment_target }}-${{ hashFiles('.github/scripts/build-hamlib-macos.sh') }}
+
+      - name: Build Hamlib
+        if: steps.hamlib-cache.outputs.cache-hit != 'true'
+        env:
+          PKG_CONFIG_PATH: ${{ github.workspace }}/libusb-prefix/lib/pkgconfig
+        run: |
+          .github/scripts/build-hamlib-macos.sh \
+            "${{ inputs.hamlib_branch }}" \
+            "${{ inputs.deployment_target }}" \
+            "${GITHUB_WORKSPACE}/hamlib-prefix"
+
+      - name: Save Hamlib cache
+        if: steps.hamlib-cache.outputs.cache-hit != 'true'
+        continue-on-error: true
+        uses: actions/cache/save@v5
+        with:
+          path: hamlib-prefix
+          key: hamlib-macos-${{ inputs.arch }}-${{ inputs.runner }}-${{ inputs.hamlib_branch }}-min${{ inputs.deployment_target }}-${{ hashFiles('.github/scripts/build-hamlib-macos.sh') }}
+
+      - name: Cache PortAudio
+        id: portaudio-cache
+        uses: actions/cache/restore@v5
+        with:
+          path: portaudio-prefix
+          key: portaudio-macos-${{ inputs.arch }}-${{ inputs.runner }}-19.7.0-min${{ inputs.deployment_target }}-${{ hashFiles('.github/scripts/build-portaudio-macos.sh') }}
+
+      - name: Build PortAudio
+        if: steps.portaudio-cache.outputs.cache-hit != 'true'
+        run: |
+          .github/scripts/build-portaudio-macos.sh \
+            19.7.0 \
+            "${{ inputs.deployment_target }}" \
+            "${GITHUB_WORKSPACE}/portaudio-prefix"
+
+      - name: Save PortAudio cache
+        if: steps.portaudio-cache.outputs.cache-hit != 'true'
+        continue-on-error: true
+        uses: actions/cache/save@v5
+        with:
+          path: portaudio-prefix
+          key: portaudio-macos-${{ inputs.arch }}-${{ inputs.runner }}-19.7.0-min${{ inputs.deployment_target }}-${{ hashFiles('.github/scripts/build-portaudio-macos.sh') }}
+
+      - name: Cache FFTW
+        id: fftw-cache
+        uses: actions/cache/restore@v5
+        with:
+          path: fftw-prefix
+          key: fftw-macos-${{ inputs.arch }}-${{ inputs.runner }}-3.3.10-min${{ inputs.deployment_target }}-${{ hashFiles('.github/scripts/build-fftw-macos.sh') }}
+
+      - name: Build FFTW
+        if: steps.fftw-cache.outputs.cache-hit != 'true'
+        run: |
+          .github/scripts/build-fftw-macos.sh \
+            3.3.10 \
+            "${{ inputs.deployment_target }}" \
+            "${GITHUB_WORKSPACE}/fftw-prefix"
+
+      - name: Save FFTW cache
+        if: steps.fftw-cache.outputs.cache-hit != 'true'
+        continue-on-error: true
+        uses: actions/cache/save@v5
+        with:
+          path: fftw-prefix
+          key: fftw-macos-${{ inputs.arch }}-${{ inputs.runner }}-3.3.10-min${{ inputs.deployment_target }}-${{ hashFiles('.github/scripts/build-fftw-macos.sh') }}
+
+      - name: Cache Boost
+        id: boost-cache
+        uses: actions/cache/restore@v5
+        with:
+          path: boost-prefix
+          key: boost-macos-${{ inputs.arch }}-${{ inputs.runner }}-1.85.0-min${{ inputs.deployment_target }}-${{ hashFiles('.github/scripts/build-boost-macos.sh') }}
+
+      - name: Build Boost
+        if: steps.boost-cache.outputs.cache-hit != 'true'
+        run: |
+          .github/scripts/build-boost-macos.sh \
+            1.85.0 \
+            "${{ inputs.arch }}" \
+            "${{ inputs.deployment_target }}" \
+            "${GITHUB_WORKSPACE}/boost-prefix"
+
+      - name: Save Boost cache
+        if: steps.boost-cache.outputs.cache-hit != 'true'
+        continue-on-error: true
+        uses: actions/cache/save@v5
+        with:
+          path: boost-prefix
+          key: boost-macos-${{ inputs.arch }}-${{ inputs.runner }}-1.85.0-min${{ inputs.deployment_target }}-${{ hashFiles('.github/scripts/build-boost-macos.sh') }}
+
+      - name: Configure
+        env:
+          PKG_CONFIG_PATH: ${{ github.workspace }}/qt-prefix/lib/pkgconfig:${{ github.workspace }}/boost-prefix/lib/pkgconfig:${{ github.workspace }}/fftw-prefix/lib/pkgconfig:${{ github.workspace }}/libusb-prefix/lib/pkgconfig:${{ github.workspace }}/portaudio-prefix/lib/pkgconfig:${{ github.workspace }}/hamlib-prefix/lib/pkgconfig
+        run: |
+          cmake -S . -B wsjtx-build \
+            -DCMAKE_PREFIX_PATH="${GITHUB_WORKSPACE}/qt-prefix;${GITHUB_WORKSPACE}/boost-prefix;${GITHUB_WORKSPACE}/fftw-prefix;${GITHUB_WORKSPACE}/libusb-prefix;${GITHUB_WORKSPACE}/portaudio-prefix;${GITHUB_WORKSPACE}/hamlib-prefix" \
+            -DCMAKE_Fortran_COMPILER="${{ steps.fc.outputs.path }}" \
+            -DCMAKE_Fortran_FLAGS="${{ steps.fc.outputs.fortran_runtime_flags }}" \
+            -DCMAKE_OSX_DEPLOYMENT_TARGET=${{ inputs.deployment_target }} \
+            -DCMAKE_EXE_LINKER_FLAGS="-Wl,-headerpad_max_install_names ${{ steps.fc.outputs.runtime_link_flags }}" \
+            -DWSJT_MACOS_LIBGOMP_LIBRARY="${{ steps.fc.outputs.libgomp }}" \
+            -DWSJT_SOURCE_REVISION="${{ steps.source_revision.outputs.sha }}" \
+            -DCMAKE_POLICY_VERSION_MINIMUM=3.5 \
+            -DWSJT_SKIP_MANPAGES=ON \
+            -DWSJT_SKIP_BUNDLE_FIXUP=ON \
+            -DWSJT_BUILD_TESTS=ON \
+            -DWSJT_RELEASE_CHANNEL="${{ inputs.release_channel }}" \
+            -DWSJT_RC_NUMBER="${{ inputs.rc_number }}" \
+            -Wno-dev
+
+      - name: Verify resolved dependency prefixes
+        run: |
+          CACHE=wsjtx-build/CMakeCache.txt
+          BAD=$(awk -F= '
+            /^(Boost_DIR|Boost_INCLUDE_DIR|Boost_LOG_LIBRARY_RELEASE|Boost_LOG_SETUP_LIBRARY_RELEASE|FFTW3F_LIBRARY|FFTW3F_THREADS_LIBRARY|FFTW3_INCLUDE_DIR|Hamlib_INCLUDE_DIR|Hamlib_LIBRARY|Portaudio_INCLUDE_DIR|Portaudio_LIBRARY|Usb_INCLUDE_DIR|Usb_LIBRARY|Qt5[^:]*_DIR|Qt5[^:]*_EXECUTABLE):/ && $2 ~ /^(\/opt\/homebrew|\/usr\/local\/Cellar|\/usr\/local\/opt|\/opt\/local)/ {
+              print
+            }
+          ' "$CACHE")
+          if [ -n "$BAD" ]; then
+            echo "::error::Deployable macOS build resolved bundled dependencies from a package-manager prefix:"
+            echo "$BAD"
+            exit 1
+          fi
+
+          QT_BAD=$(awk -F= -v prefix="${GITHUB_WORKSPACE}/qt-prefix" '
+            /^Qt5[^:]*_(DIR|EXECUTABLE):/ && index($2, prefix) != 1 {
+              print
+            }
+          ' "$CACHE")
+          if [ -n "$QT_BAD" ]; then
+            echo "::error::Deployable macOS build did not resolve Qt from the cached qt-prefix:"
+            echo "$QT_BAD"
+            exit 1
+          fi
+
+      - name: Verify built dependency deployment targets
+        run: |
+          .github/scripts/verify-macos-artifacts.sh \
+            --target "${{ inputs.deployment_target }}" \
+            --arch "${{ inputs.arch }}" \
+            --allow-prefix "${GITHUB_WORKSPACE}/boost-prefix" \
+            --allow-prefix "${GITHUB_WORKSPACE}/fftw-prefix" \
+            --allow-prefix "${GITHUB_WORKSPACE}/libusb-prefix" \
+            --allow-prefix "${GITHUB_WORKSPACE}/portaudio-prefix" \
+            "${GITHUB_WORKSPACE}/boost-prefix" \
+            "${GITHUB_WORKSPACE}/fftw-prefix" \
+            "${GITHUB_WORKSPACE}/libusb-prefix" \
+            "${GITHUB_WORKSPACE}/portaudio-prefix"
+
+      - name: Verify Hamlib static archive deployment targets
+        run: |
+          hamlib_archives=( "${GITHUB_WORKSPACE}/hamlib-prefix/lib/"*.a )
+          .github/scripts/verify-macos-static-archives.sh \
+            --target "${{ inputs.deployment_target }}" \
+            --arch "${{ inputs.arch }}" \
+            --mode error \
+            "${hamlib_archives[@]}"
+
+      - name: Build
+        run: cmake --build wsjtx-build -j"$(sysctl -n hw.ncpu)"
+
+      - name: Run tests
+        id: ctest
+        run: ctest --output-on-failure --output-junit ctest-results.xml
+        working-directory: wsjtx-build
+
+      - name: Publish test summary
+        if: always() && steps.ctest.conclusion != 'skipped'
+        working-directory: wsjtx-build
+        run: python3 ../.github/scripts/publish-ctest-summary.py "macOS ${{ inputs.arch }}" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload test results
+        if: always() && steps.ctest.conclusion != 'skipped'
+        continue-on-error: true
+        uses: actions/upload-artifact@v7
+        with:
+          name: ctest-results-macos-${{ inputs.arch }}
+          path: wsjtx-build/ctest-results.xml
+          if-no-files-found: ignore
+
+      - name: Verify architecture
+        run: |
+          file wsjtx-build/jt9
+          lipo -archs wsjtx-build/jt9 | grep -q ${{ inputs.arch }}
+
+      - name: Install app bundle and collect CLI assets
+        id: collect
+        run: |
+          BUILD=wsjtx-build
+          STAGE=stage/wsjtx-${{ inputs.version }}-${{ inputs.arch }}
+          ASSETS=assets
+
+          mkdir -p "${ASSETS}"
+          cmake --install "${BUILD}" --prefix "${STAGE}"
+
+          APP="${STAGE}/wsjtx.app"
+          if [ ! -d "${APP}" ]; then
+            echo "::error::CMake install did not create ${APP}"
+            exit 1
+          fi
+          if [ ! -x "${APP}/Contents/MacOS/map65" ]; then
+            echo "::error::CMake install did not create executable MAP65 companion app binary at ${APP}/Contents/MacOS/map65"
+            exit 1
+          fi
+
+          for bin in jt9 wsprd wsprcode jt65code jt4code ft8code q65code encode77 fcal hash22calc; do
+            [ -f "${BUILD}/${bin}" ] && cp "${BUILD}/${bin}" "${ASSETS}/"
+          done
+
+          for bin in ft4sim jt4sim jt65sim cwsim sfoxsim echosim EchoCallSim; do
+            [ -f "${BUILD}/${bin}" ] && cp "${BUILD}/${bin}" "${ASSETS}/"
+          done
+
+          echo "stage_dir=${STAGE}" >> "$GITHUB_OUTPUT"
+          echo "assets_dir=${ASSETS}" >> "$GITHUB_OUTPUT"
+
+      - name: Verify CMake-installed app resources
+        run: |
+          APP="${{ steps.collect.outputs.stage_dir }}/wsjtx.app"
+          DATADIR="${APP}/Contents/Resources/wsjtx"
+          DOCDIR="${APP}/Contents/Resources/doc/wsjtx"
+          SOUNDDIR="${APP}/Contents/Resources/sounds"
+
+          for file in cty.dat cty.dat_copyright.txt grid.dat sat.dat eclipse.txt ALLCALL7.TXT JPLEPH; do
+            if [ ! -f "${DATADIR}/${file}" ]; then
+              echo "::error::Expected CMake-installed data file is missing: ${DATADIR}/${file}"
+              exit 1
+            fi
+          done
+
+          set -- "${DOCDIR}/wsjtx-main"*.html
+          if [ "$#" -lt 1 ] || [ ! -f "$1" ]; then
+            echo "::error::Expected at least one CMake-installed local user guide in ${DOCDIR}"
+            printf 'Matched paths:\n'
+            printf '  %s\n' "$@"
+            exit 1
+          fi
+
+          if [ ! -f "${SOUNDDIR}/Wanted.wav" ]; then
+            echo "::error::Expected CMake-installed alert sound is missing: ${SOUNDDIR}/Wanted.wav"
+            exit 1
+          fi
+          if [ ! -x "${APP}/Contents/MacOS/map65" ]; then
+            echo "::error::Expected CMake-installed MAP65 binary is missing: ${APP}/Contents/MacOS/map65"
+            exit 1
+          fi
+
+          if [ -e "${APP}/Contents/MacOS/sounds" ]; then
+            echo "::error::Alert sounds must not be installed under Contents/MacOS; codesign treats them as unsigned code."
+            exit 1
+          fi
+
+          echo "Verified CMake-installed data files in ${DATADIR}"
+          echo "Verified CMake-installed local user guides:"
+          printf '  %s\n' "$@"
+          echo "Verified CMake-installed alert sounds in ${SOUNDDIR}"
+
+      - name: Bundle dylibs into app
+        run: |
+          set -Eeuo pipefail
+          STAGE="${{ steps.collect.outputs.stage_dir }}"
+          APP="${STAGE}/wsjtx.app"
+          FRAMEWORKS="${APP}/Contents/Frameworks"
+          FORTRAN_PREFIX="${{ steps.fc.outputs.prefix }}"
+          FORTRAN_ORIGINAL_PREFIX="${{ steps.fc.outputs.original_prefix }}"
+          GCC_LIB="${{ steps.fc.outputs.runtime_lib_dir }}"
+          mkdir -p "${FRAMEWORKS}"
+
+          dump_bundle_context() {
+            local status="$1"
+            local line="$2"
+            local command="$3"
+            echo "::error::Bundle dylibs into app failed at line ${line} with status ${status}: ${command}"
+            echo "APP=${APP}"
+            echo "FRAMEWORKS=${FRAMEWORKS}"
+            echo "FORTRAN_PREFIX=${FORTRAN_PREFIX}"
+            echo "FORTRAN_ORIGINAL_PREFIX=${FORTRAN_ORIGINAL_PREFIX}"
+            echo "GCC_LIB=${GCC_LIB}"
+            echo "HOMEBREW_PREFIX=${HOMEBREW_PREFIX}"
+            echo "App executable contents:"
+            ls -la "${APP}/Contents/MacOS" || true
+            echo "Framework contents:"
+            ls -la "${FRAMEWORKS}" || true
+            echo "External references in app executables:"
+            find "${APP}/Contents/MacOS" -type f -perm +111 -print -exec otool -L {} \; 2>/dev/null || true
+            if [ -f macdeployqt.log ]; then
+              echo "macdeployqt.log:"
+              cat macdeployqt.log
+            fi
+          }
+          trap 'status=$?; dump_bundle_context "$status" "$LINENO" "$BASH_COMMAND"; exit "$status"' ERR
+
+          run_logged() {
+            echo "+ $*"
+            "$@"
+          }
+
+          echo "Running macdeployqt..."
+          set +e
+          "${GITHUB_WORKSPACE}/qt-prefix/bin/macdeployqt" "${APP}" -verbose=2 > macdeployqt.log 2>&1
+          status=$?
+          set -e
+          if [ "$status" -ne 0 ]; then
+            echo "::error::macdeployqt failed with status ${status}"
+            dump_bundle_context "$status" "$LINENO" "macdeployqt"
+            exit "$status"
+          fi
+          cat macdeployqt.log
+
+          resolve_lib() {
+            local lib="$1"
+            if [ -n "$FORTRAN_ORIGINAL_PREFIX" ] && [[ "$lib" == "$FORTRAN_ORIGINAL_PREFIX"/* ]]; then
+              local original_prefix="${FORTRAN_ORIGINAL_PREFIX}/"
+              local relocated="${FORTRAN_PREFIX}/${lib:${#original_prefix}}"
+              [ -f "$relocated" ] && echo "$relocated" && return 0
+            fi
+            if [[ "$lib" == $HOMEBREW_PREFIX/* ]]; then
+              echo "$lib"
+              return 0
+            elif [[ "$lib" == $GITHUB_WORKSPACE/* ]]; then
+              echo "$lib"
+              return 0
+            elif [[ "$lib" == @rpath/* ]]; then
+              local name="${lib#@rpath/}"
+              for dir in \
+                "$FRAMEWORKS" \
+                "$GITHUB_WORKSPACE/boost-prefix/lib" \
+                "$GITHUB_WORKSPACE/fftw-prefix/lib" \
+                "$GITHUB_WORKSPACE/libusb-prefix/lib" \
+                "$GITHUB_WORKSPACE/portaudio-prefix/lib" \
+                "$FORTRAN_PREFIX/lib" \
+                "$GCC_LIB" \
+                "$HOMEBREW_PREFIX/lib"
+              do
+                [ -f "$dir/$name" ] && echo "$dir/$name" && return
+              done
+            fi
+            return 0
+          }
+
+          should_bundle_ref() {
+            local ref="$1"
+            case "$ref" in
+              *Qt*.framework/*)
+                return 1
+                ;;
+              "$FORTRAN_ORIGINAL_PREFIX"/*|"$HOMEBREW_PREFIX"/*|"$GITHUB_WORKSPACE"/*|@rpath/*)
+                return 0
+                ;;
+              *)
+                return 1
+                ;;
+            esac
+          }
+
+          bundle_dylib() {
+            local binary="$1"
+            local lib
+            while IFS= read -r lib; do
+              should_bundle_ref "$lib" || continue
+              local resolved
+              resolved=$(resolve_lib "$lib")
+              if [ -z "$resolved" ]; then
+                echo "::error::Could not resolve ${lib} required by ${binary}"
+                exit 1
+              fi
+              local libname
+              libname=$(basename "$resolved")
+              case "$libname" in
+                libgomp*.dylib)
+                  echo "::error::Refusing to bundle ${resolved}; libgomp must be linked statically for deployable macOS artifacts."
+                  exit 1
+                  ;;
+              esac
+              if [ ! -f "${FRAMEWORKS}/${libname}" ]; then
+                echo "  Bundling: $resolved -> ${FRAMEWORKS}/${libname}"
+                run_logged cp "$resolved" "${FRAMEWORKS}/${libname}"
+                run_logged chmod 644 "${FRAMEWORKS}/${libname}"
+                run_logged install_name_tool -id "@rpath/${libname}" "${FRAMEWORKS}/${libname}"
+                bundle_dylib "${FRAMEWORKS}/${libname}"
+              fi
+              if [ "$lib" != "@rpath/${libname}" ]; then
+                run_logged install_name_tool -change "$lib" "@rpath/${libname}" "$binary"
+              fi
+            done < <(otool -L "$binary" | awk 'NR > 1 {print $1}' || true)
+          }
+
+          ensure_app_rpath() {
+            local binary="$1"
+            local rpath
+
+            while IFS= read -r rpath; do
+              [ -n "$rpath" ] || continue
+              case "$rpath" in
+                "$GITHUB_WORKSPACE"/*|"$HOMEBREW_PREFIX"/*)
+                  run_logged install_name_tool -delete_rpath "$rpath" "$binary"
+                  ;;
+              esac
+            done < <(otool -l "$binary" | awk '/LC_RPATH/{getline; getline; print $2}' || true)
+
+            if ! otool -l "$binary" | awk '/LC_RPATH/{getline; getline; print $2}' | grep -Fxq "@executable_path/../Frameworks"; then
+              run_logged install_name_tool -add_rpath "@executable_path/../Frameworks" "$binary"
+            fi
+          }
+
+          for exe in "${APP}/Contents/MacOS/"*; do
+            [ -f "$exe" ] && [ -x "$exe" ] && {
+              ensure_app_rpath "$exe"
+              bundle_dylib "$exe"
+              for fw in $(otool -L "$exe" | awk '{print $1}' | grep '\.framework/' || true); do
+                fwname=$(basename "$fw")
+                bundled=$(find "${FRAMEWORKS}" -name "${fwname}" -path "*.framework/*" 2>/dev/null | head -1)
+                if [ -n "$bundled" ]; then
+                  app_contents="${APP}/Contents/"
+                  fwrel="${bundled:${#app_contents}}"
+                  if [ "$fw" != "@executable_path/../${fwrel}" ]; then
+                    run_logged install_name_tool -change "$fw" "@executable_path/../${fwrel}" "$exe"
+                  fi
+                fi
+              done
+            }
+          done
+
+          for fw in "${FRAMEWORKS}"/*.dylib; do
+            [ -f "$fw" ] && bundle_dylib "$fw"
+          done
+
+          for exe in "${APP}/Contents/MacOS/"*; do
+            [ -f "$exe" ] && [ -x "$exe" ] && bundle_dylib "$exe"
+          done
+
+          echo "Checking for remaining external references..."
+          remaining_refs="${RUNNER_TEMP:-/tmp}/wsjtx-app-remaining-refs.txt"
+          : > "$remaining_refs"
+          while IFS= read -r binary; do
+            while IFS= read -r ref; do
+              case "$ref" in
+                "$FORTRAN_ORIGINAL_PREFIX"/*|"$HOMEBREW_PREFIX"/*|"$GITHUB_WORKSPACE"/*)
+                  echo "${binary}: ${ref}" >> "$remaining_refs"
+                  ;;
+              esac
+            done < <(otool -L "$binary" | awk 'NR > 1 {print $1}' || true)
+          done < <(find "${APP}/Contents/MacOS" -type f -perm +111 -print 2>/dev/null)
+          if [ -s "$remaining_refs" ]; then
+            echo "::error::External build-time paths still present:"
+            cat "$remaining_refs"
+            exit 1
+          else
+            echo "All dylibs bundled successfully"
+          fi
+
+      - name: Bundle dylibs into CLI tools
+        run: |
+          set -Eeuo pipefail
+          ASSETS="${{ steps.collect.outputs.assets_dir }}"
+          STAGE="${{ steps.collect.outputs.stage_dir }}"
+          LIBDIR="${ASSETS}/lib"
+          FORTRAN_PREFIX="${{ steps.fc.outputs.prefix }}"
+          FORTRAN_ORIGINAL_PREFIX="${{ steps.fc.outputs.original_prefix }}"
+          GCC_LIB="${{ steps.fc.outputs.runtime_lib_dir }}"
+          mkdir -p "${LIBDIR}"
+
+          dump_cli_context() {
+            local status="$1"
+            local line="$2"
+            local command="$3"
+            echo "::error::Bundle dylibs into CLI tools failed at line ${line} with status ${status}: ${command}"
+            echo "ASSETS=${ASSETS}"
+            echo "LIBDIR=${LIBDIR}"
+            echo "FORTRAN_PREFIX=${FORTRAN_PREFIX}"
+            echo "FORTRAN_ORIGINAL_PREFIX=${FORTRAN_ORIGINAL_PREFIX}"
+            echo "GCC_LIB=${GCC_LIB}"
+            echo "HOMEBREW_PREFIX=${HOMEBREW_PREFIX}"
+            echo "Asset contents:"
+            ls -la "${ASSETS}" || true
+            echo "Library contents:"
+            ls -la "${LIBDIR}" || true
+            echo "External references in CLI assets:"
+            for bin in "${ASSETS}"/*; do
+              [ -f "$bin" ] && [ -x "$bin" ] && [ "$(basename "$bin")" != "lib" ] || continue
+              echo "== $bin =="
+              otool -L "$bin" || true
+            done
+          }
+          trap 'status=$?; dump_cli_context "$status" "$LINENO" "$BASH_COMMAND"; exit "$status"' ERR
+
+          run_logged() {
+            echo "+ $*"
+            "$@"
+          }
+
+          resolve_cli_ref() {
+            local ref="$1"
+            local name="" suffix=""
+
+            if [ -n "$FORTRAN_ORIGINAL_PREFIX" ] && [[ "$ref" == "$FORTRAN_ORIGINAL_PREFIX"/* ]]; then
+              local original_prefix="${FORTRAN_ORIGINAL_PREFIX}/"
+              local relocated="${FORTRAN_PREFIX}/${ref:${#original_prefix}}"
+              [ -f "$relocated" ] && echo "$relocated"
+              return 0
+            fi
+
+            case "$ref" in
+              /usr/lib/*|/System/Library/*)
+                return 0
+                ;;
+              @loader_path/lib/*)
+                name="${ref#@loader_path/lib/}"
+                [ -f "${LIBDIR}/${name}" ] && echo "${LIBDIR}/${name}"
+                return 0
+                ;;
+              @loader_path/*)
+                name="${ref#@loader_path/}"
+                [ -f "${LIBDIR}/${name}" ] && echo "${LIBDIR}/${name}"
+                return 0
+                ;;
+              "$GITHUB_WORKSPACE"/*|"$HOMEBREW_PREFIX"/*)
+                echo "$ref"
+                return 0
+                ;;
+            esac
+
+            if [[ "$ref" == @rpath/* ]]; then
+              suffix="${ref#@rpath/}"
+              if [[ "$suffix" == *.framework/* ]]; then
+                for dir in \
+                  "${STAGE}/wsjtx.app/Contents/Frameworks" \
+                  "${GITHUB_WORKSPACE}/qt-prefix/lib"
+                do
+                  [ -f "${dir}/${suffix}" ] && echo "${dir}/${suffix}" && return 0
+                done
+              else
+                name="${suffix}"
+                for dir in \
+                  "${LIBDIR}" \
+                  "${STAGE}/wsjtx.app/Contents/Frameworks" \
+                  "${GITHUB_WORKSPACE}/boost-prefix/lib" \
+                  "${GITHUB_WORKSPACE}/fftw-prefix/lib" \
+                  "${GITHUB_WORKSPACE}/libusb-prefix/lib" \
+                  "${GITHUB_WORKSPACE}/portaudio-prefix/lib" \
+                  "${FORTRAN_PREFIX}/lib" \
+                  "${GCC_LIB}" \
+                  "${HOMEBREW_PREFIX}/lib"
+                do
+                  [ -f "${dir}/${name}" ] && echo "${dir}/${name}" && return 0
+                done
+              fi
+            fi
+
+            return 0
+          }
+
+          bundle_cli_deps() {
+            local binary="$1"
+            local change_prefix="$2"
+            local ref resolved out name target
+
+            while IFS= read -r ref; do
+              resolved=$(resolve_cli_ref "$ref")
+              if [ -z "$resolved" ]; then
+                case "$ref" in
+                  @rpath/*|@loader_path/*|"$GITHUB_WORKSPACE"/*|"$HOMEBREW_PREFIX"/*)
+                    echo "::error::Could not resolve ${ref} required by ${binary}"
+                    exit 1
+                    ;;
+                  *)
+                    continue
+                    ;;
+                esac
+              fi
+
+              name="$(basename "$resolved")"
+              case "$name" in
+                libgomp*.dylib)
+                  echo "::error::Refusing to bundle ${resolved}; libgomp must be linked statically for deployable macOS artifacts."
+                  exit 1
+                  ;;
+              esac
+
+              out="${LIBDIR}/${name}"
+              if [ ! -f "$out" ]; then
+                echo "  Bundling: ${resolved} -> ${out}"
+                run_logged cp "$resolved" "$out"
+                run_logged chmod 644 "$out"
+                run_logged install_name_tool -id "@rpath/${name}" "$out"
+                bundle_cli_deps "$out" "@rpath"
+              fi
+
+              target="${change_prefix}/${name}"
+              if [ "$ref" != "$target" ]; then
+                run_logged install_name_tool -change "$ref" "$target" "$binary"
+              fi
+            done < <(otool -L "$binary" | awk 'NR > 1 {print $1}' | grep -E "($HOMEBREW_PREFIX|$GITHUB_WORKSPACE|@rpath|@loader_path)" || true)
+          }
+
+          ensure_cli_rpath() {
+            local binary="$1"
+            local rpath
+            local bad_rpaths=()
+            local unique_bad_rpaths=()
+
+            while IFS= read -r rpath; do
+              [ -n "$rpath" ] || continue
+              case "$rpath" in
+                "$GITHUB_WORKSPACE"/*|"$HOMEBREW_PREFIX"/*)
+                  bad_rpaths+=("$rpath")
+                  ;;
+              esac
+            done < <(otool -l "$binary" | awk '/LC_RPATH/{getline; getline; print $2}' || true)
+
+            # Deduplicate bad rpaths (compatible with macOS Bash 3.2)
+            if [ "${#bad_rpaths[@]}" -gt 0 ]; then
+              for rpath in "${bad_rpaths[@]}"; do
+                local found=0
+                local u
+                if [ "${#unique_bad_rpaths[@]}" -gt 0 ]; then
+                  for u in "${unique_bad_rpaths[@]}"; do
+                    [ "$u" = "$rpath" ] && found=1 && break
+                  done
+                fi
+                [ "$found" -eq 0 ] && unique_bad_rpaths+=("$rpath")
+              done
+            fi
+
+            if [ "${#unique_bad_rpaths[@]}" -gt 0 ]; then
+              for rpath in "${unique_bad_rpaths[@]}"; do
+                run_logged install_name_tool -delete_rpath "$rpath" "$binary"
+              done
+            fi
+
+            if ! otool -l "$binary" | awk '/LC_RPATH/{getline; getline; print $2}' | grep -Fxq "@loader_path/lib"; then
+              run_logged install_name_tool -add_rpath "@loader_path/lib" "$binary"
+            fi
+          }
+
+          for bin in "${ASSETS}"/*; do
+            [ -f "$bin" ] && [ -x "$bin" ] && [ "$(basename "$bin")" != "lib" ] || continue
+            ensure_cli_rpath "$bin"
+            bundle_cli_deps "$bin" "@rpath"
+            run_logged codesign --force --sign - "$bin"
+          done
+
+          for lib in "${LIBDIR}"/*; do
+            [ -f "$lib" ] || continue
+            bundle_cli_deps "$lib" "@rpath"
+            run_logged codesign --force --sign - "$lib"
+          done
+
+          echo "Verifying CLI tools..."
+          for bin in "${ASSETS}"/*; do
+            [ -f "$bin" ] && [ -x "$bin" ] && [ "$(basename "$bin")" != "lib" ] && {
+              BAD=$(otool -L "$bin" | grep "$HOMEBREW_PREFIX" || true)
+              if [ -n "$BAD" ]; then
+                echo "ERROR: $(basename "$bin") still has Homebrew refs:"
+                echo "$BAD"
+                exit 1
+              fi
+            }
+          done
+          echo "All CLI tools are self-contained"
+
+          cp -R "${LIBDIR}" "${STAGE}/lib"
+          for bin in "${ASSETS}"/*; do
+            [ -f "$bin" ] && [ -x "$bin" ] && [ "$(basename "$bin")" != "lib" ] && {
+              cp "$bin" "${STAGE}/$(basename "$bin")"
+            }
+          done
+
+      - name: Verify bundled macOS deployment targets
+        run: |
+          STAGE="${{ steps.collect.outputs.stage_dir }}"
+          .github/scripts/verify-macos-artifacts.sh \
+            --target "${{ inputs.deployment_target }}" \
+            --arch "${{ inputs.arch }}" \
+            "$STAGE"
+
+      - name: Import signing certificates
+        if: steps.check_secrets.outputs.signing_enabled == 'true'
+        env:
+          APP_P12: ${{ secrets.DEVELOPER_ID_CERTIFICATE_P12 }}
+          APP_P12_PW: ${{ secrets.DEVELOPER_ID_CERTIFICATE_PASSWORD }}
+          INST_P12: ${{ secrets.DEVELOPER_ID_INSTALLER_P12 }}
+          INST_P12_PW: ${{ secrets.DEVELOPER_ID_INSTALLER_PASSWORD }}
+        run: |
+          KEYCHAIN_PATH="$RUNNER_TEMP/signing.keychain-db"
+          KEYCHAIN_PASSWORD="$(openssl rand -hex 16)"
+
+          security create-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+          security set-keychain-settings -lut 21600 "$KEYCHAIN_PATH"
+          security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+
+          echo "$APP_P12" | base64 --decode > "$RUNNER_TEMP/app.p12"
+          security import "$RUNNER_TEMP/app.p12" -P "$APP_P12_PW" -A -t cert -f pkcs12 -k "$KEYCHAIN_PATH"
+
+          echo "$INST_P12" | base64 --decode > "$RUNNER_TEMP/installer.p12"
+          security import "$RUNNER_TEMP/installer.p12" -P "$INST_P12_PW" -A -t cert -f pkcs12 -k "$KEYCHAIN_PATH"
+
+          security set-key-partition-list -S apple-tool:,apple: -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+          security list-keychains -d user -s "$KEYCHAIN_PATH" login.keychain-db
+
+          APP_IDENTITY=$(security find-identity -v -p codesigning "$KEYCHAIN_PATH" | grep "Developer ID Application" | head -1 | awk -F'"' '{print $2}')
+          INST_IDENTITY=$(security find-identity -v "$KEYCHAIN_PATH" | grep "Developer ID Installer" | head -1 | awk -F'"' '{print $2}')
+          echo "App identity: $APP_IDENTITY"
+          echo "Installer identity: $INST_IDENTITY"
+          echo "identity=$APP_IDENTITY" >> "$GITHUB_OUTPUT"
+          echo "installer_identity=$INST_IDENTITY" >> "$GITHUB_OUTPUT"
+        id: keychain
+
+      # ALWAYS runs. Real Developer ID when secrets are present, ad-hoc
+      # signing (-) otherwise. Mirrors the Windows self-signed-sandbox
+      # pattern in build-windows.yml: prove the signing step is wired,
+      # rely on a real cert in production. Ad-hoc signing produces a
+      # structurally-valid signature with no Apple trust chain — pkg
+      # will not pass Gatekeeper without right-click→Open, but is
+      # well-formed and the all-platforms-ready gate in release.yml
+      # finds the artifact at the expected path.
+      - name: Code sign binaries
+        run: |
+          STAGE="${{ steps.collect.outputs.stage_dir }}"
+          ASSETS="${{ steps.collect.outputs.assets_dir }}"
+          APP="${STAGE}/wsjtx.app"
+          ENTITLEMENTS="${GITHUB_WORKSPACE}/entitlements.plist"
+
+          if [ "${{ steps.check_secrets.outputs.signing_enabled }}" = "true" ]; then
+            IDENTITY="${{ steps.keychain.outputs.identity }}"
+            TS="--timestamp"
+            echo "Code signing mode: Developer ID (real)"
+          else
+            IDENTITY="-"
+            TS=""
+            echo "Code signing mode: ad-hoc (no Apple trust chain; pkg will be unsigned)"
+          fi
+
+          # entitlements.plist declares com.apple.security.cs.disable-
+          # library-validation, which is required for any app bundling
+          # its own non-system frameworks (Qt, etc.) under hardened
+          # runtime — otherwise dyld refuses to load them. Applied on
+          # both signing paths: the real-cert path needs it for
+          # notarization-friendly distribution; the ad-hoc path needs
+          # it because each ad-hoc signature has its own pseudo-Team-ID
+          # so the main binary and bundled frameworks never match.
+          # (The plist is non-empty, so macos-15-intel's codesign now
+          # parses it cleanly — no need for the conditional that PR #23
+          # introduced as a workaround for the empty-plist parser bug.)
+          find "${APP}/Contents/Frameworks" -type f \( -name "*.dylib" -o -perm +111 \) \
+            -exec codesign --force --options runtime $TS --sign "$IDENTITY" {} \;
+          find "${APP}/Contents/Frameworks" -name "*.framework" -type d | while read -r fw; do
+            codesign --force --options runtime $TS --sign "$IDENTITY" "$fw"
+          done
+          if [ -d "${APP}/Contents/PlugIns" ]; then
+            find "${APP}/Contents/PlugIns" -type f -name "*.dylib" \
+              -exec codesign --force --options runtime $TS --sign "$IDENTITY" {} \;
+          fi
+
+          find "${APP}/Contents/MacOS" -type f -perm +111 \
+            -exec codesign --force --options runtime --entitlements "$ENTITLEMENTS" $TS --sign "$IDENTITY" {} \;
+          # Bundle-level codesign re-signs the main executable. --force
+          # without --entitlements would WIPE the entitlements applied
+          # in the previous step (PR #27 missed this — rc1 shipped with
+          # an unentitled wsjtx binary, so disable-library-validation
+          # never took effect and the dyld load of QtSerialPort still
+          # failed with mismatched Team IDs).
+          codesign --force --options runtime --entitlements "$ENTITLEMENTS" $TS --sign "$IDENTITY" "${APP}"
+          codesign --verify --deep --strict --verbose=2 "${APP}"
+
+          # Defensive: confirm the entitlement actually made it onto
+          # the main binary. `codesign --verify` doesn't check
+          # entitlement presence — it only validates the signature
+          # itself — so a re-sign that wipes entitlements would still
+          # pass verify (that's how rc1 shipped broken).
+          MAIN_BIN="${APP}/Contents/MacOS/wsjtx"
+          if ! codesign -d --entitlements - "$MAIN_BIN" 2>/dev/null | grep -q "disable-library-validation"; then
+            echo "::error::wsjtx binary is missing com.apple.security.cs.disable-library-validation entitlement."
+            echo "::error::Bundled Qt frameworks will fail to load under hardened runtime."
+            codesign -d --entitlements - "$MAIN_BIN" || true
+            exit 1
+          fi
+          echo "Confirmed disable-library-validation entitlement on $MAIN_BIN"
+
+          for dir in "${STAGE}" "${ASSETS}"; do
+            find "${dir}" -maxdepth 1 -type f -perm +111 \
+              -exec codesign --force --options runtime --entitlements "$ENTITLEMENTS" $TS --sign "$IDENTITY" {} \;
+          done
+
+          for dir in "${STAGE}/lib" "${ASSETS}/lib"; do
+            [ -d "$dir" ] && find "$dir" -type f \
+              -exec codesign --force --options runtime $TS --sign "$IDENTITY" {} \;
+          done
+
+      # ALWAYS runs. productbuild signs with the Developer ID Installer
+      # cert when secrets are present; produces an unsigned .pkg
+      # otherwise. Either way the artifact is named identically and
+      # satisfies the all-platforms-ready gate in release.yml.
+      - name: Build and verify installer pkg
+        run: |
+          STAGE="${{ steps.collect.outputs.stage_dir }}"
+          PKG_ID="org.k1jt.wsjtx.${{ inputs.arch }}"
+          PKG_VERSION="${{ inputs.version }}"
+
+          PAYLOAD="$RUNNER_TEMP/pkg-payload"
+          SCRIPTS="$RUNNER_TEMP/pkg-scripts"
+          mkdir -p "${PAYLOAD}/Applications" "${PAYLOAD}/Library/LaunchDaemons" "${SCRIPTS}"
+
+          cp -R "${STAGE}/wsjtx.app" "${PAYLOAD}/Applications/"
+
+          mkdir -p "${PAYLOAD}/usr/local/wsjtx/lib"
+          for bin in "${STAGE}"/*; do
+            [ -f "$bin" ] && [ -x "$bin" ] && cp "$bin" "${PAYLOAD}/usr/local/wsjtx/"
+          done
+          [ -d "${STAGE}/lib" ] && cp -R "${STAGE}/lib/"* "${PAYLOAD}/usr/local/wsjtx/lib/"
+
+          cp "Darwin/com.wsjtx.sysctl.plist" "${PAYLOAD}/Library/LaunchDaemons/"
+
+          cat > "${SCRIPTS}/postinstall" << 'SCRIPT'
+          #!/bin/bash
+          /bin/launchctl load /Library/LaunchDaemons/com.wsjtx.sysctl.plist 2>/dev/null || true
+          /usr/sbin/sysctl kern.sysv.shmmax=52428800 kern.sysv.shmall=25600 2>/dev/null || true
+          mkdir -p /usr/local/bin
+          for bin in /usr/local/wsjtx/*; do
+            [ -f "$bin" ] && [ -x "$bin" ] && ln -sf "$bin" "/usr/local/bin/$(basename "$bin")"
+          done
+          SCRIPT
+          chmod +x "${SCRIPTS}/postinstall"
+
+          pkgbuild --analyze --root "${PAYLOAD}" "$RUNNER_TEMP/components.plist"
+          /usr/libexec/PlistBuddy -c "Set :0:BundleIsRelocatable false" "$RUNNER_TEMP/components.plist" 2>/dev/null || true
+          /usr/libexec/PlistBuddy -c "Set :0:BundleIsVersionChecked false" "$RUNNER_TEMP/components.plist" 2>/dev/null || true
+          /usr/libexec/PlistBuddy -c "Set :0:BundleOverwriteAction upgrade" "$RUNNER_TEMP/components.plist" 2>/dev/null || true
+
+          pkgbuild \
+            --root "${PAYLOAD}" \
+            --scripts "${SCRIPTS}" \
+            --component-plist "$RUNNER_TEMP/components.plist" \
+            --identifier "${PKG_ID}" \
+            --version "${PKG_VERSION}" \
+            --install-location / \
+            "$RUNNER_TEMP/wsjtx-component.pkg"
+
+          PKG_OUT="wsjtx-${{ inputs.version }}-${{ inputs.arch }}-macOS.pkg"
+          if [ "${{ steps.check_secrets.outputs.signing_enabled }}" = "true" ]; then
+            INST_IDENTITY="${{ steps.keychain.outputs.installer_identity }}"
+            productbuild \
+              --package "$RUNNER_TEMP/wsjtx-component.pkg" \
+              --sign "$INST_IDENTITY" \
+              "$PKG_OUT"
+          else
+            productbuild \
+              --package "$RUNNER_TEMP/wsjtx-component.pkg" \
+              "$PKG_OUT"
+          fi
+
+          CHECK_PAYLOAD="$RUNNER_TEMP/pkg-check"
+          rm -rf "$CHECK_PAYLOAD"
+          pkgutil --expand-full "$PKG_OUT" "$CHECK_PAYLOAD"
+          [ "$(/usr/libexec/PlistBuddy -c "Print :0:BundleIsRelocatable" "$RUNNER_TEMP/components.plist")" = "false" ]
+          [ "$(/usr/libexec/PlistBuddy -c "Print :0:BundleIsVersionChecked" "$RUNNER_TEMP/components.plist")" = "false" ]
+          [ "$(/usr/libexec/PlistBuddy -c "Print :0:BundleOverwriteAction" "$RUNNER_TEMP/components.plist")" = "upgrade" ]
+
+          APP_PAYLOAD="$CHECK_PAYLOAD/wsjtx-component.pkg/Payload/Applications/wsjtx.app"
+          DATADIR="${APP_PAYLOAD}/Contents/Resources/wsjtx"
+          DOCDIR="${APP_PAYLOAD}/Contents/Resources/doc/wsjtx"
+          SOUNDDIR="${APP_PAYLOAD}/Contents/Resources/sounds"
+
+          for file in cty.dat cty.dat_copyright.txt grid.dat sat.dat eclipse.txt ALLCALL7.TXT JPLEPH; do
+            if [ ! -f "${DATADIR}/${file}" ]; then
+              echo "::error::Expected packaged data file is missing: ${DATADIR}/${file}"
+              exit 1
+            fi
+          done
+
+          set -- "${DOCDIR}/wsjtx-main"*.html
+          if [ "$#" -lt 1 ] || [ ! -f "$1" ]; then
+            echo "::error::Expected at least one local user guide in the packaged app bundle."
+            printf 'Matched paths:\n'
+            printf '  %s\n' "$@"
+            exit 1
+          fi
+
+          if [ ! -f "${SOUNDDIR}/Wanted.wav" ]; then
+            echo "::error::Expected packaged alert sound is missing: ${SOUNDDIR}/Wanted.wav"
+            exit 1
+          fi
+          if [ ! -x "${APP_PAYLOAD}/Contents/MacOS/map65" ]; then
+            echo "::error::Expected packaged MAP65 binary is missing: ${APP_PAYLOAD}/Contents/MacOS/map65"
+            exit 1
+          fi
+
+          if [ -e "${APP_PAYLOAD}/Contents/MacOS/sounds" ]; then
+            echo "::error::Packaged alert sounds must not be under Contents/MacOS."
+            exit 1
+          fi
+
+          echo "Verified packaged local user guides:"
+          printf '  %s\n' "$@"
+          echo "Verified packaged alert sounds in ${SOUNDDIR}"
+
+      - name: Notarize pkg
+        if: steps.check_secrets.outputs.signing_enabled == 'true'
+        env:
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_ID_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: |
+          notarize_and_staple() {
+            local file="$1"
+            echo "Notarizing: $file"
+            xcrun notarytool submit "$file" \
+              --apple-id "$APPLE_ID" \
+              --password "$APPLE_ID_PASSWORD" \
+              --team-id "$APPLE_TEAM_ID" \
+              --wait 2>&1 | tee notarize.log
+
+            if grep -q "status: Invalid" notarize.log; then
+              SUBMISSION_ID=$(grep "id:" notarize.log | head -1 | awk '{print $2}')
+              xcrun notarytool log "$SUBMISSION_ID" \
+                --apple-id "$APPLE_ID" \
+                --password "$APPLE_ID_PASSWORD" \
+                --team-id "$APPLE_TEAM_ID" || true
+              exit 1
+            fi
+
+            xcrun stapler staple "$file"
+          }
+
+          notarize_and_staple "wsjtx-${{ inputs.version }}-${{ inputs.arch }}-macOS.pkg"
+
+      - name: Notarize CLI tools
+        if: steps.check_secrets.outputs.signing_enabled == 'true'
+        env:
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_ID_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: |
+          ASSETS="${{ steps.collect.outputs.assets_dir }}"
+          zip -r cli-tools.zip "${ASSETS}"/
+          xcrun notarytool submit cli-tools.zip \
+            --apple-id "$APPLE_ID" \
+            --password "$APPLE_ID_PASSWORD" \
+            --team-id "$APPLE_TEAM_ID" \
+            --wait 2>&1 | tee notarize-cli.log
+
+          if grep -q "status: Invalid" notarize-cli.log; then
+            SUBMISSION_ID=$(grep "id:" notarize-cli.log | head -1 | awk '{print $2}')
+            xcrun notarytool log "$SUBMISSION_ID" \
+              --apple-id "$APPLE_ID" \
+              --password "$APPLE_ID_PASSWORD" \
+              --team-id "$APPLE_TEAM_ID" || true
+            exit 1
+          fi
+          rm cli-tools.zip
+
+      - name: Clean up keychain
+        if: always() && steps.check_secrets.outputs.signing_enabled == 'true'
+        run: security delete-keychain "$RUNNER_TEMP/signing.keychain-db" 2>/dev/null || true
+
+      - name: Upload pkg
+        uses: actions/upload-artifact@v7
+        with:
+          name: wsjtx-${{ inputs.version }}-${{ inputs.arch }}-macOS.pkg
+          path: wsjtx-${{ inputs.version }}-${{ inputs.arch }}-macOS.pkg
+
+      - name: Package individual binaries
+        run: |
+          # Tarball and inner-dir names include the arch suffix so arm64
+          # and x86_64 per-binary artifacts can coexist in a single
+          # GitHub Release without ReleaseAsset.name collisions (#24).
+          ASSETS="${{ steps.collect.outputs.assets_dir }}"
+          ARCH="${{ inputs.arch }}"
+          PKGS=packages
+          mkdir -p "${PKGS}"
+          for bin in "${ASSETS}"/*; do
+            [ -f "$bin" ] && [ -x "$bin" ] || continue
+            name=$(basename "$bin")
+            arch_name="${name}-${ARCH}"
+            dir="${PKGS}/${arch_name}"
+            mkdir -p "${dir}"
+            cp "$bin" "${dir}/"
+            [ -d "${ASSETS}/lib" ] && cp -R "${ASSETS}/lib" "${dir}/lib"
+            tar -czf "${PKGS}/${arch_name}.tar.gz" -C "${PKGS}" "${arch_name}"
+            rm -rf "${dir}"
+          done
+
+      - name: Upload individual binaries
+        uses: actions/upload-artifact@v7
+        with:
+          name: individual-binaries-macos-${{ inputs.arch }}
+          path: packages/*.tar.gz

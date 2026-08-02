@@ -1,0 +1,48 @@
+You can use _WSJT-X_ on any 64-bit Linux system by downloading and
+executing the appropriate "AppImage" file from the {downloads}. These
+packages contain all required dependencies for use of _WSJT-X_, but
+they do not provide access to _MAP65_, _QMAP_, or any of the related
+utility programs.
+
+Complete installation packages are provided on the {downloads} for
+64-bit Debian-based and RedHat-based Linux systems. Be sure to fetch
+the package built for your machine's architecture: it will have
+`x86_64` in the file name for Intel/AMD machines, `aarch64` for ARM.
+
+* To install on Debian-based Linux, for example Ubuntu 22.x or later,
+execute the following command in a terminal:
++
+[example]
+sudo dpkg -i <package-name>
+
+* To uninstall:
++
+[example]
+sudo dpkg -P wsjtx
+
+You may also need to execute the following command in a terminal:
+
+....
+sudo apt install libgfortran5 libqt5widgets5 libqt5network5 \
+     libqt5printsupport5 libqt5multimedia5-plugins libqt5serialport5 \
+     libqt5sql5-sqlite libfftw3-single3 libgomp1 libboost-all-dev \
+     libusb-1.0-0 libportaudio2
+....
+
+* To install on Fedora, CentOS, Red Hat, and other rpm-based systems:
++
+[example]
+sudo rpm -i <package-name>
+
+* To uninstall:
++
+[example]
+sudo rpm -e wsjtx
+
+You may also need to execute the following command in a terminal:
+
+....
+sudo dnf install libgfortran fftw-libs-single qt5-qtbase \
+     qt5-qtmultimedia qt5-qtserialport qt5-qtsvg \
+     qt5-qtserialport libgomp boost libusbx portaudio
+....
