@@ -32,6 +32,12 @@ DEFAULT_RING_SECONDS = 60.0
 RESYNC_THRESHOLD_SECONDS = 0.25
 """Wall-clock drift beyond this re-anchors the sample-count epoch chain."""
 
+RX_DTYPE = "int16"
+"""Capture sample format.  Field finding (2026-08-02/03, FT-710 UAC):
+the device's CoreAudio float32 path intermittently delivers toneless
+noise (band content lost) while int16 always delivers the real band —
+every healthy capture today was int16, every degraded one float32."""
+
 
 class RxConverter:
     """Streaming 48 kHz → 12 kHz converter; the only RX conversion (AD-004).
@@ -167,9 +173,12 @@ class UtcRing:
 class AudioCapture:
     """48 kHz mono input stream feeding the converter and UTC ring.
 
-    ``stream_factory`` defaults to ``sounddevice.InputStream`` (imported
-    lazily so hardware-free hosts can use the pure components); tests inject
-    a fake.  ``clock`` supplies UTC epoch seconds for ring indexing.
+    Captures int16 (see ``RX_DTYPE``) and normalizes to float32 inside the
+    seam, so the converter contract below stays float32 in / 12 kHz int16
+    out.  ``stream_factory`` defaults to ``sounddevice.InputStream``
+    (imported lazily so hardware-free hosts can use the pure components);
+    tests inject a fake.  ``clock`` supplies UTC epoch seconds for ring
+    indexing.
     """
 
     def __init__(
@@ -193,11 +202,13 @@ class AudioCapture:
         self._tap = tap
         self.overruns = 0
         self._next_epoch: float | None = None  # sample-count-anchored continuity
+        self._prev_adc: float | None = None    # ADC-timestamped previous block
+        self._adc_offset: float | None = None  # wall↔host clock calibration
         self._stream_factory = stream_factory
         self._stream_kwargs = dict(
             samplerate=RX_SAMPLE_RATE,
             channels=1,
-            dtype="float32",
+            dtype=RX_DTYPE,
             blocksize=blocksize,
             device=device,
             callback=self._on_block,
@@ -210,11 +221,66 @@ class AudioCapture:
         if status and getattr(status, "input_overflow", False):
             self.overruns += 1
             _audio_log.debug("input overflow #%d (%d frames)", self.overruns, frames)
-        # Anchor epochs to the sample count, not per-block wall reads: real
-        # callback jitter (±ms) would otherwise carve micro-gaps into the
-        # ring and invalidate every slot (real-radio acceptance finding).
-        # The wall clock only anchors the stream start and re-anchors after
-        # a genuine stall (device hiccup), which the ring records as a gap.
+        block_epoch = self._block_epoch(frames, time_info)
+        pcm = indata[:, 0]
+        if pcm.dtype != np.float32:
+            # int16 capture (RX_DTYPE): normalize once inside the seam so the
+            # converter contract (float32 → 12 kHz int16) is unchanged.
+            pcm = pcm.astype(np.float32) / 32_768.0
+        converted = self._converter.push(pcm)
+        self._ring.write(converted, block_epoch)
+        if self._tap is not None:
+            self._tap(converted, block_epoch)  # waterfall feed (§11.2)
+
+    def _block_epoch(self, frames: int, time_info: object) -> float:
+        """Wall epoch of the block's first sample.
+
+        Primary path: CoreAudio's ADC hardware timestamp (first sample),
+        placed on the wall clock via the callback's own currentTime.  The
+        hardware timestamp travels with the audio, so a delivery stall
+        simply leaves a recorded gap in the ring — it can never stamp
+        backlog as live audio and permanently time-shift every later slot
+        (2026-08-03 field finding that killed decodes for hours).
+        Fallback for hosts/tests without ADC timestamps: the legacy
+        sample-count chain anchored to wall-clock reads, re-anchoring
+        after genuine stalls.
+        """
+
+        adc = getattr(time_info, "inputBufferAdcTime", None) if time_info else None
+        current = getattr(time_info, "currentTime", None) if time_info else None
+        if adc and current and adc > 0 and current > 0:
+            if self._adc_offset is None:
+                self._adc_offset = self._clock() - current
+            elif abs(self._clock() - current - self._adc_offset) > RESYNC_THRESHOLD_SECONDS:
+                _audio_log.warning(
+                    "wall-clock step vs ADC: re-calibrating offset (%.3f s)",
+                    self._clock() - current - self._adc_offset,
+                )
+                self._adc_offset = self._clock() - current
+            adc_epoch = adc + self._adc_offset
+            if self._prev_adc is not None and adc_epoch - self._prev_adc > RESYNC_THRESHOLD_SECONDS:
+                _audio_log.warning(
+                    "input stall: %.3f s of audio lost before this block",
+                    adc_epoch - self._prev_adc,
+                )
+            self._prev_adc = adc_epoch
+            # Jitter-free sample-count chain, re-anchored only when the ADC
+            # truth disagrees: per-block ADC jitter stays out of the ring,
+            # while a stall/backlog re-anchors the chain to where the audio
+            # actually is — backlog can never be stamped as live.
+            if (
+                self._next_epoch is None
+                or abs(adc_epoch - self._next_epoch) > RESYNC_THRESHOLD_SECONDS
+            ):
+                self._next_epoch = adc_epoch
+            epoch = self._next_epoch
+            self._next_epoch += frames / RX_SAMPLE_RATE
+            return epoch
+        return self._wall_chain_epoch(frames)
+
+    def _wall_chain_epoch(self, frames: int) -> float:
+        """Legacy anchor: sample-count chain; wall clock only re-anchors."""
+
         block_start = self._clock() - frames / RX_SAMPLE_RATE
         if (
             self._next_epoch is None
@@ -232,10 +298,7 @@ class AudioCapture:
             self._next_epoch = block_start
         block_epoch = self._next_epoch
         self._next_epoch += frames / RX_SAMPLE_RATE
-        converted = self._converter.push(indata[:, 0])
-        self._ring.write(converted, block_epoch)
-        if self._tap is not None:
-            self._tap(converted, block_epoch)  # waterfall feed (§11.2)
+        return block_epoch
 
     def start(self) -> None:
         """Start the input stream, recreating it after a :meth:`stop`.
@@ -259,6 +322,8 @@ class AudioCapture:
             self._stream.close()  # type: ignore[attr-defined]
             self._stream = None
             self._next_epoch = None  # re-anchor on the next start
+            self._prev_adc = None
+            self._adc_offset = None
 
 
 class CaptureHealthMonitor:

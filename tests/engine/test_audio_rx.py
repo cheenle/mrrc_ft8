@@ -148,7 +148,7 @@ def test_capture_wires_stream_converter_and_ring() -> None:
     stream = created[0]
     assert stream.kwargs["samplerate"] == RX_SAMPLE_RATE
     assert stream.kwargs["channels"] == 1
-    assert stream.kwargs["dtype"] == "float32"
+    assert stream.kwargs["dtype"] == "int16"  # RX_DTYPE: UAC float32 path is unreliable
 
     capture.start()
     assert stream.started
@@ -294,3 +294,73 @@ def test_capture_health_monitor_threshold_boundary() -> None:
     assert monitor.observe(1_000.0, 0) is False  # at threshold is not hot
     assert monitor.observe(1_000.1, 0) is False
     assert monitor.observe(1_000.1, 0) is True
+
+
+def test_capture_normalizes_int16_blocks() -> None:
+    """int16 capture blocks are normalized to float32 inside the seam, so a
+    full-scale int16 tone lands in the ring at the same amplitude as a
+    float32 one."""
+
+    ring_i = UtcRing(seconds=60.0)
+    ring_f = UtcRing(seconds=60.0)
+    clock = FakeClock()
+
+    def factory(**kwargs: object) -> FakeStream:
+        return FakeStream(**kwargs)
+
+    cap_i = AudioCapture(ring_i, clock=clock, stream_factory=factory, blocksize=48_000)
+    cap_f = AudioCapture(ring_f, clock=clock, stream_factory=factory, blocksize=48_000)
+
+    tone = sine(1_500.0, 48_000)  # float32 in [-1, 1]
+    block_i = np.rint(tone * 32_767).astype("<i2").reshape(-1, 1)
+    block_f = tone.reshape(-1, 1)
+    for index in range(16):
+        clock.epoch = float(index)
+        cap_i._on_block(block_i, 48_000, None, None)
+        cap_f._on_block(block_f, 48_000, None, None)
+
+    pcm_i = np.frombuffer(ring_i.read_slot(0), dtype="<i2")
+    pcm_f = np.frombuffer(ring_f.read_slot(0), dtype="<i2")
+    rms_i = float(np.sqrt(np.mean(pcm_i.astype(np.float64) ** 2)))
+    rms_f = float(np.sqrt(np.mean(pcm_f.astype(np.float64) ** 2)))
+    assert abs(rms_i - rms_f) / rms_f < 0.01
+
+
+def test_capture_anchors_blocks_to_adc_hardware_time() -> None:
+    """ADC timestamps place each block at its true epoch; a delivery stall
+    becomes one recorded gap, never a permanent time shift (2026-08-03
+    field finding: backlog mis-anchored to wall time shifted every later
+    slot by seconds and killed all decodes)."""
+
+    ring = UtcRing(seconds=60.0)
+    clock = FakeClock()
+    clock.epoch = 1_000.0
+    created: list[FakeStream] = []
+
+    def factory(**kwargs: object) -> FakeStream:
+        stream = FakeStream(**kwargs)
+        created.append(stream)
+        return stream
+
+    capture = AudioCapture(ring, clock=clock, stream_factory=factory, blocksize=48_000)
+    stream = created[0]
+    block = sine(1_500.0, 48_000).reshape(-1, 1)
+
+    def adc_time_info(adc: float) -> SimpleNamespace:
+        return SimpleNamespace(inputBufferAdcTime=adc, currentTime=adc + 0.09)
+
+    # Two 1 s blocks captured at wall epochs 999.91/999.91+1 — the anchor is
+    # offset = clock - currentTime, so epoch = adc + offset.
+    stream.callback(block, 48_000, adc_time_info(500.0), None)
+    stream.callback(block, 48_000, adc_time_info(501.0), None)
+    assert ring.metrics.gaps == 0
+    first_base = ring.base
+    assert first_base == round((500.0 + (1_000.0 - 500.09)) * 12_000)
+
+    # A 5 s delivery stall (wall clock advances with it): the post-stall
+    # block must land 5 s later, leaving exactly one gap — not a shift of
+    # the stall's backlog.
+    clock.epoch = 1_005.0
+    stream.callback(block, 48_000, adc_time_info(506.0), None)
+    assert ring.metrics.gaps == 1
+    assert ring.high_water == first_base + 5 * 12_000 + 12_000

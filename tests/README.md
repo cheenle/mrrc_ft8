@@ -112,7 +112,12 @@ fidelity, >53 dB anti-alias stopband rejection and int16 clipping. The UTC
 ring suite covers exact contiguous slot reads, gap-range invalidation of only
 the missing span, eviction with late-write drop accounting and duplicate-write
 tolerance. The capture seam is driven through a fake stream factory verifying
-the 48 kHz/mono/float32 stream contract, block-to-ring epoch wiring, overflow
+the 48 kHz/mono/int16 capture contract with in-seam float32 normalization
+(the FT-710 UAC float32 path intermittently delivers toneless noise while
+int16 always delivers the band — 2026-08-03 field finding), block-to-ring
+epoch wiring anchored to the CoreAudio ADC hardware timestamp (a delivery
+stall becomes one recorded gap, never a permanent time shift of every
+later slot), overflow
 counting, idempotent stop, and stop→start stream recreation (the degraded-
 session bounce). The capture-health monitor is pinned for cold-band silence,
 healthy decodes, the once-per-episode hot-but-silent streak edge, recovery

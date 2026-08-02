@@ -1,5 +1,10 @@
 # 14. Version History
 
+## Unreleased — 2026-08-03 — RX Timestamp Root Cause
+
+- Root cause of the permanent time-shifted sessions: when the audio callback stalls ≥250 ms, CoreAudio delivers the stalled period as backlog; the legacy wall-clock re-anchor stamped that backlog as live audio, shifting every later slot by the backlog length (+6 s/+10.5 s measured) and killing all decodes while ring metrics stayed green. Block epochs are now anchored to CoreAudio's **ADC hardware timestamp** (`time_info.inputBufferAdcTime`, calibrated per block against `currentTime`): the timestamp travels with the audio, so a stall becomes one recorded gap (one skipped slot) instead of a permanent shift. The wall-clock sample-count chain remains as the fallback for hosts without ADC timestamps; stalls log an explicit "input stall" warning.
+- Root cause of the degraded capture sessions found by A/B isolation on the live device: the FT-710 UAC endpoint's CoreAudio **float32 path** intermittently delivers toneless noise at band level (rms fine, spectral structure gone), while int16 opens deliver the real band every time — including moments when the float32 server session was already dead. RX capture therefore switched from float32 to int16 with in-seam normalization; the converter contract (float32 → 12 kHz int16, AD-004) is unchanged. The monitor/self-heal from this slice stays as defense in depth.
+
 ## Unreleased — 2026-08-02 — Capture Self-Healing and Debug Logging
 
 - Stale-display hardening on the cockpit: the waterfall canvas now dims and desaturates while its WebSocket is offline (a frozen canvas used to impersonate a live band), candidate rows age into a dimmed `stale` class after ten minutes on a slow re-render tick, and row time is derived from the slot itself so replayed decode history can no longer re-float old stations to the top as if freshly decoded.
