@@ -113,7 +113,10 @@ ring suite covers exact contiguous slot reads, gap-range invalidation of only
 the missing span, eviction with late-write drop accounting and duplicate-write
 tolerance. The capture seam is driven through a fake stream factory verifying
 the 48 kHz/mono/float32 stream contract, block-to-ring epoch wiring, overflow
-counting and idempotent stop. The production-decoder suite runs a fake
+counting, idempotent stop, and stop→start stream recreation (the degraded-
+session bounce). The capture-health monitor is pinned for cold-band silence,
+healthy decodes, the once-per-episode hot-but-silent streak edge, recovery
+reset and the threshold boundary. The production-decoder suite runs a fake
 supervisor that validates every frame against the real Protocol v1 schema,
 checking the fixed descriptor, slot→`utc_hhmmss` mapping, plain-str path,
 segment byte fidelity and reuse, `DecodeBatch` conversion, sanitized error

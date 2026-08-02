@@ -193,7 +193,8 @@ class AudioCapture:
         self._tap = tap
         self.overruns = 0
         self._next_epoch: float | None = None  # sample-count-anchored continuity
-        self._stream = stream_factory(
+        self._stream_factory = stream_factory
+        self._stream_kwargs = dict(
             samplerate=RX_SAMPLE_RATE,
             channels=1,
             dtype="float32",
@@ -201,6 +202,7 @@ class AudioCapture:
             device=device,
             callback=self._on_block,
         )
+        self._stream = self._stream_factory(**self._stream_kwargs)
 
     def _on_block(
         self, indata: np.ndarray, frames: int, time_info: object, status: object
@@ -236,8 +238,17 @@ class AudioCapture:
             self._tap(converted, block_epoch)  # waterfall feed (§11.2)
 
     def start(self) -> None:
-        """Start the input stream."""
+        """Start the input stream, recreating it after a :meth:`stop`.
 
+        Field finding (2026-08-02): a USB audio session can silently degrade
+        (time-shifted, starved or looping content with healthy ring metrics)
+        and never recovers, while a freshly opened stream on the same device
+        is always clean.  Recreating the stream here is what makes the
+        monitor-state bounce in the composition layer possible.
+        """
+
+        if self._stream is None:
+            self._stream = self._stream_factory(**self._stream_kwargs)
         self._stream.start()  # type: ignore[attr-defined]
 
     def stop(self) -> None:
@@ -248,3 +259,36 @@ class AudioCapture:
             self._stream.close()  # type: ignore[attr-defined]
             self._stream = None
             self._next_epoch = None  # re-anchor on the next start
+
+
+class CaptureHealthMonitor:
+    """Hot-band-but-zero-decode streak detector for degraded capture sessions.
+
+    A live FT8 band shows slot audio well above the receiver noise floor;
+    a healthy decoder then finds messages within a slot or two.  A degraded
+    capture session (time-shifted / starved / looping content) keeps the
+    level high yet decodes nothing, indefinitely.  ``streak`` consecutive
+    hot, message-less slots raise one edge per episode; any decoded message
+    or cold slot resets the detector.
+    """
+
+    def __init__(self, *, rms_threshold: float = 1_000.0, streak: int = 4) -> None:
+        if rms_threshold <= 0 or streak <= 0:
+            raise ValueError("rms threshold and streak must be positive")
+        self._rms_threshold = rms_threshold
+        self._streak = streak
+        self._hot_silent = 0
+        self._triggered = False
+
+    def observe(self, rms: float, messages: int) -> bool:
+        """Feed one slot's audio RMS and decode count; True on the edge."""
+
+        if messages > 0 or rms <= self._rms_threshold:
+            self._hot_silent = 0
+            self._triggered = False
+            return False
+        self._hot_silent += 1
+        if self._hot_silent >= self._streak and not self._triggered:
+            self._triggered = True
+            return True
+        return False

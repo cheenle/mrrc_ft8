@@ -45,5 +45,5 @@ Configuration covers domain/proxy trust, password-hash bootstrap, radio/rigctld,
 
 ## 12.8 Operations and Troubleshooting
 
-Health reports Caddy-visible application status, worker generation/restarts, decode latency/misses, audio overrun/underflow, waterfall drops, clock health, rig connection, PTT, lease and sequencer state. Operators resolve a fault, verify monitor state, reacquire the lease and manually re-arm; no recovery auto-resumes TX.
+Health reports Caddy-visible application status, worker generation/restarts, decode latency/misses, audio overrun/underflow, waterfall drops, clock health, rig connection, PTT, lease and sequencer state. Operators resolve a fault, verify monitor state, reacquire the lease and manually re-arm; no recovery auto-resumes TX. The one automatic recovery is RX-side and monitor-only: a capture session that keeps the band hot yet decodes nothing for four consecutive slots (a silently degraded USB audio session never heals itself — 2026-08-02 field finding) is latched as an AUDIO fault and the capture stream is reopened automatically, at most three times per episode.
 

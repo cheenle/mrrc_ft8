@@ -9,6 +9,7 @@ from server.engine.audio_rx import (
     DECODER_SAMPLE_RATE,
     RX_SAMPLE_RATE,
     AudioCapture,
+    CaptureHealthMonitor,
     RxConverter,
     UtcRing,
 )
@@ -226,3 +227,70 @@ def test_capture_reanchors_after_a_real_stall() -> None:
 
     assert ring.metrics.gaps == 1
     assert ring.read_slot(0) is None  # intersects the stalled span
+
+
+def test_capture_restart_recreates_stream() -> None:
+    """A degraded capture session is healed by stop()+start(): the stream
+    must be recreated through the factory and keep feeding the ring."""
+
+    ring = UtcRing(seconds=60.0)
+    clock = FakeClock()
+    created: list[FakeStream] = []
+
+    def factory(**kwargs: object) -> FakeStream:
+        stream = FakeStream(**kwargs)
+        created.append(stream)
+        return stream
+
+    capture = AudioCapture(
+        ring, clock=clock, stream_factory=factory, blocksize=48_000
+    )
+    capture.start()
+    capture.stop()
+    assert created[0].closed
+
+    capture.start()
+    assert len(created) == 2
+    assert created[1].started
+
+    block = sine(1_500.0, 48_000).reshape(-1, 1)
+    for index in range(16, 32):
+        clock.epoch = float(index)
+        created[1].callback(block, 48_000, None, None)
+    assert ring.read_slot(1) is not None
+    capture.stop()
+
+
+def test_capture_health_monitor_ignores_cold_band() -> None:
+    monitor = CaptureHealthMonitor(rms_threshold=1_000.0, streak=4)
+    for _ in range(10):
+        assert monitor.observe(300.0, 0) is False  # silent band: nothing to decode
+
+
+def test_capture_health_monitor_ignores_healthy_decodes() -> None:
+    monitor = CaptureHealthMonitor(rms_threshold=1_000.0, streak=4)
+    for _ in range(10):
+        assert monitor.observe(5_000.0, 3) is False
+
+
+def test_capture_health_monitor_fires_once_per_episode() -> None:
+    monitor = CaptureHealthMonitor(rms_threshold=1_000.0, streak=4)
+    assert [monitor.observe(5_000.0, 0) for _ in range(3)] == [False] * 3
+    assert monitor.observe(5_000.0, 0) is True   # 4th hot-but-silent slot
+    assert monitor.observe(5_000.0, 0) is False  # edge, not every slot
+
+
+def test_capture_health_monitor_resets_on_recovery() -> None:
+    monitor = CaptureHealthMonitor(rms_threshold=1_000.0, streak=4)
+    for _ in range(3):
+        monitor.observe(5_000.0, 0)
+    monitor.observe(5_000.0, 1)  # a decode: session healthy again
+    assert [monitor.observe(5_000.0, 0) for _ in range(3)] == [False] * 3
+    assert monitor.observe(5_000.0, 0) is True
+
+
+def test_capture_health_monitor_threshold_boundary() -> None:
+    monitor = CaptureHealthMonitor(rms_threshold=1_000.0, streak=2)
+    assert monitor.observe(1_000.0, 0) is False  # at threshold is not hot
+    assert monitor.observe(1_000.1, 0) is False
+    assert monitor.observe(1_000.1, 0) is True

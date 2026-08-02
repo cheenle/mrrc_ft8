@@ -1,5 +1,12 @@
 # 14. Version History
 
+## Unreleased — 2026-08-02 — Capture Self-Healing and Debug Logging
+
+- Added RX-chain debug logging (`MRRC_FT8_LOG_LEVEL`, `restart.sh` defaults to DEBUG): per-slot ring state (base/high_water/gaps/dropped/overruns), per-message decode detail, decode-broadcast publish/replay counts, and capture re-anchor/overflow events.
+- Root-caused the recurring dead-decode incidents with that evidence: a USB capture session can silently degrade mid-run — slot content time-shifted by a constant (~6 s/~10.5 s measured), zero-tailed, or looping a stale buffer — while ring metrics stay perfect and PortAudio reports no overflow. Fresh streams on the same device are always clean; degraded sessions never recover by themselves.
+- Added `CaptureHealthMonitor` (four consecutive hot-band, zero-decode slots) wired in the composition root: on detection it latches the AUDIO interlock (TX disarms; manual clear/re-arm still required, §12) and automatically reopens the capture stream in monitor state, at most three bounces per episode. `AudioCapture.start()` now recreates a stopped stream.
+- Regressions: monitor edge/reset/threshold behavior and stop→start stream recreation.
+
 ## Unreleased — 2026-08-02 — Live Radio Field Fixes
 
 - Fixed the TX-driver fault funnel: a `TxRefused` raised by the safety controller (STOP-cancelled playback, disarm, watchdog, already-latched interlock) is now only counted, never reported through the error hook into the DSP interlock latch. Previously, the dead-man STOP cancelling an in-flight playback latched a spurious DSP fault and every subsequent Reply/CQ arm was refused until a manual clear. Real CAT/audio faults continue to latch inside `transmit()` before it raises; encode-path failures still report `report_fault(DSP)`. Added the `test_tx_refused_does_not_report_dsp_fault` regression.

@@ -26,10 +26,11 @@ from dataclasses import dataclass
 from typing import Any
 
 import uvicorn
+import numpy as np
 from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 
-from .engine.audio_rx import AudioCapture, UtcRing
+from .engine.audio_rx import AudioCapture, CaptureHealthMonitor, UtcRing
 from .engine.dsp_decode import SupervisorDecoder
 from .engine.latency import LatencyHistogram
 from .engine.orchestrator import Orchestrator
@@ -302,9 +303,52 @@ def create_server(
             f"tx slot {slot_id}", error
         )
         slot_ring = ring if ring is not None else UtcRing()
+        capture_health = CaptureHealthMonitor()
+        slot_rms: dict[int, float] = {}
+        capture_bounces = 0
+        MAX_CAPTURE_BOUNCES = 3
+
+        async def recover_capture(rms: float) -> None:
+            """Latch AUDIO and reopen the capture stream in monitor state.
+
+            A degraded USB audio session (time-shifted / starved / looping
+            content with healthy ring metrics) never heals itself, while a
+            freshly opened stream is always clean (2026-08-02 field
+            findings).  TX stays disarmed until the operator clears the
+            fault — no recovery auto-resumes TX (§12).
+            """
+
+            nonlocal capture_bounces
+            capture_bounces += 1
+            log.critical(
+                "capture session degraded: hot band (rms %.0f) but zero decodes",
+                rms,
+            )
+            await safety.report_fault(
+                Interlock.AUDIO,
+                "degraded capture session: hot band, zero decodes",
+            )
+            if capture_bounces <= MAX_CAPTURE_BOUNCES:
+                log.critical(
+                    "reopening capture stream (%d/%d)",
+                    capture_bounces,
+                    MAX_CAPTURE_BOUNCES,
+                )
+                await asyncio.to_thread(capture.stop)
+                await asyncio.to_thread(capture.start)
+            else:
+                log.critical(
+                    "capture bounce limit reached; manual intervention required"
+                )
 
         def read_slot_logged(slot_id: int) -> bytes | None:
             data = slot_ring.read_slot(slot_id)
+            if data is not None:
+                pcm = np.frombuffer(data, dtype="<i2")
+                slot_rms.clear()
+                slot_rms[slot_id] = float(
+                    np.sqrt(np.mean(pcm.astype(np.float64) ** 2))
+                )
             if log.isEnabledFor(logging.DEBUG):
                 log.debug(
                     "ring slot %d: %s base=%s high=%s gaps=%d dropped=%d overruns=%d",
@@ -319,6 +363,13 @@ def create_server(
             return data
 
         def on_decode(slot_decode: Any) -> None:
+            nonlocal capture_bounces
+            if capture is not None:
+                rms = slot_rms.get(slot_decode.slot_id, 0.0)
+                if slot_decode.messages:
+                    capture_bounces = 0  # healthy session: reset self-heal budget
+                if capture_health.observe(rms, len(slot_decode.messages)):
+                    asyncio.get_running_loop().create_task(recover_capture(rms))
             batch = {
                 "slot_id": slot_decode.slot_id,
                 "late": slot_decode.late,

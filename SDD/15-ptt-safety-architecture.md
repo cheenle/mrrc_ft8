@@ -46,6 +46,7 @@ A deliberate lease RELEASE does not run the dead-man STOP; the dead-man path onl
 |---|---|---|
 | CAT/rigctld fault | Cancel audio, PTT-off request, disarm | Repair, verify RX, manual lease/re-arm |
 | Audio underflow/device loss | Cancel/close stream, PTT off, disarm | Reopen in monitor, manual re-arm |
+| Degraded capture session (hot band, zero decodes for 4 consecutive slots) | Latch AUDIO, disarm, auto-reopen the capture stream in monitor state (≤3 bounces per episode) | Operator verifies RX, clears fault, manual re-arm |
 | DSP timeout/crash | Disarm/stop, invalidate result | Restart worker, manual re-arm |
 | Clock unsafe | Cancel queued TX and disarm | Stable clock, manual re-arm |
 | Lease/controller loss | STOP | Acquire new lease, manual re-arm |
