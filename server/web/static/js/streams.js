@@ -26,9 +26,16 @@ function connect(path, { binary = false, onMessage, name }) {
       setConnected(name, true);
     };
     socket.onmessage = (event) => onMessage(event.data);
-    socket.onclose = () => {
+    socket.onclose = (event) => {
       setConnected(name, false);
       if (closed) return;
+      // 4401 = the server rejected the upgrade as unauthenticated (session
+      // wiped by a restart): reload so boot() shows the login view. Any
+      // other close keeps the reconnect backoff (server bounce, network).
+      if (event.code === 4401) {
+        location.reload();
+        return;
+      }
       const delay = BACKOFF_MS[Math.min(attempt, BACKOFF_MS.length - 1)];
       attempt += 1;
       setTimeout(open, delay);

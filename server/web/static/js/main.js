@@ -1,5 +1,11 @@
 // Cockpit bootstrap: session, streams, views and the slot clock.
 
+// Kill any stale ServiceWorker that was caching old JS. This must run before
+// anything else; index.html may not carry inline logic, so it lives here.
+if ("serviceWorker" in navigator) {
+  navigator.serviceWorker.getRegistrations().then((regs) => regs.forEach((r) => r.unregister()));
+}
+
 import { api } from "./api.js";
 import { applySnapshot, subscribe } from "./state.js";
 import { startStreams } from "./streams.js";
@@ -67,8 +73,9 @@ loginForm.addEventListener("submit", async (event) => {
   }
 });
 
-if ("serviceWorker" in navigator) {
-  navigator.serviceWorker.register("/static/sw.js");
-}
+// ServiceWorker disabled during development — cache was serving stale JS
+// if ("serviceWorker" in navigator) {
+//   navigator.serviceWorker.register("/static/sw.js");
+// }
 
 boot();

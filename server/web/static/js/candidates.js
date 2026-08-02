@@ -2,6 +2,7 @@
 
 import { api } from "./api.js";
 import { getState, patch, subscribe } from "./state.js";
+import { showToast } from "./toast.js";
 
 function slotUtc(slotId) {
   return new Date(slotId * 15_000).toISOString().slice(11, 19);
@@ -35,18 +36,31 @@ export function createCandidates(listElement) {
 
   async function select(candidate) {
     // Selecting never arms or transmits; it only enables the Reply button.
-    const result = await api.select(candidate);
+    let result = await api.select(candidate);
+    if (!result.ok && result.reason === "lease_required" && !getState().lease.held) {
+      // WSJT-X-style single tap: a free control lease is taken implicitly so
+      // the tap just works. A lease held by another session still rejects —
+      // exactly one controller at a time (§10.3, UC-002).
+      const acquired = await api.acquireLease();
+      result = acquired.ok ? await api.select(candidate) : acquired;
+    }
     if (result.ok) {
       patch({ selected: { call: candidate.call, grid: candidate.grid || "" } });
+      return true;
     }
+    showToast(
+      result.reason === "lease_required"
+        ? "Control is held by another session"
+        : `Select rejected: ${result.reason || result.status}`,
+    );
+    return false;
   }
 
   async function reply(candidate) {
     // Double-click = select + Reply through the exact same gated paths.
-    const chosen = await api.select(candidate);
-    if (chosen.ok) {
-      patch({ selected: { call: candidate.call, grid: candidate.grid || "" } });
-      await api.reply();
+    if (await select(candidate)) {
+      const result = await api.reply();
+      if (!result.ok) showToast(`Reply rejected: ${result.reason || result.status}`);
     }
   }
 

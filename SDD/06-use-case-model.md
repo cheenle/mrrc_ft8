@@ -12,7 +12,7 @@ An authenticated session requests the lease. If free, the server grants it and e
 
 ### UC-003 Select a Station and Reply
 
-The operator taps a candidate to inspect it, then separately taps Reply. The server verifies lease, health and supported message semantics, sets call/grid, RX offset and opposite TX slot, then prepares the single-QSO sequencer. Selection alone never transmits.
+The operator taps a candidate to inspect it, then separately taps Reply. The server verifies lease, health and supported message semantics, sets call/grid, RX offset and opposite TX slot, then prepares the single-QSO sequencer. Selection alone never transmits. If the tapping session holds no lease and the lease is free, the client first acquires it implicitly through the standard grant path (UC-002 invariants unchanged); a tap rejected because another session holds the lease, or for any other reason, produces visible feedback rather than failing silently.
 
 ### UC-004 Call CQ
 

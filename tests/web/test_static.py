@@ -93,18 +93,16 @@ def test_waterfall_resize_compares_floored_dimensions() -> None:
     assert "canvas.height !== rect.height" not in js
 
 
-def test_decode_dedup_scopes_to_slot() -> None:
-    """FT8 messages repeat verbatim every slot; deduping candidates by text
-    alone freezes the list after the first slots (no scrolling updates).
-    The dedup key must include the slot id."""
+def test_decode_dedup_scopes_to_callsign() -> None:
+    """Band Activity keeps one row per station, newest decode wins (WSJT-X
+    style). Keying by raw text alone would freeze stations whose CQ text
+    repeats verbatim every slot, and rows without fresh timestamps would
+    stop scrolling; replayed history batches must refresh rows too."""
 
     js = (STATIC / "js" / "state.js").read_text()
-    seen_line = next(
-        line for line in js.splitlines() if "new Set" in line and "candidates" in line
-    )
-    assert "slot_id" in seen_line
-    filter_line = js.split(".filter", 1)[1].splitlines()[0]
-    assert "slot_id" in filter_line
+    assert "m.call || m.text" in js  # per-station identity, not raw text
+    assert "slot_id" in js           # rows keep their slot for the UTC column
+    assert "_t" in js                # newest-wins ordering key
 
 
 def test_service_worker_cache_is_versioned() -> None:
@@ -119,6 +117,48 @@ def test_candidates_render_band_activity_columns() -> None:
     for field in ("snr", "dt", "freq", "text", "slot_id"):
         assert field in js
     assert "dblclick" in js  # double-click replies (same api.reply path)
+
+
+def test_candidate_tap_never_fails_silently() -> None:
+    """An observer tap on a decode row hits require_lease → 409; swallowed
+    rejections leave the cockpit looking dead (console-only errors). The tap
+    must take a free lease implicitly (WSJT-X-style single tap, §10.3/UC-002)
+    and surface every rejection through the toast."""
+    js = (STATIC / "js" / "candidates.js").read_text()
+    assert "showToast" in js
+    assert 'result.reason === "lease_required"' in js
+    assert "api.acquireLease" in js
+
+
+def test_toast_feedback_is_wired_and_cached() -> None:
+    html = (STATIC / "index.html").read_text()
+    assert 'id="toast"' in html
+    css = (STATIC / "css" / "app.css").read_text()
+    assert "#toast" in css
+    sw = (STATIC / "sw.js").read_text()
+    assert "/static/js/toast.js" in sw, "toast module must ship in the app shell"
+
+
+def test_login_form_pairs_a_username_field() -> None:
+    """Password managers and Chrome a11y audits expect a (visually hidden)
+    username field alongside the station password."""
+    html = (STATIC / "index.html").read_text()
+    assert 'autocomplete="username"' in html
+    css = (STATIC / "css" / "app.css").read_text()
+    assert ".visually-hidden" in css
+
+
+def test_auth_death_returns_to_login() -> None:
+    """Sessions are in-memory (NFR-075), so a server restart wipes every
+    cookie. Without an auth-death path the cockpit freezes on stale data
+    with dead streams and no way back. REST 401s (outside /session/) and a
+    4401 WS close must both route back to the login view."""
+    api_js = (STATIC / "js" / "api.js").read_text()
+    assert "status === 401" in api_js
+    assert "location.reload()" in api_js
+    streams_js = (STATIC / "js" / "streams.js").read_text()
+    assert "4401" in streams_js
+    assert "location.reload()" in streams_js
 
 
 def test_api_cq_carries_loop_flag() -> None:

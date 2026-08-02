@@ -178,7 +178,12 @@ accumulates). The dedup of repeated FT8 texts is pinned to include the
 slot id, or the candidate list freezes after the first slots and never
 scrolls. Static contract tests also pin the Band Activity row columns
 (UTC/SNR/dt/freq/text), the CQ-loop countdown in the safety bar and the
-loop flag on the CQ intent. The composition suite runs the
+loop flag on the CQ intent. The candidate-tap contract pins that a tap on a
+decode row never fails silently: a free control lease is taken implicitly
+(WSJT-X-style single tap) and every rejection surfaces through the toast,
+whose element/styles/module are pinned into the app shell; the login form is
+pinned to carry a visually-hidden username field for password managers. The
+composition suite runs the
 real lifespan through TestClient: monitor-only startup with PTT-off,
 `ABORTED_RESTART` marking of seeded interrupted QSOs, dead-man wiring from
 lease disconnect to priority STOP, STOP-first shutdown and static shell

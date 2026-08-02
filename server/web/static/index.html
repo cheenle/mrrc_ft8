@@ -12,6 +12,8 @@
   <div id="login-view" class="overlay" hidden>
     <form id="login-form" class="login-card" autocomplete="off">
       <h1>MRRC-FT8</h1>
+      <input id="login-username" type="text" autocomplete="username" value="operator"
+             class="visually-hidden" tabindex="-1" aria-hidden="true">
       <input id="login-password" type="password" placeholder="Station password"
              autocomplete="current-password" required>
       <button type="submit">Log in</button>
@@ -23,7 +25,8 @@
     <header id="top-bar">
       <span id="station-id">—</span>
       <span id="slot-clock">--:--:--</span>
-      <span id="revision-badge">r0</span>
+      <span id="revision-badge">v2</span>
+      <span id="decode-counter" style="color:#3fbf6f;margin-left:8px">⏳</span>
     </header>
 
     <main id="workspace">
@@ -34,6 +37,8 @@
         <ul id="candidate-list"></ul>
       </section>
     </main>
+
+    <div id="toast" role="status" hidden></div>
 
     <footer id="state-bar">
       <div id="interlocks" class="state-group">

@@ -1,7 +1,7 @@
 // App-shell service worker. API and WebSocket traffic is NEVER cached:
 // stale safety state is worse than no state.
 
-const CACHE = "mrrc-ft8-shell-v8";
+const CACHE = "mrrc-ft8-shell-v13";
 const SHELL = [
   "/static/index.html",
   "/static/css/app.css",
@@ -12,6 +12,7 @@ const SHELL = [
   "/static/js/waterfall.js",
   "/static/js/candidates.js",
   "/static/js/safety.js",
+  "/static/js/toast.js",
   "/static/manifest.webmanifest",
   "/static/icon.svg",
 ];
@@ -36,6 +37,6 @@ self.addEventListener("fetch", (event) => {
     return; // network only, no caching of radio/safety data
   }
   event.respondWith(
-    caches.match(event.request).then((hit) => hit || fetch(event.request)),
+    fetch(event.request).catch(() => caches.match(event.request)),
   );
 });

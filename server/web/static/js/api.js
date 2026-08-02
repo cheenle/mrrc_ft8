@@ -19,6 +19,10 @@ async function request(path, { method = "GET", body, idempotencyKey } = {}) {
   let payload = {};
   try { payload = await response.json(); } catch { /* empty body */ }
   if (typeof payload.revision === "number") revision = payload.revision;
+  // Sessions are in-memory (NFR-075): a server restart invalidates every
+  // cookie. Reload so boot() lands on the login view instead of leaving a
+  // dead cockpit. Session endpoints are excluded — boot/login handle them.
+  if (response.status === 401 && !path.startsWith("/session/")) location.reload();
   return { status: response.status, ...payload };
 }
 

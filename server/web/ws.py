@@ -155,24 +155,14 @@ async def _pump(
     get: Any,
     send: Any,
 ) -> None:
-    """Forward queued items until the subscription or the socket dies.
-
-    ``websocket.receive`` runs alongside every queue wait so a client
-    disconnect is noticed immediately instead of after the next publish.
-    """
+    """Forward queued items until the subscription closes or the socket dies."""
 
     while not subscription.closed:
-        get_task = asyncio.ensure_future(get())
-        recv_task = asyncio.ensure_future(websocket.receive())
-        done, pending = await asyncio.wait(
-            {get_task, recv_task}, return_when=asyncio.FIRST_COMPLETED
-        )
-        for task in pending:
-            task.cancel()
-        if recv_task in done:
-            recv_task.result()  # raises WebSocketDisconnect on client close
-            continue  # ignore unexpected client traffic
-        await send(get_task.result())
+        try:
+            item = await get()
+            await send(item)
+        except WebSocketDisconnect:
+            break
 
 
 def _with_lease_view(

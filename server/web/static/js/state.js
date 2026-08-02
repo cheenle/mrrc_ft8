@@ -37,12 +37,19 @@ export function applySnapshot(snapshot) {
 }
 
 export function applyDecodeBatch(batch) {
-  // FT8 messages repeat verbatim every slot; dedup only within the same
-  // slot or the list freezes after the first slots and never scrolls.
-  const key = (slotId, text) => `${slotId}:${text}`;
-  const seen = new Set(state.candidates.map((c) => key(c.slot_id, c.text)));
-  const additions = (batch.messages || [])
-    .filter((m) => !seen.has(key(batch.slot_id, m.text)))
-    .map((m) => ({ ...m, slot_id: batch.slot_id, late: batch.late }));
-  patch({ candidates: [...additions, ...state.candidates].slice(0, 200) });
+  // WSJT-X style: one row per callsign, newest decode updates the entry.
+  const seen = new Set();
+  const updated = new Map();
+  const now = Date.now();
+  for (const m of batch.messages || []) {
+    const key = m.call || m.text;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    updated.set(key, { ...m, slot_id: batch.slot_id, late: batch.late, _t: now });
+  }
+  const kept = state.candidates.filter(c => !updated.has(c.call || c.text));
+  const merged = [...updated.values(), ...kept]
+    .sort((a, b) => (b._t || 0) - (a._t || 0))
+    .slice(0, 200);
+  patch({ candidates: merged });
 }
