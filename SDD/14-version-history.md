@@ -1,5 +1,9 @@
 # 14. Version History
 
+## Unreleased — 2026-08-03 — Public Host ACL Opened
+
+- `.env` `MRRC_FT8_ALLOWED_HOSTS` now includes the public domain `radio.vlsc.net` (was `localhost,127.0.0.1`). The NFR-035 Host/Origin checks gate WebSocket and every mutation (login, select, reply, CQ, STOP …) — with only loopback names allowed, all public POST/WS traffic was 403 and only GETs worked, so the PWA loaded but could never log in. Adding the domain lets the Caddy edge (`radio.vlsc.net:9988`, dual-stack) reach the full API over IPv4 or IPv6; the Host header is the domain either way, so no protocol-specific entry is needed. `.env` is operator config (gitignored); the deploy templates already document setting it.
+
 ## Unreleased — 2026-08-03 — Manual Reply Decision Window + Feed Red Text
 
 - Fixed the manual Reply always missing the slot right after the message it answers: the orchestrator locks a slot's TX decision at the same instant the previous slot's decode reaches the UI, so an operator-tapped Reply could never make that slot and always transmitted a full T/R cycle (2 slots) late — by which time the partner had often moved on. The TX decision is now provisional (I9): `TxDriver.on_slot_start` keeps the slot's window open until `decision_cutoff` (2.0 s, the latest a 12.64 s waveform still fits) when the sequencer is idle, re-checks the armed parity at the cutoff, and transmits a fast manual Reply in the current slot. Auto-sequencer transmissions still go out immediately, unchanged. Regressions: in-window tap transmits, wrong-parity slot is rejected, no-tap closes silently.
