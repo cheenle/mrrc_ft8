@@ -43,6 +43,7 @@ export function createCandidates(listElement) {
       item.className = "candidate";
       if (candidate.is_cq) item.classList.add("cq");
       if (candidate.to_me) item.classList.add("to-me");
+      if (candidate.mine) item.classList.add("mine");
       if (candidate.late) item.classList.add("late");
       if (now - (candidate._t || 0) > STALE_AFTER_MS) item.classList.add("stale");
       if (selected && selected.call === candidate.call) item.classList.add("selected");

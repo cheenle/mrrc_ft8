@@ -133,6 +133,8 @@ button.stop {
   white-space: pre; padding: 6px 10px;
 }
 .candidate.cq { font-weight: 700; }
+/* Self-transmitted echoes and stations calling/reply to me read in red. */
+.candidate.mine, .candidate.to-me { color: #ff7b72; }
 .candidate.to-me { background: #3d2430; }
 .candidate.late { opacity: 0.55; }
 /* Selection must stay visible on addressed-to-me rows (same (0,2,0) tie otherwise). */

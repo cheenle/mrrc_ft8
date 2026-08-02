@@ -145,7 +145,7 @@ class ServerConfig:
 def decode_message_view(message: Any, my_call: str = "") -> dict[str, Any]:
     """One decode message → wire payload (Band Activity columns)."""
 
-    from .engine.msgparse import addressed_to
+    from .engine.msgparse import addressed_to, base_call
 
     parsed = message.parsed
     return {
@@ -157,6 +157,10 @@ def decode_message_view(message: Any, my_call: str = "") -> dict[str, Any]:
         "grid": parsed.grid,
         "is_cq": parsed.is_cq,
         "to_me": addressed_to(parsed, my_call),
+        # The station's own transmitted message echoed back in the RX slot.
+        "mine": bool(parsed.from_call)
+        and bool(my_call)
+        and base_call(parsed.from_call) == base_call(my_call),
     }
 
 

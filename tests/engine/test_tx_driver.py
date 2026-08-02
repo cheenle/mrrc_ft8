@@ -133,6 +133,73 @@ def test_driver_transmits_on_sequencer_tx_phase() -> None:
     assert driver.counters["tx_attempts"] == 2
 
 
+class FakeClock:
+    def __init__(self, t: float) -> None:
+        self.t = t
+
+    def __call__(self) -> float:
+        return self.t
+
+
+def test_manual_reply_makes_the_current_slot_when_tapped_in_time() -> None:
+    """A Reply armed inside the decision window transmits in the slot right
+    after the message it answers — not a full T/R cycle later (I9)."""
+
+    sequencer = Sequencer(my_call="M0XX", my_grid="IO91")
+    encoder, safety = FakeEncoder(), FakeSafety()
+    clock = FakeClock(30.9)  # on_slot_start(2) fires 0.9 s into slot 2
+
+    async def window_sleep(delay: float) -> None:
+        clock.t += delay  # jump to the cutoff
+        sequencer.reply_to(parse_message("CQ K1ABC FN42"), -10, tx_phase=0)
+
+    driver = TxDriver(
+        sequencer, encoder, safety,  # type: ignore[arg-type]
+        clock=clock, sleep=window_sleep,
+    )
+    run(driver.on_slot_start(2))  # even slot, reply phase 0: fits
+    assert [c[0] for c in encoder.calls] == ["K1ABC M0XX IO91"]
+    assert [c[2] for c in encoder.calls] == [2]
+
+
+def test_manual_reply_waits_when_the_slot_parity_does_not_match() -> None:
+    """A reply armed with an odd phase must not transmit on an even slot."""
+
+    sequencer = Sequencer(my_call="M0XX", my_grid="IO91")
+    encoder, safety = FakeEncoder(), FakeSafety()
+    clock = FakeClock(30.9)
+
+    async def window_sleep(delay: float) -> None:
+        clock.t += delay
+        sequencer.reply_to(parse_message("CQ K1ABC FN42"), -10, tx_phase=1)
+
+    driver = TxDriver(
+        sequencer, encoder, safety,  # type: ignore[arg-type]
+        clock=clock, sleep=window_sleep,
+    )
+    run(driver.on_slot_start(2))  # even slot, but the reply needs odd
+    assert encoder.calls == []
+
+
+def test_no_reply_within_the_window_transmits_nothing() -> None:
+    """If the operator never taps, the open window just closes silently."""
+
+    sequencer = Sequencer(my_call="M0XX", my_grid="IO91")
+    encoder, safety = FakeEncoder(), FakeSafety()
+    clock = FakeClock(30.9)
+
+    async def window_sleep(delay: float) -> None:
+        clock.t += delay  # nobody taps
+
+    driver = TxDriver(
+        sequencer, encoder, safety,  # type: ignore[arg-type]
+        clock=clock, sleep=window_sleep,
+    )
+    run(driver.on_slot_start(2))
+    assert encoder.calls == []
+    assert driver.counters["tx_attempts"] == 0
+
+
 def test_retry_exhaustion_stops_transmissions() -> None:
     """CQ repeats forever by design (UC-004); the budget bounds QSO messages."""
 
