@@ -80,6 +80,32 @@ def test_answerer_full_qso_logs_on_rr73_and_finishes_after_one_73() -> None:
     assert record.report_rcvd == -9
 
 
+def test_reply_carries_the_opposite_tx_phase() -> None:
+    """UC-003 "opposite TX slot": a reply transmits on the parity opposite
+    the slot the partner's message was heard in."""
+
+    seq = make()
+    seq.reply_to(parse_message("CQ K1ABC FN42"), snr_db=-10, tx_phase=1)
+    assert seq.tx_phase == 1  # message heard in an even slot -> reply on odd
+    assert seq.state == QSOState.REPLYING
+    assert seq.next_tx_message() == "K1ABC N0CALL FN42"
+
+    seq2 = make()
+    seq2.reply_to(parse_message("CQ K1ABC FN42"), snr_db=-10, tx_phase=0)
+    assert seq2.tx_phase == 0  # message heard in an odd slot -> reply on even
+
+
+def test_start_cq_resets_tx_phase_to_even() -> None:
+    """The CQ loop always transmits on the default (even) phase."""
+
+    seq = make()
+    seq.reply_to(parse_message("CQ K1ABC FN42"), snr_db=-10, tx_phase=1)
+    assert seq.tx_phase == 1
+    seq.start_cq()
+    assert seq.tx_phase == 0
+    assert seq.state == QSOState.CALLING
+
+
 def test_answerer_resends_73_only_when_partner_repeats_rr73() -> None:
     seq = make()
     seq.reply_to(parse_message("CQ K1ABC FN42"), snr_db=-10)

@@ -92,6 +92,7 @@ class Sequencer:
     tx_enabled: bool = False
     max_retransmissions: int = 3     # NFR-055: one initial send plus three
     disarm_reason: DisarmReason | None = None
+    tx_phase: int = 0                # 0 = even slots, 1 = odd (UC-003)
     _tx_count: int = field(default=0, repr=False)
     _signoff_sent: bool = field(default=False, repr=False)
     _log_ready: QSORecord | None = field(default=None, repr=False)
@@ -105,12 +106,20 @@ class Sequencer:
         self.state = QSOState.CALLING
         self.tx_enabled = True
 
-    def reply_to(self, msg: ParsedMessage, snr_db: int) -> None:
-        """Arm a reply to an operator-selected CQ/call message (UC-003)."""
+    def reply_to(
+        self, msg: ParsedMessage, snr_db: int, *, tx_phase: int = 0
+    ) -> None:
+        """Arm a reply to an operator-selected CQ/call message (UC-003).
+
+        ``tx_phase`` is the parity the reply must transmit on (0 = even slots,
+        1 = odd): UC-003 requires the slot opposite the one the partner's
+        message was heard in, so the caller passes ``1 - (slot_id % 2)``.
+        """
 
         if not msg.from_call:
             return
         self._reset_partner()
+        self.tx_phase = tx_phase
         self.dx_call = msg.from_call
         self.dx_grid = msg.grid
         self.report_sent = snr_db
@@ -286,6 +295,7 @@ class Sequencer:
         self.report_sent = None
         self.report_rcvd = None
         self.disarm_reason = None
+        self.tx_phase = 0  # CQ and unknown-slot replies default to even
         self._tx_count = 0
         self._signoff_sent = False
         self._log_ready = None

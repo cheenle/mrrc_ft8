@@ -50,6 +50,7 @@ export const api = {
         snr_db: candidate.snr,
         text: candidate.text,
         is_cq: candidate.is_cq,
+        slot_id: candidate.slot_id,
       },
     }),
   reply: () => request("/operation/reply", { method: "POST", idempotencyKey: key() }),

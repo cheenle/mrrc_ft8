@@ -212,6 +212,32 @@ def test_select_then_reply_arms_and_audits(
     assert "reply" in operations
 
 
+def test_reply_phase_is_opposite_the_selected_slot(
+    client: TestClient, state: AppState
+) -> None:
+    """UC-003: replying to a message heard in an even slot arms odd-phase TX."""
+
+    session_id = login(client)
+    client.post("/api/v1/lease/acquire", headers=auth_headers(session_id))
+
+    client.post(
+        "/api/v1/operation/select",
+        json={"dx_call": "K1ABC", "dx_grid": "FN42", "snr_db": -15, "slot_id": 0},
+        headers=auth_headers(session_id),
+    )
+    client.post("/api/v1/operation/reply", headers=auth_headers(session_id))
+    assert state.sequencer.tx_phase == 1  # even slot -> reply on odd
+
+    # Selecting a fresh target without a slot keeps the default even phase.
+    client.post(
+        "/api/v1/operation/select",
+        json={"dx_call": "W9XYZ", "snr_db": -8, "slot_id": 1},
+        headers=auth_headers(session_id),
+    )
+    client.post("/api/v1/operation/reply", headers=auth_headers(session_id))
+    assert state.sequencer.tx_phase == 0  # odd slot -> reply on even
+
+
 def test_cq_and_tx_off_require_the_lease(client: TestClient, state: AppState) -> None:
     session_id = login(client)
     no_lease = client.post("/api/v1/operation/cq", headers=auth_headers(session_id))

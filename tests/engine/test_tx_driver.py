@@ -113,10 +113,24 @@ def test_on_tx_error_hook_receives_slot_and_error() -> None:
     assert isinstance(recorded[0][1], TxEncodeError)
 
 
-def test_invalid_tx_parity_raises() -> None:
+def test_driver_transmits_on_sequencer_tx_phase() -> None:
+    """The TX parity follows the sequencer's QSO phase (UC-003 opposite slot).
+
+    A reply to an even-slot message arms phase 1: the driver transmits on odd
+    slots and stays silent on even ones — the fixed tx_parity is gone.
+    """
+
     sequencer = Sequencer(my_call="M0XX", my_grid="IO91")
-    with pytest.raises(ValueError):
-        TxDriver(sequencer, FakeEncoder(), FakeSafety(), tx_parity=2)  # type: ignore[arg-type]
+    encoder, safety = FakeEncoder(), FakeSafety()
+    driver = TxDriver(sequencer, encoder, safety)  # type: ignore[arg-type]
+    sequencer.reply_to(parse_message("CQ K1ABC FN42"), snr_db=-10, tx_phase=1)
+    run(driver.on_slot_start(0))  # even: no TX
+    run(driver.on_slot_start(1))  # odd: TX
+    run(driver.on_slot_start(2))  # even: no TX
+    run(driver.on_slot_start(3))  # odd: retransmission
+    assert [c[0] for c in encoder.calls] == ["K1ABC M0XX IO91", "K1ABC M0XX IO91"]
+    assert [c[2] for c in encoder.calls] == [1, 3]
+    assert driver.counters["tx_attempts"] == 2
 
 
 def test_retry_exhaustion_stops_transmissions() -> None:

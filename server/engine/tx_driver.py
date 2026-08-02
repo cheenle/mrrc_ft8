@@ -26,26 +26,27 @@ DEFAULT_TX_AUDIO_FREQUENCY = 1500.0
 
 @dataclass
 class TxDriver:
-    """One-message-per-eligible-slot transmission pump."""
+    """One-message-per-eligible-slot transmission pump.
+
+    The TX parity follows the sequencer's per-QSO ``tx_phase`` (UC-003): the
+    phase is the slot opposite the one the partner was heard in, so a reply to
+    an even-slot message transmits on odd slots and vice versa.  CQ always
+    runs on the default even phase.
+    """
 
     sequencer: Sequencer
     encoder: Any       # SupervisorEncoder; duck-typed for tests
     safety: Any        # SafetyController; duck-typed for tests
     tx_audio_frequency: float = DEFAULT_TX_AUDIO_FREQUENCY
-    tx_parity: int = 0  # transmit on even slot ids, receive on odd
     counters: dict[str, int] = field(
         default_factory=lambda: {"tx_attempts": 0, "tx_failed": 0}
     )
     _tx_in_flight: bool = field(default=False, repr=False)
 
-    def __post_init__(self) -> None:
-        if self.tx_parity not in (0, 1):
-            raise ValueError("tx_parity must be 0 (even slots) or 1 (odd slots)")
-
     async def on_slot_start(self, slot_id: int) -> None:
         """Handle one orchestrator slot-start announcement."""
 
-        if slot_id % 2 != self.tx_parity:
+        if slot_id % 2 != self.sequencer.tx_phase:
             return
         if self._tx_in_flight:
             # The previous encode is still running (a slow round trip can

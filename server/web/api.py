@@ -103,6 +103,7 @@ class AppState:
     idempotency: IdempotencyCache = field(default_factory=IdempotencyCache)
     selected: ParsedMessage | None = None
     selected_snr_db: int | None = None
+    selected_slot_id: int | None = None  # slot the selected message was heard in
     radio_freq_hz: int | None = None  # last polled dial frequency, if rig is up
 
     def bump(self) -> int:
@@ -346,6 +347,7 @@ def create_router(state: AppState) -> APIRouter:
             grid=str(body.get("dx_grid") or "").upper(),
         )
         state.selected_snr_db = body.get("snr_db") if isinstance(body.get("snr_db"), int) else None
+        state.selected_slot_id = body.get("slot_id") if isinstance(body.get("slot_id"), int) else None
         return await mutate(request, request.headers.get("idempotency-key"), 200, {"selected": state.selected.from_call})
 
     @router.post("/operation/reply")
@@ -359,7 +361,11 @@ def create_router(state: AppState) -> APIRouter:
             await state.safety.arm()
         except TxRefused as exc:
             return _reject(409, REASON_INTERLOCK_OPEN, detail=str(exc))
-        state.sequencer.reply_to(state.selected, state.selected_snr_db)
+        # UC-003: transmit on the slot opposite the one the partner's message
+        # was heard in; a message without a known slot defaults to even.
+        slot_id = state.selected_slot_id
+        tx_phase = 0 if slot_id is None else 1 - (slot_id % 2)
+        state.sequencer.reply_to(state.selected, state.selected_snr_db, tx_phase=tx_phase)
         await _audit(state, session, "reply", state.selected.from_call, "")
         return await mutate(request, request.headers.get("idempotency-key"), 200, {"sequencer": state.sequencer.state.value})
 
