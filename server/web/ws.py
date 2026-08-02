@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
+import logging
 from typing import Any
 
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
@@ -21,6 +22,8 @@ from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 from ..engine.waterfall import SpectrumFanout
 from .api import COOKIE_NAME, AppState, _snapshot
 from .auth import host_allowed, origin_allowed
+
+log = logging.getLogger("mrrc-ft8.ws")
 
 STATE_QUEUE = 4            # coalesced snapshots in flight per client
 STATE_CLOSE_AFTER_DROPS = 16  # irrecoverably slow: never drains
@@ -120,6 +123,12 @@ class DecodeBroadcaster:
                 if not sub._offer(batch):
                     break
         self._subscribers.append(sub)
+        log.debug(
+            "decode subscribe: replayed %d of %d history batches, %d subscribers",
+            min(len(self.batches), self._history) if replay else 0,
+            len(self.batches),
+            len(self._subscribers),
+        )
         return sub
 
     def publish(self, batch: dict[str, Any]) -> None:
@@ -127,6 +136,12 @@ class DecodeBroadcaster:
         del self.batches[: max(0, len(self.batches) - self._history)]
         for sub in self._subscribers:
             sub._offer(batch)
+        log.debug(
+            "decode publish: slot %s, %d messages, %d subscribers",
+            batch.get("slot_id"),
+            len(batch.get("messages", [])),
+            len(self._subscribers),
+        )
 
 
 # ---- WebSocket glue -----------------------------------------------------------

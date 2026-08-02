@@ -48,7 +48,7 @@ LEASE_POLL_S = 1.0
 MAINTENANCE_S = 3_600.0
 
 log = logging.getLogger("mrrc-ft8")
-log.setLevel(logging.INFO)
+log.setLevel(os.environ.get("MRRC_FT8_LOG_LEVEL", "INFO").upper())
 _h = logging.StreamHandler()
 _h.setFormatter(logging.Formatter("%(asctime)s %(message)s"))
 log.addHandler(_h)
@@ -303,6 +303,21 @@ def create_server(
         )
         slot_ring = ring if ring is not None else UtcRing()
 
+        def read_slot_logged(slot_id: int) -> bytes | None:
+            data = slot_ring.read_slot(slot_id)
+            if log.isEnabledFor(logging.DEBUG):
+                log.debug(
+                    "ring slot %d: %s base=%s high=%s gaps=%d dropped=%d overruns=%d",
+                    slot_id,
+                    "hit" if data is not None else "MISS",
+                    slot_ring.base,
+                    slot_ring.high_water,
+                    slot_ring.gap_count,
+                    slot_ring.metrics.dropped_samples,
+                    capture.overruns if capture is not None else -1,
+                )
+            return data
+
         def on_decode(slot_decode: Any) -> None:
             batch = {
                 "slot_id": slot_decode.slot_id,
@@ -317,6 +332,14 @@ def create_server(
                      len(state.decode_broadcast._subscribers),
                      orchestrator.counters.slots_started if orchestrator else -1,
                      orchestrator.counters.slots_skipped if orchestrator else -1)
+            if log.isEnabledFor(logging.DEBUG):
+                for message in slot_decode.messages:
+                    log.debug(
+                        "slot %d msg: snr=%d dt=%+.1f f=%.0f %s",
+                        slot_decode.slot_id, message.result.snr,
+                        message.result.dt, message.result.frequency,
+                        message.result.text,
+                    )
             state.decode_broadcast.publish(batch)
             for message in slot_decode.messages:
                 asyncio.get_running_loop().create_task(
@@ -330,7 +353,7 @@ def create_server(
 
         orchestrator = Orchestrator(
             supervisor_decoder,
-            slot_ring.read_slot,
+            read_slot_logged,
             sequencer,
             on_decode=on_decode,
             on_decode_error=lambda slot_id, error: report_dsp_fault(

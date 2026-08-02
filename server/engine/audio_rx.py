@@ -90,6 +90,24 @@ class UtcRing:
         self._gap_ranges: list[tuple[int, int]] = []
         self.metrics = RingMetrics()
 
+    @property
+    def base(self) -> int | None:
+        """Oldest retained absolute sample index (None before first write)."""
+
+        return self._base
+
+    @property
+    def high_water(self) -> int:
+        """Absolute contiguous end (exclusive) of the written stream."""
+
+        return self._high_water
+
+    @property
+    def gap_count(self) -> int:
+        """Number of recorded gap ranges (lost audio upstream)."""
+
+        return len(self._gap_ranges)
+
     def write(self, samples: np.ndarray, first_epoch: float) -> None:
         """Append converted samples whose first sample sits at first_epoch."""
 
@@ -189,6 +207,7 @@ class AudioCapture:
     ) -> None:
         if status and getattr(status, "input_overflow", False):
             self.overruns += 1
+            _audio_log.debug("input overflow #%d (%d frames)", self.overruns, frames)
         # Anchor epochs to the sample count, not per-block wall reads: real
         # callback jitter (±ms) would otherwise carve micro-gaps into the
         # ring and invalidate every slot (real-radio acceptance finding).
@@ -199,6 +218,15 @@ class AudioCapture:
             self._next_epoch is None
             or abs(block_start - self._next_epoch) > RESYNC_THRESHOLD_SECONDS
         ):
+            if self._next_epoch is not None:
+                # A stall means the delivered block may be PortAudio backlog
+                # mis-anchored to now; make the event visible (field finding:
+                # stale-audio sessions decode the same station for minutes).
+                _audio_log.warning(
+                    "capture re-anchor: drift %.3f s after %d frames",
+                    block_start - self._next_epoch,
+                    frames,
+                )
             self._next_epoch = block_start
         block_epoch = self._next_epoch
         self._next_epoch += frames / RX_SAMPLE_RATE

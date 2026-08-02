@@ -38,7 +38,7 @@ fi
 sleep 8
 
 echo "Starting server..."
-nohup venv/bin/python -m server.main > /tmp/mrrc-ft8.out.log 2> /tmp/mrrc-ft8.err.log &
+MRRC_FT8_LOG_LEVEL="${MRRC_FT8_LOG_LEVEL:-DEBUG}" nohup venv/bin/python -m server.main > /tmp/mrrc-ft8.out.log 2> /tmp/mrrc-ft8.err.log &
 NEW_PID=$!
 echo "Started (PID: $NEW_PID)"
 
