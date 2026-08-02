@@ -12,6 +12,9 @@ from __future__ import annotations
 
 import os
 
+from dotenv import load_dotenv
+load_dotenv(os.path.join(os.path.dirname(os.path.dirname(__file__)), ".env"))
+
 os.environ.setdefault("OMP_STACKSIZE", "10M")  # before NumPy/OpenMP loads
 
 import asyncio
@@ -44,7 +47,11 @@ from .web.ws import DecodeBroadcaster, StateBroadcaster
 LEASE_POLL_S = 1.0
 MAINTENANCE_S = 3_600.0
 
-log = logging.getLogger(__name__)
+log = logging.getLogger("mrrc-ft8")
+log.setLevel(logging.INFO)
+_h = logging.StreamHandler()
+_h.setFormatter(logging.Formatter("%(asctime)s %(message)s"))
+log.addHandler(_h)
 
 
 class _NullEncoder:
@@ -166,7 +173,15 @@ def create_server(
     )
     sequencer = Sequencer(my_call=config.my_call, my_grid=config.my_grid)
     player = TxPlayer(device=config.audio_device)
-    safety = SafetyController(rig_client, player, sequencer=sequencer)
+
+    def on_safety_event(event: Any) -> None:
+        # TX arm/key/fault transitions are otherwise invisible outside the
+        # state broadcast; log them so field diagnosis does not need a client.
+        log.info("safety %s: %s", event.kind.value, event.detail)
+
+    safety = SafetyController(
+        rig_client, player, sequencer=sequencer, on_event=on_safety_event
+    )
     state = AppState(
         auth=AuthService(config.password_hash),
         lease=LeaseService(),
@@ -217,6 +232,7 @@ def create_server(
     def report_dsp_fault(context: str, error: Exception) -> None:
         # DSP faults latch in the safety controller: a dead Worker failing
         # every slot is reported once, not once per slot (I2).
+        log.error("dsp fault: %s: %s", context, error)
         schedule(safety.report_fault(Interlock.DSP, f"{context}: {error}"))
 
     # CQ loop wiring (§6 auto-CQ): polls on the lease watchdog; idle timeout
@@ -296,6 +312,11 @@ def create_server(
                     for message in slot_decode.messages
                 ],
             }
+            log.info("slot %d: %d msgs, %d subs, %d started, %d skipped",
+                     slot_decode.slot_id, len(slot_decode.messages),
+                     len(state.decode_broadcast._subscribers),
+                     orchestrator.counters.slots_started if orchestrator else -1,
+                     orchestrator.counters.slots_skipped if orchestrator else -1)
             state.decode_broadcast.publish(batch)
             for message in slot_decode.messages:
                 asyncio.get_running_loop().create_task(
@@ -403,7 +424,18 @@ def create_server(
 
     app = create_app(state)
     app.router.lifespan_context = lifespan
-    app.mount("/static", StaticFiles(directory=_static_dir()), name="static")
+    import starlette.responses
+    _static_dir_v = _static_dir()
+    class _NoCacheStaticFiles(StaticFiles):
+        async def __call__(self, scope, receive, send):
+            async def _send(msg):
+                if msg["type"] == "http.response.start":
+                    headers = dict(msg.get("headers", []))
+                    headers[b"cache-control"] = b"no-cache, no-store, must-revalidate"
+                    msg["headers"] = list(headers.items())
+                await send(msg)
+            return await super().__call__(scope, receive, _send)
+    app.mount("/static", _NoCacheStaticFiles(directory=_static_dir_v), name="static")
     return app
 
 

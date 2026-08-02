@@ -1,5 +1,12 @@
 # 14. Version History
 
+## Unreleased — 2026-08-02 — Live Radio Field Fixes
+
+- Fixed the TX-driver fault funnel: a `TxRefused` raised by the safety controller (STOP-cancelled playback, disarm, watchdog, already-latched interlock) is now only counted, never reported through the error hook into the DSP interlock latch. Previously, the dead-man STOP cancelling an in-flight playback latched a spurious DSP fault and every subsequent Reply/CQ arm was refused until a manual clear. Real CAT/audio faults continue to latch inside `transmit()` before it raises; encode-path failures still report `report_fault(DSP)`. Added the `test_tx_refused_does_not_report_dsp_fault` regression.
+- Wired `SafetyController.on_event` and the DSP-fault funnel to the composition logger: every arm/TX start/TX stop/PTT-off/watchdog/fault transition is now visible in the server log without an authenticated client.
+- Hardened `restart.sh`: the old server is found by the `:8000` LISTEN socket and `pgrep -f server.main` (case-safe), waited out, escalated to SIGKILL, and the audio device is given an 8 s settle before the new server opens it. Measured on the FT-710 UAC device: a process that opens the device while a previous holder is dying (or within ~2 s of its SIGKILL) gets a permanently degraded stream — full-level audio with starved/scrambled content that decodes zero messages for the process lifetime.
+- Field finding recorded: the server never sets the radio mode; FT-710 must run USB-D (PKTUSB), not USB. In plain USB the CAT PTT keys the mic path and USB TX audio never reaches the modulator, so transmissions key with no RF drive.
+
 ## Unreleased — 2026-08-01 — Standard FT8 DSP Slices
 
 - Added the stable `wsjt_ft8_encode` C ABI backed by vendor `genft8` and `gen_ft8wave` with an exact 48 kHz, 606,720-sample float waveform.

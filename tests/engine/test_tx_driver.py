@@ -129,3 +129,22 @@ def test_retry_exhaustion_stops_transmissions() -> None:
     run(driver.on_slot_start(2))  # budget exhausted → RETRY_EXHAUSTED, no encode
     assert len(driver.encoder.calls) == 1
     assert sequencer.tx_enabled is False
+
+
+def test_tx_refused_does_not_report_dsp_fault() -> None:
+    """Safety refusals/aborts (STOP cancel, disarm, watchdog) are not DSP faults.
+
+    Regression: an in-flight playback cancelled by the dead-man STOP used to
+    flow through on_tx_error into the DSP interlock latch, refusing every
+    subsequent arm until a manual clear.
+    """
+
+    sequencer, driver = make_driver(
+        FakeEncoder(), FakeSafety(TxRefused("playback cancelled"))
+    )
+    sequencer.start_cq()
+    recorded: list[tuple[int, Exception]] = []
+    driver.on_tx_error = lambda slot_id, error: recorded.append((slot_id, error))  # type: ignore[method-assign]
+    run(driver.on_slot_start(0))
+    assert driver.counters["tx_failed"] == 1
+    assert recorded == []

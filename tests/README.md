@@ -82,7 +82,9 @@ sanitized error and unexpected-type frames mapping to `TxEncodeError`, and
 idempotent close. The TX-driver suite pins slot-parity gating (even slots by
 default), one sequencer message per eligible slot, idle-sequencer silence,
 broad failure counting (`tx_attempts`/`tx_failed`) without propagation for
-encode, TX-refused and WorkerFault paths, the in-flight overlap guard, the
+encode, TX-refused and WorkerFault paths, the rule that a safety `TxRefused`
+never reaches the error hook (a STOP-cancelled playback must not latch the
+DSP interlock), the in-flight overlap guard, the
 audit hook, retry-exhaustion silence and invalid-parity rejection. The
 CQ-loop suite covers DONE re-arm with idle-timer reset, retry-exhaustion and
 partner-loss re-arm without reset, manual/fault disarm and lease loss
@@ -174,9 +176,9 @@ guard that keeps the login overlay/cockpit toggling real (without it the
 waterfall canvas paints over the login form and the password field is
 untypable), and the floored canvas-resize comparison (a raw fractional-rect
 comparison clears the bitmap every frame, so the waterfall never
-accumulates). The dedup of repeated FT8 texts is pinned to include the
-slot id, or the candidate list freezes after the first slots and never
-scrolls. Static contract tests also pin the Band Activity row columns
+accumulates). The dedup of repeated FT8 texts is pinned to key on the station
+(`call || text`) with newest-wins timestamps, or the candidate list
+freezes after the first slots and never scrolls. Static contract tests also pin the Band Activity row columns
 (UTC/SNR/dt/freq/text), the CQ-loop countdown in the safety bar and the
 loop flag on the CQ intent. The candidate-tap contract pins that a tap on a
 decode row never fails silently: a free control lease is taken implicitly

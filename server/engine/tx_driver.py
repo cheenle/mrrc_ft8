@@ -4,8 +4,13 @@ The orchestrator announces every slot start; this driver transmits only on
 its configured parity (FT8 TX/RX alternation), pulls at most one message
 per eligible slot from the sequencer (driving the NFR-055 budget), encodes
 it through the supervised Worker and hands the waveform to the safety
-controller.  Every failure is counted and left to the §15.5 fault matrix;
-the driver never retries and never touches PTT itself.
+controller.  Encode failures are counted and reported through the error
+hook (the composition layer latches the DSP interlock); a ``TxRefused``
+from the safety controller is only counted — refusal or abort by the
+safety authority (STOP, disarm, watchdog, latched interlock) is the safety
+system working as designed, and real CAT/audio faults already latch inside
+``transmit`` before it raises.  The driver never retries and never touches
+PTT itself.
 """
 
 from __future__ import annotations
@@ -13,6 +18,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any
 
+from .safety import TxRefused
 from .sequencer import Sequencer
 
 DEFAULT_TX_AUDIO_FREQUENCY = 1500.0
@@ -56,10 +62,15 @@ class TxDriver:
                 message, self.tx_audio_frequency, slot_id=slot_id
             )
             await self.safety.transmit(waveform)
+        except TxRefused:
+            # Refused or aborted by the safety authority (STOP cancel,
+            # disarm, watchdog, latched interlock): not a DSP fault, and
+            # real CAT/audio faults already latched inside transmit().
+            self.counters["tx_failed"] += 1
         except Exception as error:
-            # Broad catch mirrors the RX path in orchestrator.py: encode can
-            # raise WorkerFault (transport/health) or OSError (shared memory)
-            # beyond TxEncodeError/TxRefused; all are counted, none propagate.
+            # Encode-path failures mirror the RX path in orchestrator.py:
+            # WorkerFault (transport/health) or OSError (shared memory)
+            # beyond TxEncodeError; all are counted, none propagate.
             self.counters["tx_failed"] += 1
             self.on_tx_error(slot_id, error)
         finally:

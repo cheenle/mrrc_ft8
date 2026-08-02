@@ -15,8 +15,12 @@ import time
 from collections.abc import Callable
 from dataclasses import dataclass
 
+import logging
+
 import numpy as np
 import scipy.signal
+
+_audio_log = logging.getLogger("mrrc-ft8.audio")
 
 RX_SAMPLE_RATE = 48_000
 DECODER_SAMPLE_RATE = 12_000
