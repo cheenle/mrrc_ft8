@@ -1,5 +1,13 @@
 # 14. Version History
 
+## Unreleased — 2026-08-03 — Waterfall Bandwidth = 3 kHz
+
+- `SpectrumComputer` emitted the full `0..rate/2` (0..6 kHz) spectrum, so the upper half of the waterfall canvas was always blank (the FT8 passband is ~0..3 kHz). The frame now emits only `DISPLAY_BANDWIDTH_HZ` (3.0 kHz) of bins; the client maps whatever bins it receives across the full canvas, so the span fills with no blank half (and the frame payload halves). Configurable via `display_bandwidth_hz`; validated to stay within `0..rate/2`. Regression: emitted span is ~3 kHz, not 6 kHz.
+
+## Unreleased — 2026-08-03 — Reply Decision Window: Polling + Fit Guard
+
+- The manual-Reply TX window now polls instead of sleeping to the cutoff: a Reply transmits as soon as it is armed (within ~0.1 s) rather than waiting until the decision deadline, and the window stays open `TX_DECISION_CUTOFF_SECONDS` (5.0, operator-selected) past slot start. A fit guard enforces the FT8 physical limit — the fixed 12.64 s waveform in a 15 s slot can only start by ~2.4 s in, so a Reply armed past that deadline defers to the next eligible slot instead of overrunning the boundary (an overrun is undecodable at the partner and deafens the next slot's RX). TX-window decisions (armed/transmitted, deferred past fit, cutoff reached) are logged at DEBUG under `mrrc-ft8.tx`. Regressions: in-window tap transmits, wrong-parity slot is rejected, no-tap closes silently, past-fit-deadline defers.
+
 ## Unreleased — 2026-08-03 — Public Host ACL Opened
 
 - `.env` `MRRC_FT8_ALLOWED_HOSTS` now includes the public domain `radio.vlsc.net` (was `localhost,127.0.0.1`). The NFR-035 Host/Origin checks gate WebSocket and every mutation (login, select, reply, CQ, STOP …) — with only loopback names allowed, all public POST/WS traffic was 403 and only GETs worked, so the PWA loaded but could never log in. Adding the domain lets the Caddy edge (`radio.vlsc.net:9988`, dual-stack) reach the full API over IPv4 or IPv6; the Host header is the domain either way, so no protocol-specific entry is needed. `.env` is operator config (gitignored); the deploy templates already document setting it.

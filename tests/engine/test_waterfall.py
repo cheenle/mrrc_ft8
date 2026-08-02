@@ -34,6 +34,18 @@ def test_tone_peaks_at_the_expected_bin() -> None:
     assert bins[peak] > 100  # clear tone well above the floor
 
 
+def test_spectrum_spans_only_the_ft8_passband() -> None:
+    """The emitted bins cover ~3 kHz (the FT8 passband), not the full 6 kHz
+    of the 12 kHz stream — the display would otherwise be half blank."""
+
+    computer = make_computer()
+    frames = computer.push(tone(1_500.0, 1.0), first_epoch=0.0)
+    frame = frames[0]
+    span_hz = len(frame.bins) * frame.bin_hz
+    assert abs(span_hz - 3_000.0) <= frame.bin_hz  # within one bin of 3 kHz
+    assert span_hz < 6_000.0  # not the full 0..rate/2
+
+
 def test_silence_quantizes_to_zero() -> None:
     computer = make_computer()
     frames = computer.push(np.zeros(4_096, dtype=np.int16), first_epoch=0.0)

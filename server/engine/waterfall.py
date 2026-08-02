@@ -24,6 +24,11 @@ DEFAULT_LINES_PER_SECOND = 3.5  # NFR-004 target cadence
 DEFAULT_FFT_SIZE = 4_096
 DB_FLOOR = -90.0
 DB_CEILING = -30.0
+DISPLAY_BANDWIDTH_HZ = 3_000.0
+"""Audio span shown on the waterfall.  The 12 kHz stream carries 0..6 kHz,
+but the FT8 passband is ~0..3 kHz; showing the full 6 kHz leaves the upper
+half of the display blank, so only this band is emitted (the client maps
+whatever bins it receives across the full canvas)."""
 
 _FRAME_MAGIC = b"WF01"
 _FRAME_HEADER = struct.Struct("<4sIQfH")
@@ -32,7 +37,7 @@ _FRAME_HEADER = struct.Struct("<4sIQfH")
 
 @dataclass(frozen=True, slots=True)
 class SpectrumFrame:
-    """One quantized waterfall line covering ``0 .. rate/2`` Hz."""
+    """One quantized waterfall line covering ``0 .. display_bandwidth`` Hz."""
 
     seq: int
     epoch: float
@@ -80,6 +85,7 @@ class SpectrumComputer:
         fft_size: int = DEFAULT_FFT_SIZE,
         db_floor: float = DB_FLOOR,
         db_ceiling: float = DB_CEILING,
+        display_bandwidth_hz: float = DISPLAY_BANDWIDTH_HZ,
     ) -> None:
         if not 0 < lines_per_second <= DECODER_SAMPLE_RATE:
             raise ValueError("lines_per_second out of range")
@@ -87,9 +93,12 @@ class SpectrumComputer:
             raise ValueError("fft_size must be a power of two >= 8")
         if not db_floor < db_ceiling:
             raise ValueError("db_floor must be below db_ceiling")
+        if not 0 < display_bandwidth_hz <= DECODER_SAMPLE_RATE / 2:
+            raise ValueError("display bandwidth must be within 0..rate/2")
         self.fft_size = fft_size
         self.hop = round(DECODER_SAMPLE_RATE / lines_per_second)
         self.bin_hz = DECODER_SAMPLE_RATE / fft_size
+        self._band_bins = int(display_bandwidth_hz / self.bin_hz) + 1
         self._floor = db_floor
         self._span = db_ceiling - db_floor
         self._window = np.hanning(fft_size).astype(np.float64)
@@ -123,7 +132,11 @@ class SpectrumComputer:
     def _analyze(self, window: np.ndarray, epoch: float) -> SpectrumFrame:
         spectrum = np.abs(np.fft.rfft(window * self._window)) / self._norm
         db = 20.0 * np.log10(np.maximum(spectrum, 1e-12))
-        quantized = np.clip((db - self._floor) / self._span * 255.0, 0, 255)
+        # Emit only the FT8 passband (0..display_bandwidth); the client maps
+        # these bins across the full canvas, so the upper blank half is gone.
+        quantized = np.clip(
+            (db[: self._band_bins] - self._floor) / self._span * 255.0, 0, 255
+        )
         frame = SpectrumFrame(
             seq=self._seq,
             epoch=epoch,

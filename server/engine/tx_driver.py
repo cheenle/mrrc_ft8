@@ -14,16 +14,21 @@ PTT itself.
 
 The decision is provisional (I9): when the sequencer is idle at slot start —
 the common case before the operator taps a Reply — the driver keeps the
-slot's TX window open until ``decision_cutoff`` seconds into the slot, so a
-fast manual reply can still transmit in the slot right after the message it
-answers, instead of always waiting a full T/R cycle.  The parity is
-re-checked at the cutoff, so a reply whose phase does not fit the current
-slot simply waits for the next eligible one.
+slot's TX window open until ``decision_cutoff`` seconds into the slot,
+polling so a Reply transmits as soon as it is armed instead of waiting for
+the cutoff.  FT8's fixed 12.64 s waveform in a 15 s slot physically caps the
+latest usable start at ~2.4 s; the fit guard below refuses to start a
+waveform that would overrun the slot (which is undecodable at the partner
+and deafens the next slot's RX), so a Reply armed past that deadline simply
+falls to the next eligible slot.  The parity is re-checked before every
+transmit, so a reply whose phase does not fit the current slot waits for the
+next one.
 """
 
 from __future__ import annotations
 
 import asyncio
+import logging
 import time
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
@@ -32,11 +37,18 @@ from typing import Any
 from .safety import TxRefused
 from .sequencer import Sequencer
 
+_log = logging.getLogger("mrrc-ft8.tx")
+
 DEFAULT_TX_AUDIO_FREQUENCY = 1500.0
 DEFAULT_TX_PERIOD_SECONDS = 15.0  # FT8 slot; slot_start = slot_id * period
-# A 12.64 s FT8 waveform must start by 15 − 12.64 ≈ 2.36 s into the slot;
-# the decision deadline leaves ~0.3 s for encode so the waveform still fits.
-TX_DECISION_CUTOFF_SECONDS = 2.0
+# Operator-selected decision window (2026-08-03): how long after a candidate
+# appears the operator may still click Reply.  The fit guard caps the latest
+# usable start, so clicks inside this window but past the fit deadline defer
+# to the next eligible slot instead of overrunning.
+TX_DECISION_CUTOFF_SECONDS = 5.0
+TX_WAVEFORM_SECONDS = 12.64  # MAX_TX_SAMPLES / 48 kHz
+TX_FIT_MARGIN_SECONDS = 0.2  # encode + start ramp before the waveform
+TX_POLL_SECONDS = 0.1
 
 
 @dataclass
@@ -84,21 +96,38 @@ class TxDriver:
             return
 
         # Provisional (I9): no message ready yet — the operator may still tap
-        # a Reply.  Keep this slot's TX window open until the decision cutoff
-        # so a fast reply lands in this slot instead of a full cycle later.
+        # a Reply.  Keep this slot's TX window open until the decision
+        # cutoff, polling so a Reply transmits as soon as it is armed.  The
+        # fit guard refuses to start a waveform that would overrun the slot.
         slot_start = slot_id * self.period
-        delay = slot_start + self.decision_cutoff - self.clock()
-        if delay > 0:
-            await self.sleep(delay)
-            if self._tx_in_flight:
+        slot_end = slot_start + self.period
+        deadline = slot_start + self.decision_cutoff
+        while True:
+            now = self.clock()
+            if now >= deadline:
+                _log.debug("tx window slot %d: decision cutoff reached, no reply", slot_id)
                 return
-            # The armed reply may target the other parity; only use this slot
-            # when its parity now matches the sequencer's phase.
-            if slot_id % 2 != self.sequencer.tx_phase:
+            if now + TX_WAVEFORM_SECONDS + TX_FIT_MARGIN_SECONDS >= slot_end:
+                _log.debug(
+                    "tx window slot %d: past the %.2f s fit deadline, deferring to the next slot",
+                    slot_id,
+                    slot_end - TX_WAVEFORM_SECONDS - TX_FIT_MARGIN_SECONDS - slot_start,
+                )
                 return
             message = self.sequencer.next_tx_message()
             if message is not None:
+                if slot_id % 2 != self.sequencer.tx_phase:
+                    _log.debug(
+                        "tx window slot %d: armed reply targets the other parity", slot_id
+                    )
+                    return
+                _log.debug(
+                    "tx window slot %d: reply armed at +%.2f s, transmitting",
+                    slot_id, now - slot_start,
+                )
                 await self._transmit(slot_id, message)
+                return
+            await self.sleep(min(TX_POLL_SECONDS, max(0.0, deadline - now)))
 
     async def _transmit(self, slot_id: int, message: str) -> None:
         self.counters["tx_attempts"] += 1

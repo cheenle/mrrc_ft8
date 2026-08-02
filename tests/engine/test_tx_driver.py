@@ -181,6 +181,26 @@ def test_manual_reply_waits_when_the_slot_parity_does_not_match() -> None:
     assert encoder.calls == []
 
 
+def test_reply_past_the_fit_deadline_defers_to_the_next_slot() -> None:
+    """A 12.64 s waveform cannot start past ~2.4 s into a 15 s slot: a Reply
+    armed after that must not overrun — it waits for the next eligible slot."""
+
+    sequencer = Sequencer(my_call="M0XX", my_grid="IO91")
+    encoder, safety = FakeEncoder(), FakeSafety()
+    clock = FakeClock(33.0)  # 3 s into slot 2: past the fit deadline
+
+    async def never_sleep(delay: float) -> None:
+        raise AssertionError("fit guard must return before sleeping")
+
+    driver = TxDriver(
+        sequencer, encoder, safety,  # type: ignore[arg-type]
+        clock=clock, sleep=never_sleep,
+    )
+    run(driver.on_slot_start(2))
+    assert encoder.calls == []  # deferred; the next slot will transmit
+    assert driver.counters["tx_attempts"] == 0
+
+
 def test_no_reply_within_the_window_transmits_nothing() -> None:
     """If the operator never taps, the open window just closes silently."""
 
