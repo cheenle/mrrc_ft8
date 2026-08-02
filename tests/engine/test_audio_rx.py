@@ -98,6 +98,41 @@ def test_ring_evicts_old_slots_and_counts_late_writes() -> None:
     assert ring.metrics.dropped_samples == 100
 
 
+def test_ring_slot_content_is_unaligned_after_eviction() -> None:
+    """Regression (2026-08-03): eviction advances base but must not shift
+    retained data.
+
+    Physical positions are keyed to the absolute sample index (X % capacity),
+    so advancing ``base`` never requires moving data.  The old code keyed
+    positions to ``(X - base)``; after an eviction advanced ``base``, reads
+    found content shifted by the cumulative base advance — the field "D":
+    decode died ~60-75 s in (ring full), the shift grew 1:1 with wall clock
+    and wrapped at capacity (repeating stale slots).  Constant-value slots
+    hid it; a known pattern catches it.
+    """
+
+    ring = UtcRing(seconds=50.0)  # 600,000 samples: three slots + margin
+    slot1 = np.full(180_000, 111, dtype="<i2")  # lands in the misread window
+    slot2 = np.full(180_000, 222, dtype="<i2")
+    slot3 = (np.arange(180_000) % 257).astype("<i2")  # the target: distinct pattern
+    slot4 = np.full(180_000, 333, dtype="<i2")
+    slot5 = np.full(180_000, 444, dtype="<i2")  # lands in the misread window
+
+    ring.write(np.zeros(180_000, dtype="<i2"), 0.0)   # slot 0, evicted
+    ring.write(slot1, 15.0)
+    ring.write(slot2, 30.0)
+    ring.write(slot3, 45.0)   # first eviction: base 0 -> 120,000
+    ring.write(slot4, 60.0)   # second eviction: base 120,000 -> 300,000
+    ring.write(slot5, 75.0)   # third eviction: base 300,000 -> 480,000
+
+    # slot3 (written before the last two evictions) is still fully retained
+    # and must decode to slot3's exact bytes — not 444/111 from later/earlier
+    # slots pulled in by a base-shifted read.
+    got = ring.read_slot(3)
+    assert got is not None
+    assert got == slot3.tobytes()
+
+
 def test_ring_tolerates_overlapping_rewrite() -> None:
     ring = UtcRing(seconds=60.0)
     block = np.full(12_000, 5, dtype=np.int16)

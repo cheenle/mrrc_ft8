@@ -148,8 +148,13 @@ class UtcRing:
                 for gap_start, gap_end in self._gap_ranges
                 if gap_end > evict_to
             ]
-        offset = start - self._base
-        positions = (np.arange(offset, offset + chunk.size)) % self._capacity
+        # Physical position is keyed to the absolute sample index, never to
+        # the moving ``base``: advancing base on eviction must not require
+        # moving data, or every later read finds content shifted by the
+        # cumulative base advance (field bug 2026-08-03, "D").  ``base`` is
+        # only a bounds/gap-check boundary; the window [base, new_high) is
+        # ≤ capacity, so (X % capacity) over it is a bijection.
+        positions = np.arange(start, start + chunk.size) % self._capacity
         self._buffer[positions] = chunk
         self._high_water = new_high
 
@@ -165,8 +170,9 @@ class UtcRing:
         for gap_start, gap_end in self._gap_ranges:
             if first < gap_end and last > gap_start:
                 return None
-        offset = first - self._base
-        positions = np.arange(offset, offset + self._slot_samples) % self._capacity
+        # Same absolute-index keying as write(); see there for why this must
+        # not subtract base.
+        positions = np.arange(first, first + self._slot_samples) % self._capacity
         return self._buffer[positions].tobytes()
 
 
