@@ -43,7 +43,7 @@
     <div class="hero-content">
         <div class="hero-badge">
             <i class="fas fa-book"></i>
-            <span>SDD V1.1 · 2026-08-03</span>
+            <span>SDD V1.2 · 2026-08-04</span>
         </div>
         <h1 class="hero-title">MRRC-FT8<br><span class="gradient">软件设计说明书</span></h1>
         <p class="hero-subtitle">
@@ -74,8 +74,8 @@
             </thead>
             <tbody>
             <tr><td>文档 ID</td><td>SDD-MRRC-FT8-2026-001</td></tr>
-            <tr><td>版本</td><td>V1.1</td></tr>
-            <tr><td>基线日期</td><td>2026-08-03</td></tr>
+            <tr><td>版本</td><td>V1.2</td></tr>
+            <tr><td>基线日期</td><td>2026-08-04</td></tr>
             <tr><td>阶段</td><td>radio.vlsc.net:9988 在线运行（BG1SB / ON80DA，FT-710）</td></tr>
             <tr><td>运行时</td><td>WSJT-X 3.0.2 Improved DSP + FastAPI + Uvicorn + NumPy</td></tr>
             <tr><td>前端</td><td>HTML5, CSS3, vanilla JavaScript, Canvas PWA</td></tr>
@@ -85,10 +85,31 @@
     </div>
 </section>
 
-<section class="section" id="updates" style="background: var(--bg-primary);">
+<section class="section" id="updates-v12" style="background: var(--bg-primary);">
     <div class="container">
         <div class="section-header">
             <span class="section-label">最新更新</span>
+            <h2 class="section-title">V1.2 落地了什么</h2>
+        </div>
+        <div class="features-grid">
+            <div class="feature-card">
+                <div class="icon"><i class="fas fa-sliders-h"></i></div>
+                <h3>FT-710 电台电平改走 Raw CAT</h3>
+                <p>ATT / PREAMP / AGC / RF 增益现改用 <code>\send_raw</code> 原始 CAT 帧读写，绕开 FT-710 从不回应的 hamlib <code>L</code>/<code>l</code> 电平路径（2026-08-04 对站内 rigctld 实机验证）。编码：<code>RA01;</code>=6 dB、<code>PA01;</code>=10 dB、<code>GT06;</code>=AUTO——hamlib 4.7.2 会误发 <code>GT04;</code>——以及 <code>RG0&lt;NNN&gt;;</code>=0..1。抽屉每次读取电台真实状态，写入后丢弃过期快照。</p>
+            </div>
+            <div class="feature-card">
+                <div class="icon"><i class="fas fa-filter"></i></div>
+                <h3>FT-710 滤波器宽度 Raw-SH</h3>
+                <p>hamlib 4.6.2 拼错宽度命令（<code>SH0NN;</code> 而非 <code>SH00NN;</code>），导致 <code>M &lt;mode&gt; &lt;width&gt;</code> 永不改变电台。宽度现改走 raw <code>\send_raw</code>，并以 SH 寄存器真实读数回读（1.8 / 2.4 / 3.0 kHz），兼容 4.7.2 升级。发射功率（<code>PC0…;</code>）被 FT-710 拒绝，故不提供该控件。</p>
+            </div>
+        </div>
+    </div>
+</section>
+
+<section class="section" id="updates" style="background: var(--bg-secondary);">
+    <div class="container">
+        <div class="section-header">
+            <span class="section-label">V1.1 基线</span>
             <h2 class="section-title">V1.1 落地了什么</h2>
         </div>
         <div class="features-grid">

@@ -1,5 +1,18 @@
 # 14. Version History
 
+## Unreleased — 2026-08-04 — FT-710 Rig Levels (ATT/PREAMP/AGC/RF): Raw-CAT Read/Write Through rigctld
+
+- Field report: after the filter-width fix and the hamlib **4.7.2** upgrade, the drawer's filter selector works but **ATT/PREAMP/AGC/RF gain** do not — `POST /radio/rig/level` returns success yet the rig never changes. Root cause was **not** the CAT frames (the filter bug was) but hamlib's level abstraction itself: the FT-710 never answers `L <name>` (times out / drops the session) and the `l <name> <value>` write path is equally unreliable, so the level readback reported the rig's stored state while the write silently did nothing or failed.
+- Verified live against the station rigctld (4.7.2, SHA 40f63488f) with raw `\send_raw` probes, including an interleaved write→readback→restore sequence for every level. The raw CAT path works for **both** directions; the FT-710's actual codes were confirmed empirically:
+  - ATT `RA00;`=off / `RA01;`=6 / `RA02;`=12 / `RA03;`=18 dB — matches hamlib 4.7.2's `newcat_set_level`.
+  - PREAMP `PA00;`=off / `PA01;`=10 / `PA02;`=20 dB — matches hamlib.
+  - AGC `GT00;`=OFF / `GT01;`=FAST / `GT02;`=MED / `GT03;`=SLOW / `GT06;`=AUTO — **hamlib sends `GT04;` for AUTO, which the FT-710 ignores** (probing `GT04`/`GT05` normalizes to `GT06`); another confirmed hamlib mapping bug.
+  - RF gain `RG0<000..255>;` = round(value × 255) — matches hamlib's `level_gran` step 1/255.
+  - TX power via `PC0…;` is **rejected by the FT-710** (`?` reply), matching hamlib 4.7.2's `NO_LVL_RFPOWER` in `ft710.c` — deliberately not exposed.
+- Fix (AD-008 intact — rigctld stays the sole serial owner): `RigClient.get_level`/`set_level` now prefer raw CAT frames through `\send_raw` for ATT/PREAMP/AGC/RF (value→code and code→value tables verified above), falling back to the hamlib `L`/`l` path for other levels, non-FT-710 rigs, and out-of-set values. Raw writes drain any residual reply with a 50 ms quiet check so a stray rig answer can never corrupt the next command.
+- `POST /radio/rig/level` now drops the 60 s level snapshot on success, so the drawer reflects the rig's real state on the next open instead of a stale readback.
+- Regressions: `FakeRigctld` answers `\send_raw` for RA/PA/GT/RG (write = silent, read = `<prefix>0<code>;`), mirroring the live rig; the engine tests cover raw read/write for all four levels, the hamlib fallback for out-of-set values, and the caps-dump drain on the fallback path; the API test asserts the level cache is invalidated after a write.
+
 ## Unreleased — 2026-08-04 — FT-710 Filter Width: Corrected Root Cause, Raw-SH Fix Through rigctld
 
 - The "filter width does not stick" investigation concluded with a **corrected** root cause (full record: `docs/FILTER_WIDTH_ISSUE.md`; the earlier direct-serial workaround ca9ec89 was based on a misdiagnosis and is reverted). Hamlib 4.6.2's FT-710 backend (Yaesu newcat) is broken in both directions:

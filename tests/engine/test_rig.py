@@ -19,12 +19,18 @@ class FakeRigctld:
         # disagree with it — that mismatch is exactly the FT-710 bug).
         self.width_index = 9  # 1800 Hz power-on default
         self.levels: dict[str, float] = {"ATT": 0.0, "PREAMP": 0.0, "RF": 50.0, "AGC": 30.0}
+        # Raw FT-710 CAT level codes (the rig's real state, read via
+        # ``\send_raw``): RA/PA/GT are 2-digit codes, RG a 3-digit 0..255.
+        # These mirror the live rig (ATT off, preamp off, AGC=06 AUTO,
+        # RF gain max) and are independent of the hamlib ``levels`` map.
+        self.ft710_codes = {"RA": 0, "PA": 0, "GT": 6, "RG": 255}
         self.rprt_error = 0          # when nonzero, every set command fails
         self.silent = False          # never reply (timeout injection)
         self.garbage = False         # reply with non-protocol bytes
         self.drop_after: int | None = None  # close session after N commands
         self.dump_caps_on_level: str | None = None  # level whose set triggers caps dump
         self.stale_rprt_once: int | None = None  # send one stale RPRT before this command count
+        self.poison_suffix: str | None = None  # rigctld resp_sep poison: appended to every reply
         self.commands: list[str] = []
         self.sessions = 0
         self._server: asyncio.AbstractServer | None = None
@@ -65,6 +71,16 @@ class FakeRigctld:
                     writer.write(b"RPRT -11\n")
                     await writer.drain()
                 reply = self._reply(command)
+                if command == ";f":
+                    # rigctld: a punctuation-prefixed command restores the
+                    # process-wide response separator to newline.
+                    self.poison_suffix = None
+                    reply = f"get_freq:;Frequency: {self.frequency};RPRT 0"
+                elif self.poison_suffix:
+                    # Poisoned rigctld appends the separator char to replies.
+                    reply = "\n".join(
+                        line + self.poison_suffix for line in reply.split("\n")
+                    )
                 for line in reply.split("\n"):
                     writer.write(line.encode("ascii") + b"\n")
                     await writer.drain()
@@ -121,6 +137,21 @@ class FakeRigctld:
             if len(parts) != 3:
                 return "RPRT -1"
             spec, payload = parts[1], parts[2]
+            # FT-710 raw-CAT level commands (verified against the live rig):
+            # writes are silent ("No answer"), reads echo the stored code as
+            # ``<prefix>0<code>;`` (RA00;..RA03;, GT06;, RG0255;).
+            level = re.fullmatch(r"(RA|PA|GT|RG)(\d+);", payload)
+            if level:
+                prefix, code = level.group(1), int(level.group(2))
+                if spec == "0":
+                    self.ft710_codes[prefix] = code
+                    return "No answer"
+                if spec == ";":
+                    # Reply in the rig's fixed-width frame: P1 is always 0,
+                    # the value is 1 digit (RA/PA/GT) or 3 digits (RG).
+                    width = 3 if prefix == "RG" else 1
+                    return f"{prefix}0{self.ft710_codes[prefix]:0{width}d};"
+                return "RPRT -1"
             if spec == "0":
                 # Raw write, no rig reply.  Like the real FT-710, only a
                 # correctly framed ``SH00NN;`` (4 digits) changes the width —
@@ -184,16 +215,16 @@ def test_ptt_and_mode(rig: FakeRigctld) -> None:
 
 
 def test_level_round_trip_and_unsupported(rig: FakeRigctld) -> None:
-    """ATT/AGC/PREAMP/RF level read/write; unsupported level -> rig_unsupported."""
+    """ATT level read/write round trip; unsupported level -> rig_unsupported."""
 
     async def main() -> None:
         port = await rig.start()
         client = RigClient(port=port, timeout=1.0)
         try:
             assert await client.get_level("ATT") == 0.0
-            await client.set_level("ATT", 1.0)
-            assert await client.get_level("ATT") == 1.0
-            assert rig.levels["ATT"] == 1.0
+            await client.set_level("ATT", 6)
+            assert await client.get_level("ATT") == 6.0
+            assert rig.ft710_codes["RA"] == 1
             # Unknown level: hamlib replies RPRT -11 (not supported on this rig).
             with pytest.raises(RigError) as exc:
                 await client.get_level("SQL")
@@ -203,12 +234,15 @@ def test_level_round_trip_and_unsupported(rig: FakeRigctld) -> None:
             await rig.stop()
 
     run(main())
-    assert rig.commands[:3] == ["L ATT", "l ATT 1.0", "L ATT"]
+    assert rig.commands[:3] == ["\\send_raw ; RA0;", "\\send_raw 0 RA01;", "\\send_raw ; RA0;"]
+    assert "L SQL" in rig.commands
 
 
 def test_level_set_drains_caps_dump(rig: FakeRigctld) -> None:
-    """FT-710 echoes a value then dumps full caps + RPRT; trailing lines must
-    not leak into the next command's reply."""
+    """The hamlib ``l`` fallback echoes a value then dumps full caps + RPRT;
+    trailing lines must not leak into the next command's reply.  (Valid
+    FT-710 values go raw and never hit this path — it only fires when a
+    value is outside the rig's discrete set and we fall back to hamlib.)"""
 
     rig.dump_caps_on_level = "PREAMP"
 
@@ -216,17 +250,82 @@ def test_level_set_drains_caps_dump(rig: FakeRigctld) -> None:
         port = await rig.start()
         client = RigClient(port=port, timeout=2.0)
         try:
-            await client.set_level("PREAMP", 10)
-            assert rig.levels["PREAMP"] == 10.0
+            # 99 dB is not an FT-710 preamp step -> raw path rejects it and
+            # the hamlib fallback applies it (and dumps caps, which we drain).
+            await client.set_level("PREAMP", 99)
+            assert rig.levels["PREAMP"] == 99.0
             # Next command must see a clean stream (no caps-dump residue).
             assert await client.get_level("ATT") == 0.0
             await client.set_level("AGC", 6)
-            assert rig.levels["AGC"] == 6.0
+            assert rig.ft710_codes["GT"] == 6
         finally:
             await client.close()
             await rig.stop()
 
     run(main())
+
+
+def test_ft710_levels_read_write_via_raw_cat(rig: FakeRigctld) -> None:
+    """ATT/PREAMP/AGC/RF gain are read and written as raw CAT frames through
+    rigctld's ``\\send_raw`` — hamlib's ``L``/``l`` level path is unusable on
+    the FT-710 (the rig never answers it, verified live 2026-08-04 against
+    the station rigctld)."""
+
+    async def main() -> None:
+        port = await rig.start()
+        client = RigClient(port=port, timeout=1.0)
+        try:
+            # Baseline reads come from the rig's raw state.
+            assert await client.get_level("ATT") == 0.0
+            assert await client.get_level("PREAMP") == 0.0
+            assert await client.get_level("AGC") == 6.0  # AUTO = GT06
+            assert await client.get_level("RF") == 1.0  # RG0255
+            # Writes go out as correctly framed raw CAT commands.
+            await client.set_level("ATT", 6)
+            await client.set_level("PREAMP", 10)
+            await client.set_level("AGC", 5)  # MED = GT02
+            await client.set_level("RF", 0.5)
+            assert rig.ft710_codes["RA"] == 1
+            assert rig.ft710_codes["PA"] == 1
+            assert rig.ft710_codes["GT"] == 2
+            assert rig.ft710_codes["RG"] == 128
+            # Readback reflects the rig's real state.
+            assert await client.get_level("ATT") == 6.0
+            assert await client.get_level("PREAMP") == 10.0
+            assert await client.get_level("AGC") == 5.0
+            assert await client.get_level("RF") == 128 / 255.0
+        finally:
+            await client.close()
+            await rig.stop()
+
+    run(main())
+    assert "\\send_raw ; RA0;" in rig.commands
+    assert "\\send_raw 0 RA01;" in rig.commands
+    assert "\\send_raw 0 PA01;" in rig.commands
+    assert "\\send_raw 0 GT02;" in rig.commands
+    assert "\\send_raw 0 RG0128;" in rig.commands
+    assert "L ATT" not in rig.commands  # hamlib level path never used on FT-710
+    assert "l ATT" not in rig.commands
+
+
+def test_ft710_level_falls_back_to_hamlib_for_unknown_value(rig: FakeRigctld) -> None:
+    """A value outside the FT-710's discrete level set falls back to the
+    hamlib ``l`` path instead of failing the write."""
+
+    async def main() -> None:
+        port = await rig.start()
+        client = RigClient(port=port, timeout=1.0)
+        try:
+            # 1 dB is not an FT-710 attenuator step: raw rejects, hamlib applies.
+            await client.set_level("ATT", 1.0)
+            assert rig.levels["ATT"] == 1.0
+        finally:
+            await client.close()
+            await rig.stop()
+
+    run(main())
+    assert "l ATT 1.0" in rig.commands
+    assert "\\send_raw 0 RA01;" not in rig.commands  # no raw frame for 1 dB
 
 
 def test_query_skips_stale_rprt_from_previous_command(rig: FakeRigctld) -> None:
@@ -486,6 +585,67 @@ def test_filter_width_get_rejects_bad_reply(rig: FakeRigctld) -> None:
             await rig.stop()
 
     run(main())
+
+
+def test_separator_poison_self_heals_on_frequency_poll(rig: FakeRigctld) -> None:
+    """rigctld's response separator is a process-wide global: a foreign
+    client sending a punctuation-prefixed line leaves every reply suffixed
+    (``14074000.``) for ALL clients until rigctld restarts.  The 5 s
+    frequency poll is the canary and must heal the session itself."""
+
+    rig.poison_suffix = "."
+
+    async def main() -> None:
+        port = await rig.start()
+        client = RigClient(port=port, timeout=1.0)
+        try:
+            assert await client.get_frequency() == 14_074_000
+            assert rig.poison_suffix is None  # the heal reset the separator
+            # Poisoned again mid-session: the next poll heals again.
+            rig.poison_suffix = ";"
+            assert await client.get_frequency() == 14_074_000
+        finally:
+            await client.close()
+            await rig.stop()
+
+    run(main())
+    assert rig.commands.count(";f") == 2
+
+
+def test_separator_poison_self_heals_on_set(rig: FakeRigctld) -> None:
+    """A poisoned ``RPRT 0.`` must not fail user-facing sets."""
+
+    rig.poison_suffix = "."
+
+    async def main() -> None:
+        port = await rig.start()
+        client = RigClient(port=port, timeout=1.0)
+        try:
+            await client.set_frequency(7_074_000)
+            assert rig.frequency == 7_074_000
+            await client.set_mode("USB", 2_400)
+            assert rig.mode == ("USB", 2_400)
+        finally:
+            await client.close()
+            await rig.stop()
+
+    run(main())
+    assert ";f" in rig.commands
+
+
+def test_no_heal_without_poison(rig: FakeRigctld) -> None:
+    async def main() -> None:
+        port = await rig.start()
+        client = RigClient(port=port, timeout=1.0)
+        try:
+            assert await client.get_frequency() == 14_074_000
+            await client.set_frequency(7_074_000)
+        finally:
+            await client.close()
+            await rig.stop()
+
+    run(main())
+    assert ";f" not in rig.commands
 
 
 def test_close_is_idempotent(rig: FakeRigctld) -> None:

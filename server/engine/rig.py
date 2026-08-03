@@ -52,6 +52,84 @@ _SSB_WIDTH_TABLE_HZ = (
 )
 _SH_REPLY_RE = re.compile(r"^SH(\d{4});")
 
+# ── FT-710 raw-CAT levels ──────────────────────────────────────────────
+# hamlib's level abstraction (``L``/``l``) is unusable on the FT-710: the
+# rig never answers the read (``L <name>`` times out and drops the session)
+# and the write path is equally unreliable — yet the underlying CAT frames
+# are valid.  Verified live 2026-08-04 against the station rigctld (same
+# investigation as the SH filter bug, docs/FILTER_WIDTH_ISSUE.md): the raw
+# ``\send_raw`` pass-through works for both directions, so ATT / PREAMP /
+# AGC / RF gain are read and written as raw CAT frames here, with the hamlib
+# path kept as the fallback for other rigs and out-of-set values.
+#
+# Verified FT-710 codes (live readback):
+#   ATT    RA00=off, RA01=6, RA02=12, RA03=18 dB
+#   PREAMP PA00=off, PA01=10, PA02=20 dB
+#   AGC    GT00=OFF, GT01=FAST, GT02=MED, GT03=SLOW, GT06=AUTO
+#          (hamlib maps AUTO -> GT04, which the FT-710 ignores; AUTO is GT06)
+#   RF     RG0<000..255> = round(value * 255)
+_FT710_ATT_CODE = {0: 0, 6: 1, 12: 2, 18: 3}
+_FT710_PREAMP_CODE = {0: 0, 10: 1, 20: 2}
+_FT710_AGC_CODE = {0: 0, 2: 1, 5: 2, 3: 3, 6: 6}  # hamlib enum -> GT digit
+_FT710_CODE_TO_VALUE = {
+    "ATT": {v: k for k, v in _FT710_ATT_CODE.items()},
+    "PREAMP": {v: k for k, v in _FT710_PREAMP_CODE.items()},
+    "AGC": {v: k for k, v in _FT710_AGC_CODE.items()},
+}
+_FT710_READ_PREFIX = {"ATT": "RA", "PREAMP": "PA", "AGC": "GT", "RF": "RG"}
+_LEVEL_REPLY_RE = re.compile(r"^([A-Z]{2})(\d+);")
+
+
+def _ft710_set_frame(level: str, value: float) -> str:
+    """Build the raw FT-710 CAT frame for a level set.
+
+    Raises ValueError when ``value`` is outside the rig's discrete set.
+    """
+
+    if level == "ATT":
+        code = _FT710_ATT_CODE.get(int(value))
+        if code is None:
+            raise ValueError(f"unsupported FT-710 attenuator value: {value!r} dB")
+        return f"RA{code:02d};"
+    if level == "PREAMP":
+        code = _FT710_PREAMP_CODE.get(int(value))
+        if code is None:
+            raise ValueError(f"unsupported FT-710 preamp value: {value!r} dB")
+        return f"PA{code:02d};"
+    if level == "AGC":
+        code = _FT710_AGC_CODE.get(int(value))
+        if code is None:
+            raise ValueError(f"unsupported FT-710 AGC value: {value!r}")
+        return f"GT{code:02d};"
+    if level == "RF":
+        if not 0.0 <= float(value) <= 1.0:
+            raise ValueError(f"RF gain must be in 0..1: {value!r}")
+        # The FT-710 frame is ``RG0<NNN>;`` — a fixed P1 (0) plus 3 digits.
+        return f"RG0{round(float(value) * 255):03d};"
+    raise KeyError(level)
+
+
+def _parse_ft710_level_reply(level: str, line: str) -> float:
+    """Map a raw FT-710 level readback (e.g. ``RA01;``) to a hamlib value."""
+
+    match = _LEVEL_REPLY_RE.match(line)
+    if match is None:
+        raise RigError("protocol", f"rig returned an invalid {level} reply: {line!r}")
+    prefix, code_text = match.groups()
+    if prefix != _FT710_READ_PREFIX[level]:
+        raise RigError("protocol", f"rig replied to {level} with {prefix}: {line!r}")
+    code = int(code_text)
+    if level in _FT710_CODE_TO_VALUE:
+        try:
+            return float(_FT710_CODE_TO_VALUE[level][code])
+        except KeyError:
+            raise RigError(
+                "protocol", f"rig returned an unknown {level} code: {code}"
+            ) from None
+    if level == "RF":
+        return code / 255.0
+    raise KeyError(level)
+
 
 class RigError(Exception):
     """One rigctld interaction failed closed."""
@@ -113,7 +191,15 @@ class RigClient:
         """Return the current VFO frequency in Hz."""
 
         lines = await self._query("f", 1, skip_stale_rprt=True)
-        return self._parse_int(lines[0], "frequency")
+        text = lines[0]
+        if text and text[-1] in ";.:":
+            # rigctld's response separator was poisoned by a punctuation-
+            # prefixed command from another client; send ``;f`` to reset it
+            # and retry so every subsequent command stays clean.
+            await self._heal_separator()
+            lines = await self._query("f", 1, skip_stale_rprt=True)
+            text = lines[0]
+        return self._parse_int(text, "frequency")
 
     async def set_frequency(self, frequency_hz: int) -> None:
         """Set the VFO frequency in Hz."""
@@ -176,12 +262,21 @@ class RigClient:
     async def get_level(self, level: str) -> float:
         """Read one rig level (e.g. ``ATT``, ``RF``, ``PREAMP``, ``AGC``).
 
-        ``RPRT -11`` (unsupported on this rig) surfaces as :class:`RigError`
-        with ``code == "rig_unsupported"``; callers may degrade gracefully.
+        FT-710 levels are read as raw CAT frames through rigctld's
+        ``\\send_raw`` — hamlib's ``L <name>`` is unreliable on the FT-710
+        (the rig never answers it, verified live 2026-08-04); other levels
+        and non-FT-710 rigs fall back to hamlib.  ``RPRT -11`` (unsupported
+        on this rig) surfaces as :class:`RigError` with ``code ==
+        "rig_unsupported"``; callers may degrade gracefully.
         """
 
         if not _LEVEL_RE.match(level):
             raise ValueError("level must be an uppercase Hamlib token")
+        if level in _FT710_READ_PREFIX:
+            try:
+                return await self._ft710_get_level(level)
+            except RigError:
+                pass  # not an FT-710 / transient — fall back to hamlib below
         try:
             # FT-710 never answers ``L <name>``; cap the read so the rig
             # lock is released quickly instead of stalling for 2 s per
@@ -203,16 +298,26 @@ class RigClient:
     async def set_level(self, level: str, value: float) -> None:
         """Write one rig level; unsupported levels raise ``rig_unsupported``.
 
+        FT-710 levels are written as raw CAT frames through rigctld's
+        ``\\send_raw`` (hamlib's ``l`` path is unreliable on the FT-710);
+        values outside the rig's discrete set fall back to hamlib.
+
         NB: rigctld replies to ``l <level> <value>`` with the *new value*
-        (e.g. ``6.``) on rigs like the FT-710, not ``RPRT 0`` — so this
-        path tolerates both reply styles (``M``/``F``/``T`` keep using
-        :meth:`_set` which requires RPRT).
+        (e.g. ``6.``) on rigs like the FT-710, not ``RPRT 0`` — so the
+        fallback path tolerates both reply styles (``M``/``F``/``T`` keep
+        using :meth:`_set` which requires RPRT).
         """
 
         if not _LEVEL_RE.match(level):
             raise ValueError("level must be an uppercase Hamlib token")
         if type(value) not in (int, float):
             raise ValueError("level value must be numeric")
+        if level in _FT710_READ_PREFIX:
+            try:
+                await self._ft710_set_level(level, value)
+                return
+            except (ValueError, RigError):
+                pass  # value outside the FT-710 set / transient — fall back
         async with self._lock:
             await self._ensure_connected_locked()
             await self._write_locked(f"l {level} {value}")
@@ -240,6 +345,66 @@ class RigClient:
                     "protocol", f"level set did not return a value or RPRT: {line!r}"
                 ) from None
             await self._drain_until_rprt()
+
+    async def _send_raw(self, reply_spec: str, payload: str) -> str:
+        """Forward one raw CAT frame through rigctld's ``\\send_raw``.
+
+        ``reply_spec`` is rigctld's expected-reply argument: ``0`` for a
+        write (rigctld answers ``No answer`` on success), ``;`` to read the
+        rig's reply up to ``;``.  An ``RPRT`` reply raises :class:`RigError`.
+        """
+
+        async with self._lock:
+            await self._ensure_connected_locked()
+            await self._write_locked(f"\\send_raw {reply_spec} {payload}")
+            line = await self._readline_locked()
+        if line.startswith("RPRT"):
+            self._raise_rprt(line)
+        return line
+
+    async def _ft710_get_level(self, level: str) -> float:
+        """Read one FT-710 level as a raw CAT frame (``\\send_raw ; <P>0;``)."""
+
+        prefix = _FT710_READ_PREFIX[level]
+        line = await self._send_raw(";", f"{prefix}0;")
+        return _parse_ft710_level_reply(level, line)
+
+    async def _ft710_set_level(self, level: str, value: float) -> None:
+        """Write one FT-710 level as a raw CAT frame (``\\send_raw 0 <cmd>;``)."""
+
+        frame = _ft710_set_frame(level, value)
+        async with self._lock:
+            await self._ensure_connected_locked()
+            await self._write_locked(f"\\send_raw 0 {frame}")
+            line = await self._readline_locked()
+            if line.startswith("RPRT"):
+                self._raise_rprt(line)
+            # A raw write is usually silent, but if the rig did answer (some
+            # level writes can dump capability text) the bytes must not leak
+            # into the next command; drain with a short timeout.
+            await self._drain_residual_locked()
+
+    async def _drain_residual_locked(self) -> None:
+        """Discard bytes the rig buffered after a raw write (short timeout).
+
+        The FT-710 accepts most raw writes silently; the drain costs one
+        50 ms quiet check and keeps the protocol stream clean if the rig
+        ever answers a write.
+        """
+
+        assert self._reader is not None
+        for _ in range(512):
+            try:
+                raw = await asyncio.wait_for(
+                    self._reader.readline(), timeout=0.05
+                )
+            except asyncio.TimeoutError:
+                return  # stream quiet — nothing buffered
+            except (OSError, RuntimeError):
+                return
+            if raw == b"":
+                await self._drop_locked()
+                return
 
     async def set_filter_width(self, hz: int) -> None:
         """Set the FT-710 SSB filter width via raw CAT ``SH00<NN>;``.
@@ -343,6 +508,14 @@ class RigClient:
             line = await self._readline_locked()
             if not line.startswith("RPRT"):
                 raise RigError("protocol", "set command did not return RPRT")
+            if line and line[-1] in ";.:":
+                # Poisoned response separator: ``RPRT 0.`` instead of ``RPRT 0``.
+                # Heal with ``;f`` and retry the original command once.
+                await self._heal_separator_locked()
+                await self._write_locked(payload)
+                line = await self._readline_locked()
+                if not line.startswith("RPRT"):
+                    raise RigError("protocol", "set command did not return RPRT")
             self._raise_rprt(line)
             # FT-710's rigctld appends a blank line after set replies
             # (``RPRT 0\n\n``); ``_readline_locked`` skips blanks so the
@@ -451,8 +624,40 @@ class RigClient:
             except OSError:
                 pass
 
+    async def _heal_separator(self) -> None:
+        """Reset rigctld's process-wide response separator to newline.
+
+        A punctuation-prefixed command (e.g. ``;``) changes rigctld's
+        ``resp_sep`` globally, causing every reply to end with that char.
+        The ``;f`` command restores the default newline separator.
+        """
+
+        async with self._lock:
+            await self._heal_separator_locked()
+
+    async def _heal_separator_locked(self) -> None:
+        """Locked variant of :meth:`_heal_separator`; caller must hold ``_lock``."""
+
+        await self._ensure_connected_locked()
+        await self._write_locked(";f")
+        # ``;f`` replies with ``get_freq:;Frequency: <freq>;RPRT 0`` on one
+        # line when the separator is ``;``.  Drain any leftover poison tokens
+        # (e.g. a trailing ``.`` appended to the previous reply) then read
+        # the heal reply, extract the trailing ``RPRT 0``, and validate it.
+        for _ in range(8):
+            line = await self._readline_locked()
+            if line.startswith("RPRT") or "RPRT" in line:
+                tail = line.rsplit("RPRT", 1)[-1].strip()
+                self._raise_rprt("RPRT " + tail)
+                return
+        raise RigError("protocol", "separator heal did not return RPRT")
+
     @staticmethod
     def _raise_rprt(line: str) -> None:
+        # Some rigs/hamlib builds append the response separator character
+        # (``;`` or ``.``) to replies when the process-wide separator has
+        # been poisoned.  Strip it before parsing.
+        line = line.rstrip(".;:")
         parts = line.split()
         if len(parts) != 2:
             raise RigError("protocol", "malformed RPRT reply")
@@ -466,7 +671,7 @@ class RigClient:
     @staticmethod
     def _parse_int(text: str, what: str) -> int:
         try:
-            return int(text)
+            return int(text.rstrip(".;:"))
         except ValueError:
             raise RigError(
                 "protocol", f"rig returned an invalid {what}: {text!r}"

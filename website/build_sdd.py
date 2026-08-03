@@ -171,7 +171,7 @@ def build_page(body_html: str, title: str, current_file: str) -> str:
 <footer class="footer" style="margin-top: 0;">
     <div class="container">
         <div class="footer-bottom">
-            <p>&copy; 2026 MRRC-FT8 Project · SDD V1.1 · <a href="https://github.com/cheenle/mrrc_ft8" style="color:var(--accent);">GitHub</a></p>
+            <p>&copy; 2026 MRRC-FT8 Project · SDD V1.2 · <a href="https://github.com/cheenle/mrrc_ft8" style="color:var(--accent);">GitHub</a></p>
         </div>
     </div>
 </footer>

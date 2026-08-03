@@ -419,6 +419,12 @@ def test_radio_rig_levels_and_station_snapshot(
     assert set_att.status_code == 200
     assert set_att.json()["value"] == 1
 
+    # A level write drops the 60 s capability snapshot: the next read must
+    # re-probe the rig and report the new value, not the stale cached one.
+    levels2 = client.get("/api/v1/radio/rig/levels", headers=headers)
+    assert levels2.status_code == 200
+    assert levels2.json()["levels"]["ATT"] == 1.0
+
     bad = client.post(
         "/api/v1/radio/rig/level", json={"level": "att; DROP", "value": 1}, headers=headers
     )

@@ -43,7 +43,7 @@
     <div class="hero-content">
         <div class="hero-badge">
             <i class="fas fa-book"></i>
-            <span>SDD V1.1 · 2026-08-03</span>
+            <span>SDD V1.2 · 2026-08-04</span>
         </div>
         <h1 class="hero-title">MRRC-FT8<br><span class="gradient">Software Design Description</span></h1>
         <p class="hero-subtitle">
@@ -74,8 +74,8 @@
             </thead>
             <tbody>
             <tr><td>Document ID</td><td>SDD-MRRC-FT8-2026-001</td></tr>
-            <tr><td>Version</td><td>V1.1</td></tr>
-            <tr><td>Baseline Date</td><td>2026-08-03</td></tr>
+            <tr><td>Version</td><td>V1.2</td></tr>
+            <tr><td>Baseline Date</td><td>2026-08-04</td></tr>
             <tr><td>Phase</td><td>Live on radio.vlsc.net:9988 (BG1SB / ON80DA, FT-710)</td></tr>
             <tr><td>Runtime</td><td>WSJT-X 3.0.2 Improved DSP + FastAPI + Uvicorn + NumPy</td></tr>
             <tr><td>Frontend</td><td>HTML5, CSS3, vanilla JavaScript, Canvas PWA</td></tr>
@@ -85,10 +85,31 @@
     </div>
 </section>
 
-<section class="section" id="updates" style="background: var(--bg-primary);">
+<section class="section" id="updates-v12" style="background: var(--bg-primary);">
     <div class="container">
         <div class="section-header">
             <span class="section-label">Latest Update</span>
+            <h2 class="section-title">What Landed In V1.2</h2>
+        </div>
+        <div class="features-grid">
+            <div class="feature-card">
+                <div class="icon"><i class="fas fa-sliders-h"></i></div>
+                <h3>FT-710 Rig Levels via Raw CAT</h3>
+                <p>ATT / PREAMP / AGC / RF gain now switch through raw <code>\send_raw</code> CAT frames instead of hamlib's <code>L</code>/<code>l</code> level path, which the FT-710 never answers (verified live 2026-08-04 against the station rigctld). Codes: <code>RA01;</code>=6 dB, <code>PA01;</code>=10 dB, <code>GT06;</code>=AUTO — hamlib 4.7.2 sends the wrong <code>GT04;</code> — and <code>RG0&lt;NNN&gt;;</code>=0..1. The drawer reads the rig's real state and drops the stale snapshot after every write.</p>
+            </div>
+            <div class="feature-card">
+                <div class="icon"><i class="fas fa-filter"></i></div>
+                <h3>FT-710 Filter Width Raw-SH</h3>
+                <p>Hamlib 4.6.2 mis-framed the width command (<code>SH0NN;</code> instead of <code>SH00NN;</code>) so <code>M &lt;mode&gt; &lt;width&gt;</code> never changed the rig. The width now goes through raw <code>\send_raw</code> with the true SH-register readback (1.8 / 2.4 / 3.0 kHz), compatible with the hamlib 4.7.2 upgrade. TX power (<code>PC0…;</code>) is rejected by the FT-710 and is deliberately not exposed.</p>
+            </div>
+        </div>
+    </div>
+</section>
+
+<section class="section" id="updates" style="background: var(--bg-secondary);">
+    <div class="container">
+        <div class="section-header">
+            <span class="section-label">V1.1 Baseline</span>
             <h2 class="section-title">What Landed In V1.1</h2>
         </div>
         <div class="features-grid">

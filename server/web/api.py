@@ -606,6 +606,10 @@ def create_router(state: AppState) -> APIRouter:
             await state.rig.set_level(name, float(value))
         except Exception as exc:
             return _reject(502, "rig_error", detail=str(exc))
+        # The rig state changed: drop the 60 s capability snapshot so the
+        # next drawer open re-reads the real level values instead of a stale
+        # one (the FT-710 raw-CAT reads are cheap and reliable).
+        state._rig_level_cache = {"at": 0.0, "levels": None}
         return await mutate(request, request.headers.get("idempotency-key"), 200, {"level": name, "value": value})
 
     # ---- logs ----------------------------------------------------------------

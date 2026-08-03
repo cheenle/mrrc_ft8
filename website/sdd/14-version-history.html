@@ -124,6 +124,102 @@
     </aside>
     <main class="sdd-content">
 <h1 id="version-history">14. Version History</h1>
+<h2 id="unreleased-2026-08-04-ft-710-rig-levels-attpreampagcrf-raw-cat-readwrite-through-rigctld">Unreleased — 2026-08-04 — FT-710 Rig Levels (ATT/PREAMP/AGC/RF): Raw-CAT Read/Write Through rigctld</h2>
+<ul>
+<li>Field report: after the filter-width fix and the hamlib <strong>4.7.2</strong> upgrade, the drawer’s filter selector works but <strong>ATT/PREAMP/AGC/RF gain</strong> do not — <code>POST /radio/rig/level</code> returns success yet the rig never changes. Root cause was <strong>not</strong> the CAT frames (the filter bug was) but hamlib’s level abstraction itself: the FT-710 never answers <code>L &lt;name&gt;</code> (times out / drops the session) and the <code>l &lt;name&gt; &lt;value&gt;</code> write path is equally unreliable, so the level readback reported the rig’s stored state while the write silently did nothing or failed.</li>
+<li>Verified live against the station rigctld (4.7.2, SHA 40f63488f) with raw <code>\send_raw</code> probes, including an interleaved write→readback→restore sequence for every level. The raw CAT path works for <strong>both</strong> directions; the FT-710’s actual codes were confirmed empirically:
+<ul>
+<li>ATT <code>RA00;</code>=off / <code>RA01;</code>=6 / <code>RA02;</code>=12 / <code>RA03;</code>=18 dB — matches hamlib 4.7.2’s <code>newcat_set_level</code>.</li>
+<li>PREAMP <code>PA00;</code>=off / <code>PA01;</code>=10 / <code>PA02;</code>=20 dB — matches hamlib.</li>
+<li>AGC <code>GT00;</code>=OFF / <code>GT01;</code>=FAST / <code>GT02;</code>=MED / <code>GT03;</code>=SLOW / <code>GT06;</code>=AUTO — <strong>hamlib sends <code>GT04;</code> for AUTO, which the FT-710 ignores</strong> (probing <code>GT04</code>/<code>GT05</code> normalizes to <code>GT06</code>); another confirmed hamlib mapping bug.</li>
+<li>RF gain <code>RG0&lt;000..255&gt;;</code> = round(value × 255) — matches hamlib’s <code>level_gran</code> step 1/255.</li>
+<li>TX power via <code>PC0…;</code> is <strong>rejected by the FT-710</strong> (<code>?</code> reply), matching hamlib 4.7.2’s <code>NO_LVL_RFPOWER</code> in <code>ft710.c</code> — deliberately not exposed.</li>
+</ul></li>
+<li>Fix (AD-008 intact — rigctld stays the sole serial owner): <code>RigClient.get_level</code>/<code>set_level</code> now prefer raw CAT frames through <code>\send_raw</code> for ATT/PREAMP/AGC/RF (value→code and code→value tables verified above), falling back to the hamlib <code>L</code>/<code>l</code> path for other levels, non-FT-710 rigs, and out-of-set values. Raw writes drain any residual reply with a 50 ms quiet check so a stray rig answer can never corrupt the next command.</li>
+<li><code>POST /radio/rig/level</code> now drops the 60 s level snapshot on success, so the drawer reflects the rig’s real state on the next open instead of a stale readback.</li>
+<li>Regressions: <code>FakeRigctld</code> answers <code>\send_raw</code> for RA/PA/GT/RG (write = silent, read = <code>&lt;prefix&gt;0&lt;code&gt;;</code>), mirroring the live rig; the engine tests cover raw read/write for all four levels, the hamlib fallback for out-of-set values, and the caps-dump drain on the fallback path; the API test asserts the level cache is invalidated after a write.</li>
+</ul>
+<h2 id="unreleased-2026-08-04-ft-710-filter-width-corrected-root-cause-raw-sh-fix-through-rigctld">Unreleased — 2026-08-04 — FT-710 Filter Width: Corrected Root Cause, Raw-SH Fix Through rigctld</h2>
+<ul>
+<li>The “filter width does not stick” investigation concluded with a <strong>corrected</strong> root cause (full record: <code>docs/FILTER_WIDTH_ISSUE.md</code>; the earlier direct-serial workaround ca9ec89 was based on a misdiagnosis and is reverted). Hamlib 4.6.2’s FT-710 backend (Yaesu newcat) is broken in both directions:
+<ul>
+<li>SET: <code>newcat_set_rx_bandwidth</code> misses the FT-710 in its 4-digit command branch and emits <code>SH0NN;</code> instead of <code>SH00NN;</code> — the rig ignores the malformed frame, so <code>M &lt;mode&gt; &lt;width&gt;</code> returns RPRT 0 yet never changes the width.</li>
+<li>GET: <code>newcat_get_rx_bandwidth</code> has no FT-710 branch; the SH index falls into the FT-450/FT-9000 narrow/normal/wide bucketing, so <code>m</code> reports 2400 Hz (index 14) as 1800 Hz. The supposed “1-3 s revert” is just the 500 ms hamlib set-cache expiring and exposing this misread — the rig never reverts; the supposed rigctld-restart reset is the same misread (<code>newcat_open</code> never touches SH).</li>
+</ul></li>
+<li>Fix (AD-008 intact — rigctld stays the sole serial owner): <code>RigClient.set_filter_width</code> writes the correctly framed <code>SH00&lt;NN&gt;;</code> via rigctld’s <code>\send_raw 0</code> pass-through; <code>RigClient.get_filter_width</code> reads the true width via <code>\send_raw ; SH0;</code> and maps it with hamlib’s <code>ftdx101_ssb_widths</code> table. <code>GET /radio/mode</code> now prefers the raw SH read over hamlib’s misreported passband; <code>POST /radio/mode</code> applies the width through the raw path as well (best effort); <code>POST /radio/filter</code> stays the dedicated width intent.</li>
+<li>Removed the direct-serial machinery (pyserial/requirements.txt, <code>FT710_FILTER_SERIAL_PORT</code>), corrected the width index table (2400 → index 14; the committed 13 = 2300 Hz was wrong), and verified live against the station rigctld with interleaved raw reads while the server polled. Regressions: FakeRigctld only accepts 4-digit <code>SH00NN;</code> frames (the rig ignores malformed ones), and the API tests include the “hamlib claims 1800, register holds 2400” readback scenario.</li>
+<li>Also fixed a stale SDD-harness assertion that still expected SDD version V1.0 after the V1.1 refresh.</li>
+</ul>
+<h2 id="unreleased-2026-08-03-level-probe-fast-fail-diagnostic-logging">Unreleased — 2026-08-03 — Level-Probe Fast-Fail + Diagnostic Logging</h2>
+<ul>
+<li>The real culprit behind “filter switch does nothing”: the server had been restarted BEFORE the rig.py/api.py fixes landed, so it kept running the old code (level probes holding the rig lock 8 s, stale RPRT poisoning reads). With the fixes deployed, a drawer open costs one 0.55 s probe (first unsupported level stops the batch), filter switches take ~0.25 s and read back correctly.</li>
+<li><code>RigClient._query/_readline_locked</code> accept a per-command <code>timeout</code>; <code>get_level</code> probes with 0.5 s and treats timeout/unsupported identically (write path <code>l &lt;level&gt; &lt;value&gt;</code> unaffected). <code>/radio/rig/levels</code> probes serially and stops at the first failure, caching the result for 60 s.</li>
+<li><code>radio_mode</code> and the rig invalid-token errors now log the failure + raw payload (<code>log.warning</code> / richer <code>RigError</code> detail) so field diagnosis no longer needs to guess.</li>
+</ul>
+<h2 id="unreleased-2026-08-03-queries-skip-stale-rprt-final-filter-switch-fix">Unreleased — 2026-08-03 — Queries Skip Stale RPRT (final filter-switch fix)</h2>
+<ul>
+<li>Field report #3 with diagnostics: <code>GET /radio/mode</code> returned 502 with <code>rig_rprt</code> — rigctld rejected <code>m</code>. Root cause: FT-710 never answers <code>L &lt;level&gt;</code> queries; the timed-out command’s delayed <code>RPRT -11</code> (unsupported) arrives <em>after</em> we drop and reconnect, landing on the new session <strong>before</strong> the <code>m</code>/<code>f</code> reply. <code>get_mode</code> read <code>RPRT -11</code> as its reply → 502. The write (<code>POST /radio/mode</code>) succeeded — the 3 kHz selection actually applied, only the readback failed.</li>
+<li>Fix: <code>_query(..., skip_stale_rprt=True)</code> on <code>m</code>/<code>f</code>/<code>t</code> reads skips up to 8 leading RPRT lines (stale replies from prior commands) before taking the real payload; <code>L</code> queries keep strict RPRT handling so a genuine unsupported-level error still surfaces as <code>rig_unsupported</code>. Regression: fake rig injects a stale <code>RPRT -11</code> before the first <code>m</code> and the client still reads mode+frequency correctly.</li>
+</ul>
+<h2 id="unreleased-2026-08-03-radio-drawer-takes-the-control-lease-implicitly">Unreleased — 2026-08-03 — Radio Drawer Takes the Control Lease Implicitly</h2>
+<ul>
+<li>Field report #2: filter-bandwidth switches kept returning 409 Conflict even with no TX active. Root cause: <code>/radio/mode</code> and <code>/radio/rig/level</code> require the control lease (<code>require_lease</code>), but the settings drawer never acquired it — every toggle before a lease was held returned <code>lease_required</code> (36 consecutive 409s in the log). Candidate taps had implicit lease acquisition (UC-002); the drawer now reuses the same pattern: <code>ensureLease()</code> takes a free lease before any rig mutation, shows “Control is held by another session” when another session owns it.</li>
+</ul>
+<h2 id="unreleased-2026-08-03-rig-level-query-isolation-no-more-filter-switch-corruption">Unreleased — 2026-08-03 — Rig Level-Query Isolation (no more filter-switch corruption)</h2>
+<ul>
+<li>Field report: switching the filter bandwidth right after opening the Radio drawer failed intermittently (GET /radio/mode 502, rig_poll “invalid frequency”). Root cause: FT-710 never answers the <code>L &lt;level&gt;</code> query — every attempt timed out and dropped the rigctld session, and the reconnects corrupted concurrent rig_poll / mode traffic for minutes.</li>
+<li>Fixes:
+<ul>
+<li><code>RigClient</code> drains stale bytes on a freshly-reopened session (<code>_drain_stale_input</code>), so a reconnect never reads the previous session’s leftover reply.</li>
+<li><code>/radio/rig/levels</code> caches results for 60 s (AppState <code>_rig_level_cache</code>): once a level read fails it is treated as unsupported instead of hammering the rig on every drawer open; the drawer still allows writes (<code>l &lt;name&gt; &lt;value&gt;</code>), which FT-710 answers.</li>
+</ul></li>
+<li>Verified live: 4 level reads time out (expected), then frequency polls and mode switches are clean; USB bandwidth 1.8/2.4/3.0 kHz round-trips after the failed reads.</li>
+</ul>
+<h2 id="unreleased-2026-08-03-rigctld-protocol-hardening-real-ft-710">Unreleased — 2026-08-03 — Rigctld Protocol Hardening (real FT-710)</h2>
+<ul>
+<li>Live verification against the station’s rigctld (<code>-m 1049</code> FT-710) exposed three protocol mismatches the fake rig tests never caught; all fixed and regression-tested:
+<ul>
+<li><strong><code>l &lt;level&gt; &lt;value&gt;</code> replies with the new value</strong> (<code>6.</code>), not <code>RPRT 0</code> — <code>set_level</code> now accepts both reply styles.</li>
+<li><strong><code>l PREAMP …</code> (and some other levels) trigger a full caps dump</strong> (438 lines) ending in <code>RPRT 0</code>; <code>set_level</code> drains until RPRT so the dump never corrupts the next command.</li>
+<li><strong><code>m</code> replies <code>MODE.passband.</code> on one line</strong> (<code>USB.1800.</code>), not two lines; <code>get_mode</code> accepts both shapes.</li>
+<li><strong>FT-710 rigctld appends a blank line after every set reply</strong> (<code>RPRT 0\n\n</code>); <code>_readline_locked</code> now skips blank lines and supports an unread buffer.</li>
+</ul></li>
+<li>Live confirmations: filter bandwidth USB 1.8/2.4/3.0 kHz round-trips, ATT 0/6, PREAMP 0/10, AGC 0..6 (OFF/FAST/MED/SLOW/AUTO), RF 0..1 — all set and read back consistently.</li>
+</ul>
+<h2 id="unreleased-2026-08-03-radio-tab-filter-bandwidth-rig-accurate-levels">Unreleased — 2026-08-03 — Radio Tab: Filter Bandwidth + Rig-Accurate Levels</h2>
+<ul>
+<li>Radio tab now reads the rig’s actual capabilities instead of generic sliders: verified against the FT-710 Hamlib model (rig 1049, Hamlib 4.6.2) which exposes USB/LSB bandwidths 1.8/2.4/3.0 kHz, attenuator 6/12/18 dB, preamp 10/20 dB, discrete AGC (OFF/FAST/MED/SLOW/AUTO) and RF gain 0..1.
+<ul>
+<li>New <code>GET /radio/mode</code> + <code>POST /radio/mode</code> (rigctld <code>M &lt;mode&gt; &lt;passband&gt;</code>, the existing <code>RigClient.get_mode/set_mode</code>); the drawer shows the rig’s current passband and switches bandwidth in place.</li>
+<li>ATT/PREAMP are discrete selects (dB values), AGC is the five-mode select, RF Gain a 0..1 slider — matching the rig caps instead of the earlier generic 0-100 toggle/slider.</li>
+</ul></li>
+</ul>
+<h2 id="unreleased-2026-08-03-settings-drawer-radio-ft8-station-log">Unreleased — 2026-08-03 — Settings Drawer (Radio / FT8 / Station / Log)</h2>
+<ul>
+<li>Left-side drawer menu in the cockpit (hamburger ☰ in the top bar) with four tabs:
+<ul>
+<li><strong>Radio</strong>: rig levels via new rigctld level endpoints — ATT, PREAMP (toggles) and RF Gain / AGC (sliders), read/write through <code>L</code>/<code>l</code> short commands; unsupported levels surface as greyed-out (hamlib <code>RPRT -11</code> → <code>rig_unsupported</code>); TX must be off to change. New <code>GET /radio/rig/levels</code> + <code>POST /radio/rig/level</code>; <code>RigClient.get_level/set_level</code>.</li>
+<li><strong>FT8</strong>: decode depth (Fast/Deep), colour scheme (Classic/High-contrast/Minimal), and display filters — show only CQ, hide already-worked calls (new-DXCC focus), hide own echoes. Persisted in <code>localStorage</code> (<code>mrrc-ft8.settings</code>) and applied live to the Band Activity list.</li>
+<li><strong>Station</strong>: my call / grid / worked-call count from the snapshot’s new <code>station</code> block; <code>Repository.worked_calls()</code> groups base calls (suffix-stripped) and excludes voided QSOs.</li>
+<li><strong>Log</strong>: QSO history list (<code>GET /logs/qsos</code>, existing) plus an ADIF export link.</li>
+</ul></li>
+<li>Snapshot gained <code>station: {my_call, my_grid, worked_calls}</code>; <code>AppState</code> now carries <code>my_call</code>/<code>my_grid</code> from <code>ServerConfig</code>.</li>
+</ul>
+<h2 id="unreleased-2026-08-03-sequencer-state-shows-target-call">Unreleased — 2026-08-03 — Sequencer State Shows Target Call</h2>
+<ul>
+<li>The bottom safety bar rendered only the bare sequencer state (<code>replying</code>, <code>report</code>…). It now shows <code>state → dx_call</code> (e.g. <code>replying → K1ABC</code>) with the call highlighted in the accent colour, so the operator sees at a glance whom a manual Reply / QSO phase is aimed at. <code>sequencer.dx_call</code> was already in the snapshot; only the client rendering changed (plus an <code>escapeHtml</code> guard for the injected span).</li>
+</ul>
+<h2 id="unreleased-2026-08-03-repository-dbmoved-self-heal-main.py-qsolog-integration">Unreleased — 2026-08-03 — Repository DBMOVED Self-Heal + main.py QsoLog Integration</h2>
+<ul>
+<li><p>Production incident fix: an external process replaced <code>mrrc-ft8.db</code> mid-run; SQLite’s DBMOVED guard then refused every write with <code>OperationalError: attempt to write a readonly database</code>, turning reply/stop (which audit-write) into 500s while select (no write) stayed 200 — the “reply rejected 500” symptom. <code>Repository</code> now detects the readonly-DBMOVED error, reopens the (new) file at the same path, re-runs migration and retries the write once; a second failure propagates as a real disk problem. Regression: <code>test_external_db_replace_does_not_wedge_writes</code> swaps the file under a live repository and asserts the write lands.</p></li>
+<li><p>Completed the QsoLog integration Task 3 left half-done: <code>main.py</code> still imported the removed <code>record_qso</code> helper. The composition root now builds <code>QsoLog(repository, pending_path=config.pending_path)</code>, wires <code>sequencer.on_qso = qso_log.enqueue</code>, drains one record per lease-watchdog tick (<code>drain_once</code>), recovers dead-letter records at startup and flushes on shutdown. <code>ServerConfig</code> gained <code>pending_path</code> (env <code>MRRC_FT8_PENDING_PATH</code>). This unblocked 12 previously-failing lifespan tests.</p></li>
+<li><p>New end-to-end regression <code>test_reply_survives_external_db_replace</code>: swaps the db under a live TestClient, replies, and asserts 200 + the audit row landed on the reopened file.</p></li>
+<li><p>Also fixed a pre-existing rig-poll bug found during restart verification: <code>main.py</code> unpacked <code>freq_hz, _ = await rig.get_frequency()</code> but the rig client returns a plain <code>int</code> (TypeError every 5 s since the 08:12 boot, freezing the dial-frequency display). Now assigns the int directly; the poll loop keeps its monitor-only no-fault posture.</p></li>
+</ul>
+<h2 id="unreleased-2026-08-03-project-website-www.vlsc.netmrrc_ft8">Unreleased — 2026-08-03 — Project Website (www.vlsc.net/mrrc_ft8/)</h2>
+<ul>
+<li>Added <code>website/</code> mirroring the mrrc_ft710 site format: dark theme homepage (EN + zh), SDD chapter index (generated by <code>build_sdd.py</code> from <code>SDD/*.md</code> via pandoc), live-station CTA, and the 15-chapter HTML set. Deployed to <code>https://www.vlsc.net/mrrc_ft8/</code> (nginx static root, same webroot family as the other VLSC project sites) and linked as an entry card in the <code>www.vlsc.net</code> portal (EN + zh) plus the shared <code>global-nav.js</code> FT-8 link; the site’s <code>deploy.sh</code> mirrors the mrrc_ft710 one with the FT8 webroot.</li>
+</ul>
 <h2 id="unreleased-2026-08-03-sdd-refresh-to-v1.1">Unreleased — 2026-08-03 — SDD Refresh to V1.1</h2>
 <ul>
 <li>Brought the SDD body up to the implemented state: README quick facts (live deployment, v0.1.0), UC-003 marked implemented with the reply decision window, new UC-011 (FT8 band select), AD-006 (UTC ring absolute-index keying), §9.2/§9.3/§9.4 (3 kHz waterfall span, TX decision window + fit guard, dual cutoffs), §11 component table, §12 (public Host ACL / config), §15.6 (provisional TX decision), and the AGENTS.md/README module and status lines.</li>
@@ -284,7 +380,7 @@
 <footer class="footer" style="margin-top: 0;">
     <div class="container">
         <div class="footer-bottom">
-            <p>&copy; 2026 MRRC-FT8 Project · SDD V1.1 · <a href="https://github.com/cheenle/mrrc_ft8" style="color:var(--accent);">GitHub</a></p>
+            <p>&copy; 2026 MRRC-FT8 Project · SDD V1.2 · <a href="https://github.com/cheenle/mrrc_ft8" style="color:var(--accent);">GitHub</a></p>
         </div>
     </div>
 </footer>

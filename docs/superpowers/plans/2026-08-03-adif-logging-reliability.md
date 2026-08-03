@@ -711,7 +711,7 @@ Note: `_journal` runs on the event loop thread (rare, small append) — acceptab
 - [ ] **Step 4: Run tests to verify they pass**
 
 Run: `venv/bin/python -m pytest tests/engine/test_qso_log.py -q`
-Expected: PASS (7 tests).
+Expected: PASS (6 tests).
 
 - [ ] **Step 5: Run the full engine suite to confirm no stale `record_qso`/`pop_log_record` references**
 
