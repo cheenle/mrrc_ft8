@@ -1,0 +1,456 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Component Model — MRRC-FT8 SDD</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="../css/octen.css?v=4">
+    <link rel="stylesheet" href="../css/sunsdrmobile.css?v=1">
+    <link rel="stylesheet" href="../css/ft8.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-7442510147240155" crossorigin="anonymous"></script>
+    <style>
+        .sdd-layout { display: flex; max-width: 1400px; margin: 0 auto; padding: 0 2rem; gap: 2rem; }
+        .sdd-sidebar {
+            width: 260px; flex-shrink: 0; position: sticky; top: 80px;
+            max-height: calc(100vh - 100px); overflow-y: auto;
+            background: var(--bg-card); border: 1px solid var(--border);
+            border-radius: 0.75rem; padding: 1.25rem 0;
+        }
+        .sdd-sidebar h4 {
+            font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.08em;
+            color: var(--accent); padding: 0 1.25rem; margin-bottom: 0.75rem;
+        }
+        .sdd-sidebar ul { list-style: none; }
+        .sdd-sidebar a {
+            display: block; padding: 0.375rem 1.25rem; font-size: 0.8125rem;
+            color: var(--text-secondary); transition: all 0.15s;
+            border-left: 2px solid transparent;
+        }
+        .sdd-sidebar a:hover { color: var(--text-primary); border-left-color: var(--border-hover); }
+        .sdd-sidebar a.active {
+            color: var(--accent); background: var(--accent-glow);
+            border-left-color: var(--accent); font-weight: 500;
+        }
+        .sdd-content { flex: 1; min-width: 0; padding-bottom: 4rem; }
+        .sdd-content h1 { font-size: 2rem; font-weight: 700; margin: 2rem 0 0.5rem; letter-spacing: -0.02em; }
+        .sdd-content h2 { font-size: 1.375rem; font-weight: 600; margin: 2rem 0 0.75rem; color: var(--accent); }
+        .sdd-content h3 { font-size: 1.125rem; font-weight: 600; margin: 1.5rem 0 0.5rem; }
+        .sdd-content h4 { font-size: 1rem; font-weight: 600; margin: 1.25rem 0 0.5rem; }
+        .sdd-content p, .sdd-content li { color: var(--text-secondary); line-height: 1.7; margin-bottom: 0.75rem; }
+        .sdd-content table {
+            width: 100%; border-collapse: collapse; margin: 1.25rem 0;
+            font-size: 0.875rem;
+        }
+        .sdd-content th, .sdd-content td {
+            padding: 0.625rem 0.875rem; text-align: left;
+            border: 1px solid var(--border);
+        }
+        .sdd-content th { background: var(--bg-tertiary); color: var(--text-primary); font-weight: 600; }
+        .sdd-content td { color: var(--text-secondary); }
+        .sdd-content code {
+            font-family: var(--font-mono); font-size: 0.85em;
+            background: var(--bg-tertiary); padding: 1px 6px; border-radius: 3px;
+            color: var(--accent);
+        }
+        .sdd-content pre {
+            background: var(--bg-tertiary); border: 1px solid var(--border);
+            border-radius: 0.5rem; padding: 1rem; overflow-x: auto;
+            margin: 1rem 0; font-size: 0.8125rem; line-height: 1.6;
+        }
+        .sdd-content pre code {
+            background: none; padding: 0; color: var(--text-secondary);
+        }
+        .sdd-content blockquote {
+            border-left: 3px solid var(--accent); padding: 0.5rem 1rem;
+            margin: 1rem 0; color: var(--text-muted); font-size: 0.9375rem;
+            background: var(--bg-tertiary); border-radius: 0 0.375rem 0.375rem 0;
+        }
+        .sdd-content ul, .sdd-content ol { margin-left: 1.5rem; margin-bottom: 1rem; }
+        .sdd-content hr { border: none; border-top: 1px solid var(--border); margin: 2rem 0; }
+        .sdd-content a { color: var(--accent); }
+        .sdd-content img { max-width: 100%; border-radius: 0.5rem; margin: 1rem 0; }
+        @media (max-width: 900px) {
+            .sdd-layout { flex-direction: column; padding: 0 1rem; }
+            .sdd-sidebar { width: 100%; position: static; max-height: none; }
+        }
+    </style>
+</head>
+<body data-site="mrrc_ft8">
+
+<nav class="navbar">
+    <div class="container navbar-content">
+        <a href="../index.html" class="logo">
+            <span class="logo-icon"><i class="fas fa-microchip"></i></span>
+            <span>MRRC-FT<span style="color: var(--accent);">8</span></span>
+        </a>
+        <ul class="nav-links">
+            <li><a href="../index.html#features">Features</a></li>
+            <li><a href="../index.html#architecture">Architecture</a></li>
+            <li><a href="index.html">SDD Docs</a></li>
+            <li><a href="https://github.com/cheenle/mrrc_ft8" target="_blank"><i class="fab fa-github"></i> GitHub</a></li>
+        </ul>
+        <div class="nav-actions">
+            <a href="../zh/index.html" class="lang-btn">中文</a>
+            <button class="mobile-menu-toggle" onclick="toggleMobileMenu()"><i class="fas fa-bars"></i></button>
+        </div>
+    </div>
+</nav>
+
+<div class="sdd-layout">
+    <aside class="sdd-sidebar">
+        <h4>SDD Chapters</h4>
+        <ul>
+            <li><a href="index.html">Overview</a></li>
+            <li><a href="01-executive-summary.html">1. Executive Summary</a></li>
+            <li><a href="02-business-direction.html">2. Business Direction</a></li>
+            <li><a href="03-project-definition.html">3. Project Definition</a></li>
+            <li><a href="04-system-context.html">4. System Context</a></li>
+            <li><a href="05-non-functional-requirements.html">5. NFRs</a></li>
+            <li><a href="06-use-case-model.html">6. Use Cases</a></li>
+            <li><a href="07-subject-area-model.html">7. Subject Model</a></li>
+            <li><a href="08-architecture-decisions.html">8. Architecture Decisions</a></li>
+            <li><a href="09-architecture-overview.html">9. Architecture Overview</a></li>
+            <li><a href="10-service-model.html">10. Service Model</a></li>
+            <li><a href="11-component-model.html" class="active">11. Component Model</a></li>
+            <li><a href="12-operational-model.html">12. Operational Model</a></li>
+            <li><a href="13-feasibility-assessment.html">13. Feasibility</a></li>
+            <li><a href="14-version-history.html">14. Version History</a></li>
+            <li><a href="15-ptt-safety-architecture.html">15. PTT Safety</a></li>
+        </ul>
+    </aside>
+    <main class="sdd-content">
+<h1 id="component-model">11. Component Model</h1>
+<h2 id="dsp-layer">11.1 DSP Layer</h2>
+<table>
+<colgroup>
+<col style="width: 50%" />
+<col style="width: 50%" />
+</colgroup>
+<thead>
+<tr>
+<th>Component</th>
+<th>Responsibility</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>dsp/CMakeLists.txt</code></td>
+<td>Select vendor/patched sources and build shared library</td>
+</tr>
+<tr>
+<td><code>dsp/*_shim.f90</code></td>
+<td>Stable <code>bind(C)</code> ABI, strict rate/shape validation and vendor decode dispatch</td>
+</tr>
+<tr>
+<td><code>dsp/wsjt_batch.f90</code></td>
+<td>Fixed 256-result Fortran-owned batch; OpenMP callbacks append without crossing into Python/C</td>
+</tr>
+<tr>
+<td><code>dsp/wsjt_partition.f90</code></td>
+<td>Exact inclusive integer-frequency partitioning for 1–12 OpenMP bands</td>
+</tr>
+<tr>
+<td><code>dsp/wsjt_a8_gate.f90</code></td>
+<td>Atomic near-Rx gate used by ordinary decode callbacks and the A8 owner</td>
+</tr>
+<tr>
+<td><code>dsp/wsjt_test_hooks.f90</code></td>
+<td>Optional non-production direct-A8 probe, compiled only with <code>MRRC_FT8_TEST_HOOKS=ON</code></td>
+</tr>
+<tr>
+<td><code>dsp/ft8_stdcall.f90</code></td>
+<td>Headless extraction of the standard-callsign helper without the unrelated Q65 encoder dependency</td>
+</tr>
+<tr>
+<td><code>dsp/patched/</code></td>
+<td>Explicit copies required for build adaptation; never silent vendor edits</td>
+</tr>
+<tr>
+<td><code>server/core/models.py</code></td>
+<td>Frozen/slotted decode configuration, batch/result and encode metadata value types</td>
+</tr>
+<tr>
+<td><code>server/core/binding.py</code></td>
+<td>ctypes types, ABI validation, global lock, rate/shape assertions</td>
+</tr>
+<tr>
+<td><code>server/core/protocol.py</code></td>
+<td>Exact bounded Protocol v1 JSON schema and fixed shared-memory descriptors</td>
+</tr>
+<tr>
+<td><code>server/core/worker.py</code></td>
+<td>Spawn-only binding owner, shared-memory mapping and synchronous request dispatch</td>
+</tr>
+<tr>
+<td><code>server/core/supervisor.py</code></td>
+<td>Spawn, health, timeout, restart generation and failure reporting</td>
+</tr>
+</tbody>
+</table>
+<p>The standard FT8 ABI accepts exactly 180,000 mono int16 samples at 12 kHz. It also fails closed unless QSO progress is 0–5, sensitivity is 1–3, UTC is a valid <code>HHMMSS</code>, and the decode band satisfies <code>100 &lt;= low &lt; high &lt;= 4910</code> with at least 100 Hz width. These native checks run before sample/result mapping and vendor entry; failed calls clear count and overflow without copying result records. One ABI request resets one result batch, then reproduces the vendor full-slot disk orchestration on a single <code>ft8_decoder</code>: staged <code>nzhsym</code> calls 41, 47 and 50 expose 141,696, 162,432 and 172,800 caller samples respectively and zero the remainder. This is required because the standard depth-2/3 decoder loads its saved working buffer during the early stages; the third stage alone does not load fresh input. Results cross the C boundary only after all three stages return. The shared library exports only the ABI entry points; its callback and batch module symbols remain internal. Same-process CQ→CQ→empty→CQ regression covers batch reset, stage-41 vendor reset, slot replacement and saved-state isolation expected by a long-lived Worker.</p>
+<p>The Improved ABI applies the same pointer, struct, 12 kHz/180,000-sample, capacity and native configuration checks, plus profile 0–4, thread count 1–12 and cycle count 1–3 validation. Profiles 0–4 dispatch <code>41+49</code>, <code>41+46+50</code>, <code>48</code>, <code>49</code> and <code>50</code> respectively. Improved pass <code>N</code> exposes <code>min(180000, N*3456)</code> samples and zeroes the tail. The configured inclusive frequency window is divided into exactly the requested number of adjacent, non-overlapping bands; a 100 Hz configured width is 101 integer frequency points, so even 12 threads receive non-empty 8- or 9-point bands. All OpenMP callbacks append to the Fortran batch. After every profile pass returns, stable deduplication keeps the first exact <code>(text, rounded Hz, rounded 0.1 s)</code> key; overflow remains asserted if the pre-dedup fixed batch ever exceeded 256. Before every Improved request, the Worker-side initializer clears all even/odd CQ, MyCall and QSO detection histories across the vendor thread arrays: frequency is the vendor-compatible <code>6000.0</code> end sentinel, time offset is zero and every complex symbol is zero. A8 eligibility is also assigned afresh from the request: AP must be enabled, DX call length must be at least three and the four-character DX grid prefix must be complete. Thus neither detection history nor A8 state can carry across profiles or requests in a long-lived Worker.</p>
+<p>The OpenMP region must contain exactly the requested team size. A constrained runtime that forms a smaller team returns <code>WSJT_E_INTERNAL=8</code>; the C shim leaves count/overflow cleared and does not copy the partial Fortran batch. Every team member uses <code>copyin(dd8)</code> with thread-private slot, downsample and FFTW state, and cycle 2/3 scratch belongs to its private decoder instance. Consequently successful subtraction changes only that thread’s assigned frequency band. This band-local subtraction intentionally differs from the upstream GUI’s unsynchronized shared <code>dd8</code> subtraction and is the accepted deterministic headless behavior. The thread-private FFTW plan caches persist for the Worker process lifetime and are reclaimed at process exit.</p>
+<p>A8 has one deterministic owner: the band containing Rx, or band 1 when Rx is outside the configured window. Ordinary callbacks atomically clear the shared gate for a result strictly within 3 Hz of Rx; after the decode barrier the owner atomically snapshots that gate before any direct A8 attempt. Result collection is safe but OpenMP scheduling determines append order, so result order is unspecified. The ABI does not sort it.</p>
+<p>Improved <code>sync8var</code> uses multi-megabyte automatic arrays on every OpenMP thread. The DSP process therefore has a runtime prerequisite, inherited from the upstream GUI launcher: <code>OMP_STACKSIZE=10M</code> must be present before NumPy/SciPy, the shared library, or any OpenMP runtime can load. The Task 5 direct-ABI fixture sets it at module import. <code>worker.py</code> itself imports neither NumPy nor the binding at module load. The first executable statement in <code>worker_main</code> sets the same default, then locally imports NumPy and <code>CoreBinding</code>; the binding repeats the pre-load default defensively before its own NumPy import. Constructing the one binding loads either the explicit library path or the platform-specific <code>dsp/build/libwsjt_core</code> default and sends no unsolicited ready message.</p>
+<p><code>protocol.py</code> applies one exact schema on both encode and decode. A 64 KiB frame limit is checked before parsing and after serialization; nine frame types, complete DecodeConfig metadata, fixed RX/TX descriptors, 256 exact result objects and sanitized errors are the entire v1 control surface. The Worker checks generation before <code>SharedMemory(create=False)</code>, verifies the uniquely observable allocation size, maps the fixed logical NumPy shape, makes decode views read-only, and closes in <code>finally</code> without unlinking. Darwin’s POSIX SHM allocation is uniquely page-rounded and must equal the logical size rounded up to <code>mmap.PAGESIZE</code>; other platforms require exact logical size. Only the parent owns unlink. Valid request/ABI/SHM failures are sanitized and recoverable; protocol/pipe corruption or unexpected internal corruption exits nonzero.</p>
+<p><code>CoreBinding</code> configures signatures for exactly the four production exports and queries <code>wsjt_get_abi_info</code> at construction. ABI version, ABI-info/result structure sizes, capacity, both RX/TX domains and the complete profile/thread/ cycle capability set plus zero reserved field must match before any encode or decode may run. Python validates array shape/contiguity/type/alignment, native configuration ranges and bounded ASCII fields before acquiring the one module-level reentrant lock; TX output must also be writeable. Inside that lock it calls exactly one selected decode entry point or one encode entry point. A failed decode status discards every native out value without reading or copying it. On success, count must be 0–256 and overflow exactly 0/1; the common adapter boundary repeats those metadata checks before copying records into immutable Python values. Encode writes only to the caller-owned exact 606,720-sample float32 buffer and returns immutable metadata; no raw CDLL handle crosses the private adapter.</p>
+<p>Production builds export exactly the four C ABI functions. ELF builds generate the linker version map from a configured template; test-hook builds add only <code>wsjt_test_ft8_a8d</code>. The hook validates direct-A8 plumbing with a clean fixed signal and is never part of the production surface.</p>
+<h2 id="engine-layer">11.2 Engine Layer</h2>
+<table>
+<colgroup>
+<col style="width: 50%" />
+<col style="width: 50%" />
+</colgroup>
+<thead>
+<tr>
+<th>Component</th>
+<th>Responsibility</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>orchestrator.py</code></td>
+<td>UTC slot identity, capture/decision deadlines, mode/profile scheduling</td>
+</tr>
+<tr>
+<td><code>dsp_decode.py</code></td>
+<td>Supervisor-backed SlotDecoder: exact slot → shared memory → Protocol v1 batch</td>
+</tr>
+<tr>
+<td><code>dsp_encode.py</code></td>
+<td>Supervisor-backed encoder: message → shared memory → Protocol v1 encode</td>
+</tr>
+<tr>
+<td><code>tx_driver.py</code></td>
+<td>Slot-parity TX pump gated on the sequencer’s per-QSO <code>tx_phase</code>; provisional (I9) decision window (polling, 5 s cutoff) with a fit guard deferring past ~2.4 s — one sequencer message per eligible slot, encode → gated transmit</td>
+</tr>
+<tr>
+<td><code>cq_loop.py</code></td>
+<td>Automatic CQ loop: DONE/retry/partner-loss re-arm, lease/idle/manual/fault stop</td>
+</tr>
+<tr>
+<td><code>qso_log.py</code></td>
+<td>Sequencer log record → canonical QSO store offload</td>
+</tr>
+<tr>
+<td><code>audio_rx.py</code></td>
+<td>48 kHz capture, one 4:1 conversion, UTC ring (absolute-index <code>X % capacity</code> keying; eviction never shifts data) and overrun metrics</td>
+</tr>
+<tr>
+<td><code>capture_proc.py</code></td>
+<td>Isolated capture subprocess + parent supervisor (fresh-session restart on stall/death)</td>
+</tr>
+<tr>
+<td><code>audio_tx.py</code></td>
+<td>Bounded 48 kHz playback with cancellation</td>
+</tr>
+<tr>
+<td><code>waterfall.py</code></td>
+<td>Spectrum frames (3 kHz FT8 passband only) and lossy fan-out input</td>
+</tr>
+<tr>
+<td><code>rig.py</code></td>
+<td>Async rigctld TCP client only</td>
+</tr>
+<tr>
+<td><code>safety.py</code></td>
+<td>Interlocks, PTT watchdog, idempotent priority STOP</td>
+</tr>
+<tr>
+<td><code>sequencer.py</code></td>
+<td>One-QSO transitions, Tx1–Tx6, retry and terminal behavior; carries the per-QSO TX phase (UC-003 opposite slot)</td>
+</tr>
+<tr>
+<td><code>msgparse.py</code></td>
+<td>Supported standard-message parsing and validation</td>
+</tr>
+<tr>
+<td><code>repository.py</code></td>
+<td>SQLite transactions, retention and schema migrations</td>
+</tr>
+<tr>
+<td><code>adif.py</code></td>
+<td>ADIF generation/export from canonical QSO data</td>
+</tr>
+</tbody>
+</table>
+<h2 id="web-layer">11.3 Web Layer</h2>
+<table>
+<colgroup>
+<col style="width: 50%" />
+<col style="width: 50%" />
+</colgroup>
+<thead>
+<tr>
+<th>Component</th>
+<th>Responsibility</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>main.py</code></td>
+<td>Lifespan composition root — wires the TX driver, CQ loop controller and watchdog-polled QSO logging — and Uvicorn entry point</td>
+</tr>
+<tr>
+<td><code>web/auth.py</code></td>
+<td>Password hash, sessions, re-auth and rate limiting</td>
+</tr>
+<tr>
+<td><code>web/lease.py</code></td>
+<td>Acquire/heartbeat/release/expiry and dead-man callback</td>
+</tr>
+<tr>
+<td><code>web/api.py</code></td>
+<td>Versioned REST intent endpoints</td>
+</tr>
+<tr>
+<td><code>web/ws.py</code></td>
+<td>Separate state/decode/waterfall streams and bounded queues</td>
+</tr>
+<tr>
+<td><code>web/static/</code></td>
+<td>Landscape PWA modules (candidates, waterfall, safety bar, <code>band.js</code> band selector), CSS, manifest and service worker</td>
+</tr>
+</tbody>
+</table>
+<p>The lifespan’s background maintenance loop (session sweep plus retention) catches and logs each tick’s exceptions, so one failed sweep cannot kill the loop; the 1 s lease-expiry watchdog is guarded the same way.</p>
+<h2 id="dependency-rules">11.4 Dependency Rules</h2>
+<ul>
+<li>Web depends on engine interfaces, never on ctypes.</li>
+<li>Engine requests DSP through the supervisor, never imports the shared library.</li>
+<li><code>server/core/worker.py</code> alone imports binding; <code>server/core/binding.py</code> alone may use standard ctypes DLL loaders. Static dependency regressions enforce these exact paths, including function-local aliases and <code>CDLL</code>/<code>PyDLL</code>/<code>WinDLL</code>/<code>OleDLL</code>/<code>LoadLibrary</code> forms.</li>
+<li>Only <code>rig.py</code> speaks rigctld; no module opens serial.</li>
+<li>Only <code>safety.py</code> controls PTT and audio cancellation.</li>
+<li>Static clients submit intent and cannot construct raw PTT actions.</li>
+</ul>
+<h2 id="vendor-patch-register">11.5 Vendor Patch Register</h2>
+<p>Each file under <code>dsp/patched/</code> records original vendor path, upstream revision, minimal difference, reason and regression evidence here and in <code>AGENTS.md</code>.</p>
+<table>
+<colgroup>
+<col style="width: 20%" />
+<col style="width: 20%" />
+<col style="width: 20%" />
+<col style="width: 20%" />
+<col style="width: 20%" />
+</colgroup>
+<thead>
+<tr>
+<th>Local copy</th>
+<th>Origin / upstream revision</th>
+<th>Exact difference</th>
+<th>Reason</th>
+<th>Regression evidence</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>dsp/patched/encode174_91var.f90</code></td>
+<td>WSJT-X Improved 3.0.2 <code>lib/ft8var/encode174_91var.f90</code></td>
+<td>One absolute LDPC-generator include becomes <code>include 'ldpc_174_91_c_generator.f90'</code></td>
+<td>Relocatable headless build</td>
+<td>Per-file one-replacement inverse transform is byte-identical to vendor; all five synthetic profiles decode</td>
+</tr>
+<tr>
+<td><code>dsp/patched/osd174_91var.f90</code></td>
+<td>WSJT-X Improved 3.0.2 <code>lib/ft8var/osd174_91var.f90</code></td>
+<td>Relative LDPC include; move the complete <code>first_osd</code> check inside its named critical section</td>
+<td>Relocatable build and single concurrent generator-matrix initialization</td>
+<td>Exact reversible transformations plus parallel profile stress</td>
+</tr>
+<tr>
+<td><code>dsp/patched/four2avar.f90</code></td>
+<td>WSJT-X Improved 3.0.2 <code>lib/ft8var/four2avar.f90</code></td>
+<td>Relative FFTW include; make the saved plan registry <code>THREADPRIVATE</code></td>
+<td>Relocatable FFTW and per-thread plan/address cache</td>
+<td>Exact reversible transformations plus repeated parallel-region stress</td>
+</tr>
+<tr>
+<td><code>dsp/patched/ft8_mod1.f90</code></td>
+<td>WSJT-X Improved 3.0.2 <code>lib/ft8var/ft8_mod1.f90</code></td>
+<td>Make <code>dd8</code> <code>THREADPRIVATE</code></td>
+<td>Independent deterministic band work buffers</td>
+<td>Exact reversible transformation plus single/multithread multisignal set equivalence</td>
+</tr>
+<tr>
+<td><code>dsp/patched/ft8_decodevar.f90</code></td>
+<td>WSJT-X Improved 3.0.2 <code>lib/ft8var/ft8_decodevar.f90</code></td>
+<td>Per-thread cycle 2/3 scratch; add deterministic A8 owner, barrier and atomic gate snapshot</td>
+<td>Remove shared cycle/buffer/A8 races</td>
+<td>Exact reversible transformations plus team-limit, A8 and cycle regressions</td>
+</tr>
+<tr>
+<td><code>dsp/patched/ft8_downsamplevar.f90</code></td>
+<td>WSJT-X Improved 3.0.2 <code>lib/ft8var/ft8_downsamplevar.f90</code></td>
+<td>Make saved FFT cache <code>cxx</code> <code>THREADPRIVATE</code></td>
+<td>Prevent cross-band cache overwrite</td>
+<td>Exact reversible transformation plus repeated parallel-region stress</td>
+</tr>
+<tr>
+<td><code>dsp/patched/ft8apsetvar.f90</code></td>
+<td>WSJT-X Improved 3.0.2 <code>lib/ft8var/ft8apsetvar.f90</code></td>
+<td>Clear and rebuild all AP masks for every headless request</td>
+<td>Prevent call/grid/AP context leakage</td>
+<td>Exact reversible transformations plus same-CDLL context-switch regression</td>
+</tr>
+</tbody>
+</table>
+<p><code>tests/dsp/test_vendor_policy.py</code> also retains the independent full-tree vendor digest gate, so these seven registered copies cannot mask a vendor edit.</p>
+<p>Headless build adaptations outside <code>dsp/patched/</code> are also explicit:</p>
+<table>
+<colgroup>
+<col style="width: 25%" />
+<col style="width: 25%" />
+<col style="width: 25%" />
+<col style="width: 25%" />
+</colgroup>
+<thead>
+<tr>
+<th>Local source</th>
+<th>Origin</th>
+<th>Adaptation and reason</th>
+<th>Regression evidence</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>dsp/ft8_stdcall.f90</code></td>
+<td>WSJT-X 3.0.2 <code>lib/qra/q65/q65_set_list.f90:66-97</code></td>
+<td>Equivalent extraction of <code>stdcall</code> into an independent compilation unit; the vendor unit also contains <code>q65_set_list</code>, which introduces <code>genq65</code> and the unrelated Q65 codec into the minimal FT8 library</td>
+<td>Fresh configure/build in <code>tests/dsp/test_ft8_encode.py</code>; standard encode, error paths and exact 48 kHz/606,720-sample waveform</td>
+</tr>
+</tbody>
+</table>
+    </main>
+</div>
+
+<footer class="footer" style="margin-top: 0;">
+    <div class="container">
+        <div class="footer-bottom">
+            <p>&copy; 2026 MRRC-FT8 Project · SDD V1.1 · <a href="https://github.com/cheenle/mrrc_ft8" style="color:var(--accent);">GitHub</a></p>
+        </div>
+    </div>
+</footer>
+
+<script>
+function toggleMobileMenu() {
+    document.querySelector('.nav-links').classList.toggle('active');
+}
+document.querySelectorAll('a[href^="#"]').forEach(a => {
+    a.addEventListener('click', function(e) {
+        e.preventDefault();
+        const t = document.querySelector(this.getAttribute('href'));
+        if (t) t.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    });
+});
+const nav = document.querySelector('.navbar');
+window.addEventListener('scroll', () => {
+    nav.style.background = window.scrollY > 50 ? 'rgba(0,0,0,0.95)' : 'rgba(0,0,0,0.8)';
+});
+</script>
+    <script src="../js/global-nav.js?v=2" defer data-gn="1"></script>
+</body>
+</html>

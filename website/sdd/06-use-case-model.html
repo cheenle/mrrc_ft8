@@ -1,0 +1,180 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Use Case Model — MRRC-FT8 SDD</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="../css/octen.css?v=4">
+    <link rel="stylesheet" href="../css/sunsdrmobile.css?v=1">
+    <link rel="stylesheet" href="../css/ft8.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-7442510147240155" crossorigin="anonymous"></script>
+    <style>
+        .sdd-layout { display: flex; max-width: 1400px; margin: 0 auto; padding: 0 2rem; gap: 2rem; }
+        .sdd-sidebar {
+            width: 260px; flex-shrink: 0; position: sticky; top: 80px;
+            max-height: calc(100vh - 100px); overflow-y: auto;
+            background: var(--bg-card); border: 1px solid var(--border);
+            border-radius: 0.75rem; padding: 1.25rem 0;
+        }
+        .sdd-sidebar h4 {
+            font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.08em;
+            color: var(--accent); padding: 0 1.25rem; margin-bottom: 0.75rem;
+        }
+        .sdd-sidebar ul { list-style: none; }
+        .sdd-sidebar a {
+            display: block; padding: 0.375rem 1.25rem; font-size: 0.8125rem;
+            color: var(--text-secondary); transition: all 0.15s;
+            border-left: 2px solid transparent;
+        }
+        .sdd-sidebar a:hover { color: var(--text-primary); border-left-color: var(--border-hover); }
+        .sdd-sidebar a.active {
+            color: var(--accent); background: var(--accent-glow);
+            border-left-color: var(--accent); font-weight: 500;
+        }
+        .sdd-content { flex: 1; min-width: 0; padding-bottom: 4rem; }
+        .sdd-content h1 { font-size: 2rem; font-weight: 700; margin: 2rem 0 0.5rem; letter-spacing: -0.02em; }
+        .sdd-content h2 { font-size: 1.375rem; font-weight: 600; margin: 2rem 0 0.75rem; color: var(--accent); }
+        .sdd-content h3 { font-size: 1.125rem; font-weight: 600; margin: 1.5rem 0 0.5rem; }
+        .sdd-content h4 { font-size: 1rem; font-weight: 600; margin: 1.25rem 0 0.5rem; }
+        .sdd-content p, .sdd-content li { color: var(--text-secondary); line-height: 1.7; margin-bottom: 0.75rem; }
+        .sdd-content table {
+            width: 100%; border-collapse: collapse; margin: 1.25rem 0;
+            font-size: 0.875rem;
+        }
+        .sdd-content th, .sdd-content td {
+            padding: 0.625rem 0.875rem; text-align: left;
+            border: 1px solid var(--border);
+        }
+        .sdd-content th { background: var(--bg-tertiary); color: var(--text-primary); font-weight: 600; }
+        .sdd-content td { color: var(--text-secondary); }
+        .sdd-content code {
+            font-family: var(--font-mono); font-size: 0.85em;
+            background: var(--bg-tertiary); padding: 1px 6px; border-radius: 3px;
+            color: var(--accent);
+        }
+        .sdd-content pre {
+            background: var(--bg-tertiary); border: 1px solid var(--border);
+            border-radius: 0.5rem; padding: 1rem; overflow-x: auto;
+            margin: 1rem 0; font-size: 0.8125rem; line-height: 1.6;
+        }
+        .sdd-content pre code {
+            background: none; padding: 0; color: var(--text-secondary);
+        }
+        .sdd-content blockquote {
+            border-left: 3px solid var(--accent); padding: 0.5rem 1rem;
+            margin: 1rem 0; color: var(--text-muted); font-size: 0.9375rem;
+            background: var(--bg-tertiary); border-radius: 0 0.375rem 0.375rem 0;
+        }
+        .sdd-content ul, .sdd-content ol { margin-left: 1.5rem; margin-bottom: 1rem; }
+        .sdd-content hr { border: none; border-top: 1px solid var(--border); margin: 2rem 0; }
+        .sdd-content a { color: var(--accent); }
+        .sdd-content img { max-width: 100%; border-radius: 0.5rem; margin: 1rem 0; }
+        @media (max-width: 900px) {
+            .sdd-layout { flex-direction: column; padding: 0 1rem; }
+            .sdd-sidebar { width: 100%; position: static; max-height: none; }
+        }
+    </style>
+</head>
+<body data-site="mrrc_ft8">
+
+<nav class="navbar">
+    <div class="container navbar-content">
+        <a href="../index.html" class="logo">
+            <span class="logo-icon"><i class="fas fa-microchip"></i></span>
+            <span>MRRC-FT<span style="color: var(--accent);">8</span></span>
+        </a>
+        <ul class="nav-links">
+            <li><a href="../index.html#features">Features</a></li>
+            <li><a href="../index.html#architecture">Architecture</a></li>
+            <li><a href="index.html">SDD Docs</a></li>
+            <li><a href="https://github.com/cheenle/mrrc_ft8" target="_blank"><i class="fab fa-github"></i> GitHub</a></li>
+        </ul>
+        <div class="nav-actions">
+            <a href="../zh/index.html" class="lang-btn">中文</a>
+            <button class="mobile-menu-toggle" onclick="toggleMobileMenu()"><i class="fas fa-bars"></i></button>
+        </div>
+    </div>
+</nav>
+
+<div class="sdd-layout">
+    <aside class="sdd-sidebar">
+        <h4>SDD Chapters</h4>
+        <ul>
+            <li><a href="index.html">Overview</a></li>
+            <li><a href="01-executive-summary.html">1. Executive Summary</a></li>
+            <li><a href="02-business-direction.html">2. Business Direction</a></li>
+            <li><a href="03-project-definition.html">3. Project Definition</a></li>
+            <li><a href="04-system-context.html">4. System Context</a></li>
+            <li><a href="05-non-functional-requirements.html">5. NFRs</a></li>
+            <li><a href="06-use-case-model.html" class="active">6. Use Cases</a></li>
+            <li><a href="07-subject-area-model.html">7. Subject Model</a></li>
+            <li><a href="08-architecture-decisions.html">8. Architecture Decisions</a></li>
+            <li><a href="09-architecture-overview.html">9. Architecture Overview</a></li>
+            <li><a href="10-service-model.html">10. Service Model</a></li>
+            <li><a href="11-component-model.html">11. Component Model</a></li>
+            <li><a href="12-operational-model.html">12. Operational Model</a></li>
+            <li><a href="13-feasibility-assessment.html">13. Feasibility</a></li>
+            <li><a href="14-version-history.html">14. Version History</a></li>
+            <li><a href="15-ptt-safety-architecture.html">15. PTT Safety</a></li>
+        </ul>
+    </aside>
+    <main class="sdd-content">
+<h1 id="use-case-model-art-0508">6. Use Case Model (ART 0508)</h1>
+<h2 id="core-use-cases">6.1 Core Use Cases</h2>
+<h3 id="uc-001-authenticate-and-observe">UC-001 Authenticate and Observe</h3>
+<p>Operator opens the HTTPS domain, authenticates with the strong password, receives a secure session cookie, and connects state/decode/waterfall streams. CAT/audio/DSP and lease state are visible. Failure returns no radio data or controls.</p>
+<h3 id="uc-002-acquire-control-lease">UC-002 Acquire Control Lease</h3>
+<p>An authenticated session requests the lease. If free, the server grants it and expects a heartbeat every 5 s; TTL is 15 s. Other sessions remain observers. Restart never restores the lease.</p>
+<h3 id="uc-003-select-a-station-and-reply">UC-003 Select a Station and Reply</h3>
+<p>The operator taps a candidate to inspect it, then separately taps Reply. The server verifies lease, health and supported message semantics, sets call/grid, RX offset and opposite TX slot, then prepares the single-QSO sequencer. Selection alone never transmits. If the tapping session holds no lease and the lease is free, the client first acquires it implicitly through the standard grant path (UC-002 invariants unchanged); a tap rejected because another session holds the lease, or for any other reason, produces visible feedback rather than failing silently.</p>
+<p><em>Implemented (2026-08-03):</em> the “opposite TX slot” is carried by the sequencer’s <code>tx_phase</code> — <code>1 − slot_id % 2</code> of the slot the partner’s message was decoded from, plumbed through <code>operation/select</code>’s <code>slot_id</code> field from the UI candidate — and the <code>TxDriver</code> gates on it, so a reply to an even-slot caller transmits on odd slots and vice versa. The reply decision is provisional: when the sequencer is idle at slot start, the driver polls until <code>TX_DECISION_CUTOFF_SECONDS</code> (5.0) so a Reply transmits as soon as it is armed, with a fit guard refusing any start past ~2.4 s (the latest a fixed 12.64 s waveform fits a 15 s slot); a Reply armed past that deadline defers to the next eligible slot.</p>
+<h3 id="uc-011-select-ft8-band">UC-011 Select FT8 Band</h3>
+<p>The lease holder picks a band (7/14/21/28 MHz) from the top-bar selector. The server tunes the rig dial to the band’s FT8 frequency (7.074/14.074/21.074/28.074 MHz) through the lease-gated <code>/radio/band</code> mutation. A free lease is acquired implicitly (UC-002); the change is rejected while TX is armed, and failures are surfaced rather than silent. The selector reflects the rig’s polled dial frequency when it lands on a known band.</p>
+<h3 id="uc-004-call-cq">UC-004 Call CQ</h3>
+<p>The lease holder explicitly starts CQ. The sequencer generates the standard CQ message and sends only in an eligible slot. It may proceed with one caller; it does not select a new target after completion.</p>
+<h3 id="uc-005-complete-one-qso">UC-005 Complete One QSO</h3>
+<p>The sequencer advances through report, roger-report, rogers and signoff using Tx1–Tx6 semantics. Each message has one initial send plus at most three retransmissions. RR73/73 logs the QSO and disarms TX. Retry exhaustion also disarms and retains context.</p>
+<h3 id="uc-006-emergency-stop-tx">UC-006 Emergency STOP TX</h3>
+<p>Any authenticated session can invoke STOP without the lease. The server cancels audio and queued TX, requests PTT off, disarms the sequencer and records actor/reason. The operation is idempotent and prioritized over normal traffic.</p>
+<h3 id="uc-007-handle-fault-or-disconnect">UC-007 Handle Fault or Disconnect</h3>
+<p>CAT/audio/DSP/clock failure, controller disconnect or lease expiry during TX invokes the same immediate safe-stop path. Recovery restores monitoring and context only; the operator must reacquire control and re-arm.</p>
+<h3 id="uc-008-restart-service">UC-008 Restart Service</h3>
+<p>Startup requests PTT off, creates no lease, disarms TX, marks an interrupted QSO <code>ABORTED_RESTART</code>, restores settings/logs and enters monitor mode.</p>
+<h3 id="uc-009-review-and-export-logs">UC-009 Review and Export Logs</h3>
+<p>Authenticated sessions browse QSO history and export ADIF. Automatic completion can be undone for 30 seconds; undo creates an audited void and updates generated export data.</p>
+<h3 id="uc-010-export-diagnostics">UC-010 Export Diagnostics</h3>
+<p>An authenticated session re-enters the password, acknowledges that the archive is raw and sensitive, and exports local config/log/audit/health data. A control lease is not required. Secret hashes and cookie values are excluded.</p>
+    </main>
+</div>
+
+<footer class="footer" style="margin-top: 0;">
+    <div class="container">
+        <div class="footer-bottom">
+            <p>&copy; 2026 MRRC-FT8 Project · SDD V1.1 · <a href="https://github.com/cheenle/mrrc_ft8" style="color:var(--accent);">GitHub</a></p>
+        </div>
+    </div>
+</footer>
+
+<script>
+function toggleMobileMenu() {
+    document.querySelector('.nav-links').classList.toggle('active');
+}
+document.querySelectorAll('a[href^="#"]').forEach(a => {
+    a.addEventListener('click', function(e) {
+        e.preventDefault();
+        const t = document.querySelector(this.getAttribute('href'));
+        if (t) t.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    });
+});
+const nav = document.querySelector('.navbar');
+window.addEventListener('scroll', () => {
+    nav.style.background = window.scrollY > 50 ? 'rgba(0,0,0,0.95)' : 'rgba(0,0,0,0.8)';
+});
+</script>
+    <script src="../js/global-nav.js?v=2" defer data-gn="1"></script>
+</body>
+</html>

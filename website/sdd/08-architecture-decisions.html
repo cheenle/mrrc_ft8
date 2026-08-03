@@ -1,0 +1,202 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Architecture Decisions — MRRC-FT8 SDD</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="../css/octen.css?v=4">
+    <link rel="stylesheet" href="../css/sunsdrmobile.css?v=1">
+    <link rel="stylesheet" href="../css/ft8.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-7442510147240155" crossorigin="anonymous"></script>
+    <style>
+        .sdd-layout { display: flex; max-width: 1400px; margin: 0 auto; padding: 0 2rem; gap: 2rem; }
+        .sdd-sidebar {
+            width: 260px; flex-shrink: 0; position: sticky; top: 80px;
+            max-height: calc(100vh - 100px); overflow-y: auto;
+            background: var(--bg-card); border: 1px solid var(--border);
+            border-radius: 0.75rem; padding: 1.25rem 0;
+        }
+        .sdd-sidebar h4 {
+            font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.08em;
+            color: var(--accent); padding: 0 1.25rem; margin-bottom: 0.75rem;
+        }
+        .sdd-sidebar ul { list-style: none; }
+        .sdd-sidebar a {
+            display: block; padding: 0.375rem 1.25rem; font-size: 0.8125rem;
+            color: var(--text-secondary); transition: all 0.15s;
+            border-left: 2px solid transparent;
+        }
+        .sdd-sidebar a:hover { color: var(--text-primary); border-left-color: var(--border-hover); }
+        .sdd-sidebar a.active {
+            color: var(--accent); background: var(--accent-glow);
+            border-left-color: var(--accent); font-weight: 500;
+        }
+        .sdd-content { flex: 1; min-width: 0; padding-bottom: 4rem; }
+        .sdd-content h1 { font-size: 2rem; font-weight: 700; margin: 2rem 0 0.5rem; letter-spacing: -0.02em; }
+        .sdd-content h2 { font-size: 1.375rem; font-weight: 600; margin: 2rem 0 0.75rem; color: var(--accent); }
+        .sdd-content h3 { font-size: 1.125rem; font-weight: 600; margin: 1.5rem 0 0.5rem; }
+        .sdd-content h4 { font-size: 1rem; font-weight: 600; margin: 1.25rem 0 0.5rem; }
+        .sdd-content p, .sdd-content li { color: var(--text-secondary); line-height: 1.7; margin-bottom: 0.75rem; }
+        .sdd-content table {
+            width: 100%; border-collapse: collapse; margin: 1.25rem 0;
+            font-size: 0.875rem;
+        }
+        .sdd-content th, .sdd-content td {
+            padding: 0.625rem 0.875rem; text-align: left;
+            border: 1px solid var(--border);
+        }
+        .sdd-content th { background: var(--bg-tertiary); color: var(--text-primary); font-weight: 600; }
+        .sdd-content td { color: var(--text-secondary); }
+        .sdd-content code {
+            font-family: var(--font-mono); font-size: 0.85em;
+            background: var(--bg-tertiary); padding: 1px 6px; border-radius: 3px;
+            color: var(--accent);
+        }
+        .sdd-content pre {
+            background: var(--bg-tertiary); border: 1px solid var(--border);
+            border-radius: 0.5rem; padding: 1rem; overflow-x: auto;
+            margin: 1rem 0; font-size: 0.8125rem; line-height: 1.6;
+        }
+        .sdd-content pre code {
+            background: none; padding: 0; color: var(--text-secondary);
+        }
+        .sdd-content blockquote {
+            border-left: 3px solid var(--accent); padding: 0.5rem 1rem;
+            margin: 1rem 0; color: var(--text-muted); font-size: 0.9375rem;
+            background: var(--bg-tertiary); border-radius: 0 0.375rem 0.375rem 0;
+        }
+        .sdd-content ul, .sdd-content ol { margin-left: 1.5rem; margin-bottom: 1rem; }
+        .sdd-content hr { border: none; border-top: 1px solid var(--border); margin: 2rem 0; }
+        .sdd-content a { color: var(--accent); }
+        .sdd-content img { max-width: 100%; border-radius: 0.5rem; margin: 1rem 0; }
+        @media (max-width: 900px) {
+            .sdd-layout { flex-direction: column; padding: 0 1rem; }
+            .sdd-sidebar { width: 100%; position: static; max-height: none; }
+        }
+    </style>
+</head>
+<body data-site="mrrc_ft8">
+
+<nav class="navbar">
+    <div class="container navbar-content">
+        <a href="../index.html" class="logo">
+            <span class="logo-icon"><i class="fas fa-microchip"></i></span>
+            <span>MRRC-FT<span style="color: var(--accent);">8</span></span>
+        </a>
+        <ul class="nav-links">
+            <li><a href="../index.html#features">Features</a></li>
+            <li><a href="../index.html#architecture">Architecture</a></li>
+            <li><a href="index.html">SDD Docs</a></li>
+            <li><a href="https://github.com/cheenle/mrrc_ft8" target="_blank"><i class="fab fa-github"></i> GitHub</a></li>
+        </ul>
+        <div class="nav-actions">
+            <a href="../zh/index.html" class="lang-btn">中文</a>
+            <button class="mobile-menu-toggle" onclick="toggleMobileMenu()"><i class="fas fa-bars"></i></button>
+        </div>
+    </div>
+</nav>
+
+<div class="sdd-layout">
+    <aside class="sdd-sidebar">
+        <h4>SDD Chapters</h4>
+        <ul>
+            <li><a href="index.html">Overview</a></li>
+            <li><a href="01-executive-summary.html">1. Executive Summary</a></li>
+            <li><a href="02-business-direction.html">2. Business Direction</a></li>
+            <li><a href="03-project-definition.html">3. Project Definition</a></li>
+            <li><a href="04-system-context.html">4. System Context</a></li>
+            <li><a href="05-non-functional-requirements.html">5. NFRs</a></li>
+            <li><a href="06-use-case-model.html">6. Use Cases</a></li>
+            <li><a href="07-subject-area-model.html">7. Subject Model</a></li>
+            <li><a href="08-architecture-decisions.html" class="active">8. Architecture Decisions</a></li>
+            <li><a href="09-architecture-overview.html">9. Architecture Overview</a></li>
+            <li><a href="10-service-model.html">10. Service Model</a></li>
+            <li><a href="11-component-model.html">11. Component Model</a></li>
+            <li><a href="12-operational-model.html">12. Operational Model</a></li>
+            <li><a href="13-feasibility-assessment.html">13. Feasibility</a></li>
+            <li><a href="14-version-history.html">14. Version History</a></li>
+            <li><a href="15-ptt-safety-architecture.html">15. PTT Safety</a></li>
+        </ul>
+    </aside>
+    <main class="sdd-content">
+<h1 id="architecture-decisions">8. Architecture Decisions</h1>
+<h2 id="ad-001-headless-layered-server">AD-001 — Headless layered server</h2>
+<p><strong>Decision:</strong> Separate Web, engine, core/DSP and persistence responsibilities. No Qt or desktop GUI runtime is required.<br />
+<strong>Consequence:</strong> Mobile and desktop clients share one authoritative backend.</p>
+<h2 id="ad-002-compile-selected-wsjt-x-improved-sources-behind-a-c-abi">AD-002 — Compile selected WSJT-X Improved sources behind a C ABI</h2>
+<p><strong>Decision:</strong> Reuse vendor DSP through Fortran <code>bind(C)</code> shims and a shared library.<br />
+<strong>Consequence:</strong> Algorithm behavior stays close to WSJT-X; ABI and build regression become release gates.</p>
+<h2 id="ad-003-supervised-dsp-worker-process">AD-003 — Supervised DSP Worker process</h2>
+<p><strong>Decision:</strong> All Fortran/OpenMP operations execute in a separate worker supervised by the main process.<br />
+<strong>Consequence:</strong> Main security/PTT logic survives worker faults; IPC copies are accepted for isolation.</p>
+<h2 id="ad-004-fixed-audio-rate-domains">AD-004 — Fixed audio rate domains</h2>
+<p><strong>Decision:</strong> Radio audio and TX are 48 kHz; decoder input is 12 kHz int16 mono, with exactly one RX conversion.<br />
+<strong>Consequence:</strong> Binding rejects all other decode formats.</p>
+<h2 id="ad-005-single-dsp-owner-lock-and-batch-results">AD-005 — Single DSP owner, lock and batch results</h2>
+<p><strong>Decision:</strong> The worker calls DSP only through the global binding lock. Fortran aggregates OpenMP output and returns a batch; no Python callbacks from worker threads.<br />
+<strong>Consequence:</strong> Mutable packjt77/hash state is serialized and callback/GIL hazards are removed.</p>
+<h2 id="ad-006-utc-epoch-slot-discipline">AD-006 — UTC epoch slot discipline</h2>
+<p><strong>Decision:</strong> Slot identity is <code>floor(epoch/TRperiod)</code> and late actions are skipped.<br />
+<strong>Consequence:</strong> Tests inject epoch time; relative timers cannot define protocol phase.</p>
+<p>The UTC ring keys physical positions to the absolute sample index (<code>X % capacity</code>), so eviction (advancing the oldest-retained base) never requires moving data — a base-relative key would leave every post-eviction read shifted by the cumulative base advance (2026-08-03 field bug “D”).</p>
+<h2 id="ad-007-central-sequencerptt-safety-controller">AD-007 — Central sequencer/PTT safety controller</h2>
+<p><strong>Decision:</strong> Every TX intent crosses sequencer validation, health interlocks and the main-process watchdog.<br />
+<strong>Consequence:</strong> DSP and Web layers cannot key PTT directly; STOP is a priority idempotent operation.</p>
+<h2 id="ad-008-rigctld-is-the-serial-owner">AD-008 — rigctld is the serial owner</h2>
+<p><strong>Decision:</strong> The application uses Hamlib TCP and never opens the CAT serial device.<br />
+<strong>Consequence:</strong> Radio compatibility is isolated; rigctld failure is a handled interlock.</p>
+<h2 id="ad-009-caddy-public-edge-and-secure-cookie-auth">AD-009 — Caddy public edge and secure-cookie auth</h2>
+<p><strong>Decision:</strong> Caddy terminates public TLS; FastAPI binds loopback. Sessions use secure cookies, not URL tokens, with Host/Origin validation.<br />
+<strong>Consequence:</strong> Deployment requires a domain and correct proxy headers.</p>
+<h2 id="ad-010-single-renewable-control-lease">AD-010 — Single renewable control lease</h2>
+<p><strong>Decision:</strong> Multiple sessions may observe, but only one 5 s heartbeat/15 s TTL lease can issue transmit-starting commands. Any authenticated session may STOP.<br />
+<strong>Consequence:</strong> No last-writer-wins radio control; lease loss during TX invokes safe stop.</p>
+<h2 id="ad-011-landscape-first-cockpit">AD-011 — Landscape-first cockpit</h2>
+<p><strong>Decision:</strong> Full mobile operation is landscape with left waterfall, right candidates and fixed bottom state machine. Portrait is a degraded observer/STOP view.<br />
+<strong>Consequence:</strong> Responsive acceptance explicitly covers both modes.</p>
+<h2 id="ad-012-human-target-selection-single-qso-automation">AD-012 — Human target selection, single-QSO automation</h2>
+<p><strong>Decision:</strong> The user selects CQ or Reply; the sequencer completes one standard QSO, permits one initial send plus three retransmissions per message, and then disarms.<br />
+<strong>Consequence:</strong> qFT8-style continuous target selection, Spy/Busy and contests are deferred.</p>
+<h2 id="ad-013-separate-bounded-streams">AD-013 — Separate bounded streams</h2>
+<p><strong>Decision:</strong> Safety/state, decode events and waterfall use separate bounded WebSocket delivery paths. Old waterfall frames may drop.<br />
+<strong>Consequence:</strong> Visual congestion cannot block lease/STOP/state traffic.</p>
+<h2 id="ad-014-sqlite-canonical-records-with-adif-export">AD-014 — SQLite canonical records with ADIF export</h2>
+<p><strong>Decision:</strong> QSO/audit/history are transactional local data; ADIF is generated. Undo marks a QSO void with audit evidence.<br />
+<strong>Consequence:</strong> Persistence gains schema migration and backup responsibilities.</p>
+<h2 id="ad-015-native-macoslinux-service-deployment">AD-015 — Native macOS/Linux service deployment</h2>
+<p><strong>Decision:</strong> macOS uses a user LaunchAgent and real hardware acceptance; Linux uses systemd and simulated acceptance; Caddy is shared, Docker deferred.<br />
+<strong>Consequence:</strong> Service descriptors differ but application config and code stay common.</p>
+    </main>
+</div>
+
+<footer class="footer" style="margin-top: 0;">
+    <div class="container">
+        <div class="footer-bottom">
+            <p>&copy; 2026 MRRC-FT8 Project · SDD V1.1 · <a href="https://github.com/cheenle/mrrc_ft8" style="color:var(--accent);">GitHub</a></p>
+        </div>
+    </div>
+</footer>
+
+<script>
+function toggleMobileMenu() {
+    document.querySelector('.nav-links').classList.toggle('active');
+}
+document.querySelectorAll('a[href^="#"]').forEach(a => {
+    a.addEventListener('click', function(e) {
+        e.preventDefault();
+        const t = document.querySelector(this.getAttribute('href'));
+        if (t) t.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    });
+});
+const nav = document.querySelector('.navbar');
+window.addEventListener('scroll', () => {
+    nav.style.background = window.scrollY > 50 ? 'rgba(0,0,0,0.95)' : 'rgba(0,0,0,0.8)';
+});
+</script>
+    <script src="../js/global-nav.js?v=2" defer data-gn="1"></script>
+</body>
+</html>

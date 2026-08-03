@@ -1,0 +1,317 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>System Context — MRRC-FT8 SDD</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="../css/octen.css?v=4">
+    <link rel="stylesheet" href="../css/sunsdrmobile.css?v=1">
+    <link rel="stylesheet" href="../css/ft8.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-7442510147240155" crossorigin="anonymous"></script>
+    <style>
+        .sdd-layout { display: flex; max-width: 1400px; margin: 0 auto; padding: 0 2rem; gap: 2rem; }
+        .sdd-sidebar {
+            width: 260px; flex-shrink: 0; position: sticky; top: 80px;
+            max-height: calc(100vh - 100px); overflow-y: auto;
+            background: var(--bg-card); border: 1px solid var(--border);
+            border-radius: 0.75rem; padding: 1.25rem 0;
+        }
+        .sdd-sidebar h4 {
+            font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.08em;
+            color: var(--accent); padding: 0 1.25rem; margin-bottom: 0.75rem;
+        }
+        .sdd-sidebar ul { list-style: none; }
+        .sdd-sidebar a {
+            display: block; padding: 0.375rem 1.25rem; font-size: 0.8125rem;
+            color: var(--text-secondary); transition: all 0.15s;
+            border-left: 2px solid transparent;
+        }
+        .sdd-sidebar a:hover { color: var(--text-primary); border-left-color: var(--border-hover); }
+        .sdd-sidebar a.active {
+            color: var(--accent); background: var(--accent-glow);
+            border-left-color: var(--accent); font-weight: 500;
+        }
+        .sdd-content { flex: 1; min-width: 0; padding-bottom: 4rem; }
+        .sdd-content h1 { font-size: 2rem; font-weight: 700; margin: 2rem 0 0.5rem; letter-spacing: -0.02em; }
+        .sdd-content h2 { font-size: 1.375rem; font-weight: 600; margin: 2rem 0 0.75rem; color: var(--accent); }
+        .sdd-content h3 { font-size: 1.125rem; font-weight: 600; margin: 1.5rem 0 0.5rem; }
+        .sdd-content h4 { font-size: 1rem; font-weight: 600; margin: 1.25rem 0 0.5rem; }
+        .sdd-content p, .sdd-content li { color: var(--text-secondary); line-height: 1.7; margin-bottom: 0.75rem; }
+        .sdd-content table {
+            width: 100%; border-collapse: collapse; margin: 1.25rem 0;
+            font-size: 0.875rem;
+        }
+        .sdd-content th, .sdd-content td {
+            padding: 0.625rem 0.875rem; text-align: left;
+            border: 1px solid var(--border);
+        }
+        .sdd-content th { background: var(--bg-tertiary); color: var(--text-primary); font-weight: 600; }
+        .sdd-content td { color: var(--text-secondary); }
+        .sdd-content code {
+            font-family: var(--font-mono); font-size: 0.85em;
+            background: var(--bg-tertiary); padding: 1px 6px; border-radius: 3px;
+            color: var(--accent);
+        }
+        .sdd-content pre {
+            background: var(--bg-tertiary); border: 1px solid var(--border);
+            border-radius: 0.5rem; padding: 1rem; overflow-x: auto;
+            margin: 1rem 0; font-size: 0.8125rem; line-height: 1.6;
+        }
+        .sdd-content pre code {
+            background: none; padding: 0; color: var(--text-secondary);
+        }
+        .sdd-content blockquote {
+            border-left: 3px solid var(--accent); padding: 0.5rem 1rem;
+            margin: 1rem 0; color: var(--text-muted); font-size: 0.9375rem;
+            background: var(--bg-tertiary); border-radius: 0 0.375rem 0.375rem 0;
+        }
+        .sdd-content ul, .sdd-content ol { margin-left: 1.5rem; margin-bottom: 1rem; }
+        .sdd-content hr { border: none; border-top: 1px solid var(--border); margin: 2rem 0; }
+        .sdd-content a { color: var(--accent); }
+        .sdd-content img { max-width: 100%; border-radius: 0.5rem; margin: 1rem 0; }
+        @media (max-width: 900px) {
+            .sdd-layout { flex-direction: column; padding: 0 1rem; }
+            .sdd-sidebar { width: 100%; position: static; max-height: none; }
+        }
+    </style>
+</head>
+<body data-site="mrrc_ft8">
+
+<nav class="navbar">
+    <div class="container navbar-content">
+        <a href="../index.html" class="logo">
+            <span class="logo-icon"><i class="fas fa-microchip"></i></span>
+            <span>MRRC-FT<span style="color: var(--accent);">8</span></span>
+        </a>
+        <ul class="nav-links">
+            <li><a href="../index.html#features">Features</a></li>
+            <li><a href="../index.html#architecture">Architecture</a></li>
+            <li><a href="index.html">SDD Docs</a></li>
+            <li><a href="https://github.com/cheenle/mrrc_ft8" target="_blank"><i class="fab fa-github"></i> GitHub</a></li>
+        </ul>
+        <div class="nav-actions">
+            <a href="../zh/index.html" class="lang-btn">中文</a>
+            <button class="mobile-menu-toggle" onclick="toggleMobileMenu()"><i class="fas fa-bars"></i></button>
+        </div>
+    </div>
+</nav>
+
+<div class="sdd-layout">
+    <aside class="sdd-sidebar">
+        <h4>SDD Chapters</h4>
+        <ul>
+            <li><a href="index.html">Overview</a></li>
+            <li><a href="01-executive-summary.html">1. Executive Summary</a></li>
+            <li><a href="02-business-direction.html">2. Business Direction</a></li>
+            <li><a href="03-project-definition.html">3. Project Definition</a></li>
+            <li><a href="04-system-context.html" class="active">4. System Context</a></li>
+            <li><a href="05-non-functional-requirements.html">5. NFRs</a></li>
+            <li><a href="06-use-case-model.html">6. Use Cases</a></li>
+            <li><a href="07-subject-area-model.html">7. Subject Model</a></li>
+            <li><a href="08-architecture-decisions.html">8. Architecture Decisions</a></li>
+            <li><a href="09-architecture-overview.html">9. Architecture Overview</a></li>
+            <li><a href="10-service-model.html">10. Service Model</a></li>
+            <li><a href="11-component-model.html">11. Component Model</a></li>
+            <li><a href="12-operational-model.html">12. Operational Model</a></li>
+            <li><a href="13-feasibility-assessment.html">13. Feasibility</a></li>
+            <li><a href="14-version-history.html">14. Version History</a></li>
+            <li><a href="15-ptt-safety-architecture.html">15. PTT Safety</a></li>
+        </ul>
+    </aside>
+    <main class="sdd-content">
+<h1 id="system-context-app-011">4. System Context (APP 011)</h1>
+<h2 id="context-diagram">4.1 Context Diagram</h2>
+<pre class="text"><code>Authenticated Browser
+        |
+        | HTTPS / WSS
+        v
+      Caddy
+        |
+        | loopback
+        v
+FastAPI Main Process ---------------------- SQLite / ADIF / local logs
+  | auth, lease, REST/WS
+  | UTC, audio, sequencer, PTT
+  |
+  +-- supervised IPC --&gt; DSP Worker --&gt; wsjt_core
+  +-- loopback TCP ----&gt; rigctld -----&gt; CAT serial -----&gt; Radio
+  +-- PortAudio 48 kHz ---------------------------------&gt; Radio USB audio</code></pre>
+<h2 id="actors">4.2 Actors</h2>
+<table>
+<colgroup>
+<col style="width: 50%" />
+<col style="width: 50%" />
+</colgroup>
+<thead>
+<tr>
+<th>Actor</th>
+<th>Responsibility</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>HAM Operator</td>
+<td>Observes, acquires control, selects station/CQ, stops TX, reviews logs</td>
+</tr>
+<tr>
+<td>Authenticated Observer</td>
+<td>Observes and can always issue emergency STOP TX</td>
+</tr>
+<tr>
+<td>Caddy</td>
+<td>Public TLS termination and reverse proxy</td>
+</tr>
+<tr>
+<td>FastAPI main</td>
+<td>Security, ownership, state, audio, rig, PTT and persistence</td>
+</tr>
+<tr>
+<td>DSP Worker</td>
+<td>Sole Fortran/OpenMP owner; decode/encode only</td>
+</tr>
+<tr>
+<td>rigctld</td>
+<td>Sole CAT serial owner</td>
+</tr>
+<tr>
+<td>Radio</td>
+<td>RF and USB audio endpoint</td>
+</tr>
+</tbody>
+</table>
+<h2 id="external-interfaces">4.3 External Interfaces</h2>
+<table>
+<colgroup>
+<col style="width: 33%" />
+<col style="width: 33%" />
+<col style="width: 33%" />
+</colgroup>
+<thead>
+<tr>
+<th>Boundary</th>
+<th>Interface</th>
+<th>Constraint</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Browser–Caddy</td>
+<td>HTTPS/WSS</td>
+<td>Secure cookie; expected Host/Origin</td>
+</tr>
+<tr>
+<td>Caddy–FastAPI</td>
+<td>loopback HTTP/WS</td>
+<td>FastAPI is not public</td>
+</tr>
+<tr>
+<td>Main–Worker</td>
+<td>supervised local IPC</td>
+<td>One outstanding decode; bounded request/result size</td>
+</tr>
+<tr>
+<td>Main–rigctld</td>
+<td>loopback Hamlib TCP</td>
+<td>No direct serial open</td>
+</tr>
+<tr>
+<td>Main–radio audio</td>
+<td>PortAudio 48 kHz mono</td>
+<td>One audio owner</td>
+</tr>
+<tr>
+<td>Worker–library</td>
+<td>ctypes C ABI</td>
+<td>Binding lock; 12 kHz int16 decode input</td>
+</tr>
+<tr>
+<td>Main–storage</td>
+<td>SQLite/files</td>
+<td>Local only; transactional canonical data</td>
+</tr>
+</tbody>
+</table>
+<h2 id="data-flows">4.4 Data Flows</h2>
+<h3 id="receive">Receive</h3>
+<p>Radio 48 kHz audio → deterministic 4:1 conversion → UTC-aligned 12 kHz int16 ring → waterfall frames and slot decode window → worker → batched decode results → candidate model → Web clients.</p>
+<h3 id="transmit">Transmit</h3>
+<p>Leased operator intent → sequencer validation → worker encode/generate 48 kHz waveform → slot eligibility → PTT safety controller → radio audio/PTT. Any interlock failure cancels the chain.</p>
+<h3 id="state">State</h3>
+<p>Rig/audio/DSP/slot/sequencer/lease state → revisioned state stream. Waterfall uses a separate bounded stream so spectrum loss cannot block safety data.</p>
+<h2 id="trust-boundaries">4.5 Trust Boundaries</h2>
+<ul>
+<li>The public network ends at Caddy.</li>
+<li>Browsers are untrusted until authenticated; authenticated sessions still need a lease for transmit-starting actions.</li>
+<li>DSP output is data, never authority to transmit.</li>
+<li>rigctld and audio devices are local privileged resources.</li>
+<li>Diagnostic archives are sensitive local exports and require password re-authentication.</li>
+</ul>
+<h2 id="resource-ownership">4.6 Resource Ownership</h2>
+<table>
+<thead>
+<tr>
+<th>Resource</th>
+<th>Owner</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Session and lease</td>
+<td>Main process</td>
+</tr>
+<tr>
+<td>QSO/sequencer</td>
+<td>Main process</td>
+</tr>
+<tr>
+<td>PTT and audio</td>
+<td>Main process</td>
+</tr>
+<tr>
+<td>Fortran/OpenMP/hash state</td>
+<td>DSP Worker</td>
+</tr>
+<tr>
+<td>Serial device</td>
+<td>rigctld</td>
+</tr>
+<tr>
+<td>Vendor source</td>
+<td>Read-only repository content</td>
+</tr>
+</tbody>
+</table>
+    </main>
+</div>
+
+<footer class="footer" style="margin-top: 0;">
+    <div class="container">
+        <div class="footer-bottom">
+            <p>&copy; 2026 MRRC-FT8 Project · SDD V1.1 · <a href="https://github.com/cheenle/mrrc_ft8" style="color:var(--accent);">GitHub</a></p>
+        </div>
+    </div>
+</footer>
+
+<script>
+function toggleMobileMenu() {
+    document.querySelector('.nav-links').classList.toggle('active');
+}
+document.querySelectorAll('a[href^="#"]').forEach(a => {
+    a.addEventListener('click', function(e) {
+        e.preventDefault();
+        const t = document.querySelector(this.getAttribute('href'));
+        if (t) t.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    });
+});
+const nav = document.querySelector('.navbar');
+window.addEventListener('scroll', () => {
+    nav.style.background = window.scrollY > 50 ? 'rgba(0,0,0,0.95)' : 'rgba(0,0,0,0.8)';
+});
+</script>
+    <script src="../js/global-nav.js?v=2" defer data-gn="1"></script>
+</body>
+</html>

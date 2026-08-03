@@ -1,0 +1,312 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Feasibility Assessment — MRRC-FT8 SDD</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="../css/octen.css?v=4">
+    <link rel="stylesheet" href="../css/sunsdrmobile.css?v=1">
+    <link rel="stylesheet" href="../css/ft8.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-7442510147240155" crossorigin="anonymous"></script>
+    <style>
+        .sdd-layout { display: flex; max-width: 1400px; margin: 0 auto; padding: 0 2rem; gap: 2rem; }
+        .sdd-sidebar {
+            width: 260px; flex-shrink: 0; position: sticky; top: 80px;
+            max-height: calc(100vh - 100px); overflow-y: auto;
+            background: var(--bg-card); border: 1px solid var(--border);
+            border-radius: 0.75rem; padding: 1.25rem 0;
+        }
+        .sdd-sidebar h4 {
+            font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.08em;
+            color: var(--accent); padding: 0 1.25rem; margin-bottom: 0.75rem;
+        }
+        .sdd-sidebar ul { list-style: none; }
+        .sdd-sidebar a {
+            display: block; padding: 0.375rem 1.25rem; font-size: 0.8125rem;
+            color: var(--text-secondary); transition: all 0.15s;
+            border-left: 2px solid transparent;
+        }
+        .sdd-sidebar a:hover { color: var(--text-primary); border-left-color: var(--border-hover); }
+        .sdd-sidebar a.active {
+            color: var(--accent); background: var(--accent-glow);
+            border-left-color: var(--accent); font-weight: 500;
+        }
+        .sdd-content { flex: 1; min-width: 0; padding-bottom: 4rem; }
+        .sdd-content h1 { font-size: 2rem; font-weight: 700; margin: 2rem 0 0.5rem; letter-spacing: -0.02em; }
+        .sdd-content h2 { font-size: 1.375rem; font-weight: 600; margin: 2rem 0 0.75rem; color: var(--accent); }
+        .sdd-content h3 { font-size: 1.125rem; font-weight: 600; margin: 1.5rem 0 0.5rem; }
+        .sdd-content h4 { font-size: 1rem; font-weight: 600; margin: 1.25rem 0 0.5rem; }
+        .sdd-content p, .sdd-content li { color: var(--text-secondary); line-height: 1.7; margin-bottom: 0.75rem; }
+        .sdd-content table {
+            width: 100%; border-collapse: collapse; margin: 1.25rem 0;
+            font-size: 0.875rem;
+        }
+        .sdd-content th, .sdd-content td {
+            padding: 0.625rem 0.875rem; text-align: left;
+            border: 1px solid var(--border);
+        }
+        .sdd-content th { background: var(--bg-tertiary); color: var(--text-primary); font-weight: 600; }
+        .sdd-content td { color: var(--text-secondary); }
+        .sdd-content code {
+            font-family: var(--font-mono); font-size: 0.85em;
+            background: var(--bg-tertiary); padding: 1px 6px; border-radius: 3px;
+            color: var(--accent);
+        }
+        .sdd-content pre {
+            background: var(--bg-tertiary); border: 1px solid var(--border);
+            border-radius: 0.5rem; padding: 1rem; overflow-x: auto;
+            margin: 1rem 0; font-size: 0.8125rem; line-height: 1.6;
+        }
+        .sdd-content pre code {
+            background: none; padding: 0; color: var(--text-secondary);
+        }
+        .sdd-content blockquote {
+            border-left: 3px solid var(--accent); padding: 0.5rem 1rem;
+            margin: 1rem 0; color: var(--text-muted); font-size: 0.9375rem;
+            background: var(--bg-tertiary); border-radius: 0 0.375rem 0.375rem 0;
+        }
+        .sdd-content ul, .sdd-content ol { margin-left: 1.5rem; margin-bottom: 1rem; }
+        .sdd-content hr { border: none; border-top: 1px solid var(--border); margin: 2rem 0; }
+        .sdd-content a { color: var(--accent); }
+        .sdd-content img { max-width: 100%; border-radius: 0.5rem; margin: 1rem 0; }
+        @media (max-width: 900px) {
+            .sdd-layout { flex-direction: column; padding: 0 1rem; }
+            .sdd-sidebar { width: 100%; position: static; max-height: none; }
+        }
+    </style>
+</head>
+<body data-site="mrrc_ft8">
+
+<nav class="navbar">
+    <div class="container navbar-content">
+        <a href="../index.html" class="logo">
+            <span class="logo-icon"><i class="fas fa-microchip"></i></span>
+            <span>MRRC-FT<span style="color: var(--accent);">8</span></span>
+        </a>
+        <ul class="nav-links">
+            <li><a href="../index.html#features">Features</a></li>
+            <li><a href="../index.html#architecture">Architecture</a></li>
+            <li><a href="index.html">SDD Docs</a></li>
+            <li><a href="https://github.com/cheenle/mrrc_ft8" target="_blank"><i class="fab fa-github"></i> GitHub</a></li>
+        </ul>
+        <div class="nav-actions">
+            <a href="../zh/index.html" class="lang-btn">中文</a>
+            <button class="mobile-menu-toggle" onclick="toggleMobileMenu()"><i class="fas fa-bars"></i></button>
+        </div>
+    </div>
+</nav>
+
+<div class="sdd-layout">
+    <aside class="sdd-sidebar">
+        <h4>SDD Chapters</h4>
+        <ul>
+            <li><a href="index.html">Overview</a></li>
+            <li><a href="01-executive-summary.html">1. Executive Summary</a></li>
+            <li><a href="02-business-direction.html">2. Business Direction</a></li>
+            <li><a href="03-project-definition.html">3. Project Definition</a></li>
+            <li><a href="04-system-context.html">4. System Context</a></li>
+            <li><a href="05-non-functional-requirements.html">5. NFRs</a></li>
+            <li><a href="06-use-case-model.html">6. Use Cases</a></li>
+            <li><a href="07-subject-area-model.html">7. Subject Model</a></li>
+            <li><a href="08-architecture-decisions.html">8. Architecture Decisions</a></li>
+            <li><a href="09-architecture-overview.html">9. Architecture Overview</a></li>
+            <li><a href="10-service-model.html">10. Service Model</a></li>
+            <li><a href="11-component-model.html">11. Component Model</a></li>
+            <li><a href="12-operational-model.html">12. Operational Model</a></li>
+            <li><a href="13-feasibility-assessment.html" class="active">13. Feasibility</a></li>
+            <li><a href="14-version-history.html">14. Version History</a></li>
+            <li><a href="15-ptt-safety-architecture.html">15. PTT Safety</a></li>
+        </ul>
+    </aside>
+    <main class="sdd-content">
+<h1 id="feasibility-assessment">13. Feasibility Assessment</h1>
+<h2 id="overall-assessment">13.1 Overall Assessment</h2>
+<p>The design is feasible because vendor DSP, gfortran, fftw3f, FastAPI, rigctld and PortAudio are available. The largest risks are Improved decoder deadline, Fortran/OpenMP isolation, audio/clock correctness and public TX safety. The vertical-slice order attacks these before UI polish.</p>
+<h2 id="risks">13.2 Risks</h2>
+<table>
+<colgroup>
+<col style="width: 33%" />
+<col style="width: 33%" />
+<col style="width: 33%" />
+</colgroup>
+<thead>
+<tr>
+<th>ID</th>
+<th>Risk</th>
+<th>Mitigation / Evidence</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>R1</td>
+<td>macOS/Linux Fortran/OpenMP build/link incompatibility</td>
+<td>M1 minimal source build, exact four-export ABI smoke test, generated ELF map regression, documented toolchain</td>
+</tr>
+<tr>
+<td>R2</td>
+<td>Improved profile misses TX decision deadline</td>
+<td>Profile 3 default, Auto threads, latency histogram, late result display-only</td>
+</tr>
+<tr>
+<td>R3</td>
+<td>packjt77/ft8var mutable state races</td>
+<td>One worker owner, binding lock, exact OpenMP team check, thread-private slot/FFT/cycle state, deterministic A8 owner, batched Fortran return and repeated parallel-region regression</td>
+</tr>
+<tr>
+<td>R4</td>
+<td>Worker crash or native fault</td>
+<td>Separate process, generation-tagged IPC, fail-closed stop/restart</td>
+</tr>
+<tr>
+<td>R5</td>
+<td>Audio device loss, overrun or wrong rate</td>
+<td>One audio owner, explicit assertions, fault injection, real-radio acceptance</td>
+</tr>
+<tr>
+<td>R6</td>
+<td>UTC step/drift causes invalid slot transmission</td>
+<td>Epoch slot math, clock health interlock, manual re-arm</td>
+</tr>
+<tr>
+<td>R7</td>
+<td>Public attacker or concurrent client starts TX</td>
+<td>Caddy TLS, strong auth, Origin/Host, rate limits, one lease, universal STOP</td>
+</tr>
+<tr>
+<td>R8</td>
+<td>Browser backpressure delays safety traffic</td>
+<td>Separate bounded streams; waterfall drops only</td>
+</tr>
+<tr>
+<td>R9</td>
+<td>macOS background service cannot access audio</td>
+<td>User LaunchAgent and explicit permission acceptance</td>
+</tr>
+<tr>
+<td>R10</td>
+<td>Diagnostic bundle leaks sensitive local data</td>
+<td>Password re-auth, prominent raw-data warning, user-authorized local export</td>
+</tr>
+</tbody>
+</table>
+<p>Task 5’s direct-A8 hook repeatedly decodes a clean fixed message and the atomic near-Rx gate has a native threshold/concurrency probe. A deterministic weak direct-A8 fixture could not be reproduced across fresh library processes, so that weak direct-A8 fixture remains a strict expected failure and a documented test-evidence limitation. It is not an architecture blocker; it must not be misrepresented as weak-signal sensitivity coverage.</p>
+<h2 id="assumptions">13.3 Assumptions</h2>
+<table>
+<colgroup>
+<col style="width: 50%" />
+<col style="width: 50%" />
+</colgroup>
+<thead>
+<tr>
+<th>ID</th>
+<th>Assumption</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>A1</td>
+<td>Operator owns a domain whose DNS points to the Caddy host</td>
+</tr>
+<tr>
+<td>A2</td>
+<td>FT-710 and supported host expose stable 48 kHz USB audio</td>
+</tr>
+<tr>
+<td>A3</td>
+<td>rigctld supports required frequency/mode/PTT operations for the target radio</td>
+</tr>
+<tr>
+<td>A4</td>
+<td>Host clock is normally synchronized closely enough for FT8; unsafe state is detectable</td>
+</tr>
+<tr>
+<td>A5</td>
+<td>Apple Silicon/macOS has sufficient CPU for profile 3 Improved decoding with OpenMP</td>
+</tr>
+<tr>
+<td>A6</td>
+<td>One personal station and one simultaneous QSO are sufficient for V1.0</td>
+</tr>
+</tbody>
+</table>
+<h2 id="resolved-issues">13.4 Resolved Issues</h2>
+<ul>
+<li>I1 public access: domain + Caddy TLS.</li>
+<li>I2 authentication: strong password and secure cookie; no TOTP/passkey V1.0.</li>
+<li>I3 concurrency: many sessions, one control lease.</li>
+<li>I4 DSP architecture: supervised worker with <code>ft8var</code> and batch results.</li>
+<li>I5 UI: landscape qFT8 spatial model, WSJT-X semantics, MRRC safety.</li>
+<li>I6 QSO automation: human target, one-QSO sequencer, three retries.</li>
+<li>I7 platforms: macOS real hardware, Linux simulated acceptance.</li>
+<li>I8 IPC representation: Protocol v1 uses bounded exact-schema UTF-8 JSON control frames and fixed parent-owned RX/TX shared-memory descriptors. Fresh spawned-Worker encode/decode proves the capacities; Darwin’s uniquely observable page-rounded allocation is validated without changing logical bytes or mapped shape.</li>
+<li>I9 timing (measured 2026-08-01, Apple M2, 8 logical CPUs 4P+4E, gfortran-mp-13 Release, opt-in benchmark <code>MRRC_FT8_I9_BENCHMARK=1</code> on a busy five-signal noisy synthetic slot through the real supervised Worker): profile 3 with Auto threads decodes in 0.226–0.274 s wall; native decode time equals wall within IPC noise, and the worst spot check (profile 3, Auto threads, cycles 3) stays under 0.69 s. Thread scaling saturates at 4–6 threads and oversubscription to 12 threads is measurably slower. V1.0 Auto thread policy is therefore <code>clamp(cpu_count - 1, 1, 12)</code> — never oversubscribed, 0.26 s on M2 — and the provisional TX decision cutoff is slot end + 2.5 s (about 9x the measured headline worst case, leaving 12.5 s for decision plus the I10 PTT/audio lead). The benchmark gate re-verifies both parameters per supported CPU.</li>
+</ul>
+<h2 id="open-issues">13.5 Open Issues</h2>
+<table>
+<colgroup>
+<col style="width: 33%" />
+<col style="width: 33%" />
+<col style="width: 33%" />
+</colgroup>
+<thead>
+<tr>
+<th>ID</th>
+<th>Issue</th>
+<th>When resolved</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>I10</td>
+<td>FT-710 PTT measured (2026-08-01, Mac mini M2, C-Media USB audio, 5 W): priority STOP releases PTT in 0.26–0.31 s; a 2 s CAT-keyed transmission closes 0.8–0.9 s after audio ends. Residual uncertainty: audio-lead at key-down not yet instrumented</td>
+<td>macOS acceptance</td>
+</tr>
+<tr>
+<td>I11</td>
+<td>Linux distributions and audio backend matrix beyond baseline</td>
+<td>After V1.0</td>
+</tr>
+</tbody>
+</table>
+<p>Open issues may tune implementation parameters but cannot weaken the fixed ownership, rate, lease or safety decisions.</p>
+<h2 id="gono-go-gates">13.6 Go/No-go Gates</h2>
+<ul>
+<li>M1 no-go if Improved decoder cannot build or pass synthetic regression.</li>
+<li>M2 no-go for TX if 12/48 kHz assertions, STOP priority and fault interlocks are not tested.</li>
+<li>M3 no-go for public exposure if cookie/Origin/Host/lease tests fail.</li>
+<li>Release no-go if macOS real-radio safety scenarios or Linux simulated service gate fail.</li>
+</ul>
+    </main>
+</div>
+
+<footer class="footer" style="margin-top: 0;">
+    <div class="container">
+        <div class="footer-bottom">
+            <p>&copy; 2026 MRRC-FT8 Project · SDD V1.1 · <a href="https://github.com/cheenle/mrrc_ft8" style="color:var(--accent);">GitHub</a></p>
+        </div>
+    </div>
+</footer>
+
+<script>
+function toggleMobileMenu() {
+    document.querySelector('.nav-links').classList.toggle('active');
+}
+document.querySelectorAll('a[href^="#"]').forEach(a => {
+    a.addEventListener('click', function(e) {
+        e.preventDefault();
+        const t = document.querySelector(this.getAttribute('href'));
+        if (t) t.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    });
+});
+const nav = document.querySelector('.navbar');
+window.addEventListener('scroll', () => {
+    nav.style.background = window.scrollY > 50 ? 'rgba(0,0,0,0.95)' : 'rgba(0,0,0,0.8)';
+});
+</script>
+    <script src="../js/global-nav.js?v=2" defer data-gn="1"></script>
+</body>
+</html>

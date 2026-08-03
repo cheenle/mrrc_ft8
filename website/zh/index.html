@@ -1,0 +1,1067 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta
+      name="description"
+      content="MRRC-FT8 — 基于 WSJT-X 3.0.2 Improved DSP 核心的 headless FT8/FT4 服务器。Python FastAPI 控制面、rigctld 电台控制与横屏移动 Web 驾驶舱，完成真实 FT8 QSO。"
+    />
+    <meta
+      name="keywords"
+      content="FT8, FT4, WSJT-X, headless, 业余无线电, 数字模式, DSP, OpenMP, FastAPI, rigctld, Caddy, PTT 安全, 瀑布图"
+    />
+    <meta name="author" content="BG1SB" />
+    <meta name="theme-color" content="#0a0a0a" />
+
+    <title>MRRC-FT8 — Headless FT8/FT4 服务器</title>
+
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap"
+      rel="stylesheet"
+    />
+
+    <link rel="stylesheet" href="../css/octen.css?v=4" />
+    <link rel="stylesheet" href="../css/sunsdrmobile.css?v=1" />
+    <link rel="stylesheet" href="../css/ft8.css" />
+    <link
+      rel="stylesheet"
+      href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css"
+    />
+
+    <link
+      rel="icon"
+      type="image/svg+xml"
+      href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect fill='%2322d3ee' width='100' height='100' rx='20'/><text y='.9em' x='50%' text-anchor='middle' font-size='60'>📡</text></svg>"
+    />
+  </head>
+  <body data-site="mrrc_ft8">
+    <nav class="navbar">
+      <div class="container navbar-content">
+        <a href="#" class="logo">
+          <span class="logo-icon"><i class="fas fa-satellite-dish"></i></span>
+          <span>MRRC-FT<span style="color: var(--accent)">8</span></span>
+        </a>
+        <ul class="nav-links">
+          <li><a href="#features">功能特性</a></li>
+          <li><a href="#live">在线电台</a></li>
+          <li><a href="#start">快速上手</a></li>
+          <li><a href="#architecture">系统架构</a></li>
+          <li><a href="../sdd.html">SDD</a></li>
+          <li>
+            <a
+              href="https://github.com/cheenle/mrrc_ft8"
+              target="_blank"
+              rel="noopener"
+            >
+              <i class="fab fa-github"></i> GitHub
+            </a>
+          </li>
+        </ul>
+        <div class="nav-actions">
+          <a href="../index.html" class="lang-btn">English</a>
+          <button class="mobile-menu-toggle" onclick="toggleMobileMenu()">
+            <i class="fas fa-bars"></i>
+          </button>
+        </div>
+      </div>
+    </nav>
+
+    <section class="hero">
+      <div class="hero-content">
+        <div class="hero-badge">
+          <i class="fas fa-check-circle"></i>
+          <span>v0.1.0 · FT-710 电台在线运行</span>
+        </div>
+        <h1 class="hero-title">
+          Headless FT8 服务器<br />
+          <span class="gradient">真实 DSP · 真实 QSO</span>
+        </h1>
+        <p class="hero-subtitle">
+          MRRC-FT8 将 WSJT-X 3.0.2 Improved DSP 核心（FT8/FT4 解码与编码）运行在
+          受监督的独立 Worker 中，配合 Python FastAPI 控制面、rigctld 电台控制和
+          横屏移动 Web 驾驶舱。打开浏览器——解码波段、选定电台、由 sequencer
+          自动完成一场标准 QSO。
+        </p>
+        <div class="hero-actions">
+          <a
+            href="https://radio.vlsc.net:9988"
+            class="btn btn-primary btn-large"
+            target="_blank"
+            rel="noopener"
+          >
+            <i class="fas fa-play"></i> 在线驾驶舱
+          </a>
+          <a href="#features" class="btn btn-secondary btn-large">
+            <i class="fas fa-arrow-down"></i> 了解功能
+          </a>
+          <a
+            href="https://github.com/cheenle/mrrc_ft8"
+            class="btn btn-secondary btn-large"
+            target="_blank"
+            rel="noopener"
+          >
+            <i class="fab fa-github"></i> GitHub
+          </a>
+        </div>
+      </div>
+    </section>
+
+    <!-- Features -->
+    <section
+      class="section"
+      id="features"
+      style="background: var(--bg-secondary)"
+    >
+      <div class="container">
+        <div class="section-header">
+          <span class="section-label">功能特性</span>
+          <h2 class="section-title">WSJT-X DSP，服务器级</h2>
+          <p class="section-subtitle">
+            你熟悉的 Improved 解码器，封装进 headless 服务器，配以安全、确定的时隙调度。
+          </p>
+        </div>
+
+        <div class="features-grid">
+          <div class="feature-card animate">
+            <div class="icon"><i class="fas fa-microchip"></i></div>
+            <h3>WSJT-X 3.0.2 Improved DSP</h3>
+            <p>
+              将精选的 Improved <code>ft8var</code> 源码编译为 C ABI 共享库。
+              FT8 标准 + Improved 解码，OpenMP Auto/1–12 分带；FT4 在 FT8 验收后加入。
+            </p>
+            <ul>
+              <li>可重定位构建——生产环境无需 vendor 源码树</li>
+              <li>OpenMP 分带间确定性、无重叠分配</li>
+              <li>FT8 174-bit 消息，精确 LDPC 编解码</li>
+            </ul>
+          </div>
+
+          <div class="feature-card animate">
+            <div class="icon"><i class="fas fa-shield-halved"></i></div>
+            <h3>受监督 DSP Worker</h3>
+            <p>
+              Fortran/OpenMP 状态只存在于独立 Worker 进程、经监督 IPC 访问。
+              所有 DSP 调用走单一 binding 锁——没有跨线程 packjt77 竞态，
+              OpenMP 线程绝不回调 Python。
+            </p>
+            <ul>
+              <li>崩溃自动重启监督，状态干净恢复</li>
+              <li>全局 DSP 锁串行化所有 ctypes 调用</li>
+              <li>进程边界隔离原生内存</li>
+            </ul>
+          </div>
+
+          <div class="feature-card animate">
+            <div class="icon"><i class="fas fa-wave-square"></i></div>
+            <h3>UTC 时隙纪律</h3>
+            <p>
+              每个调度决策都使用 <code>floor(epoch/TRperiod)</code>——唯一的时隙身份规则。
+              RX、TX、解码与编排全部对齐同一绝对 UTC 时隙网格。
+            </p>
+            <ul>
+              <li>UtcRing 按绝对采样序号寻址</li>
+              <li>无漂移、无驱逐错位</li>
+              <li>FT8 15 秒 / FT4 7.5 秒周期</li>
+            </ul>
+          </div>
+
+          <div class="feature-card animate">
+            <div class="icon"><i class="fas fa-tower-broadcast"></i></div>
+            <h3>Sequencer + PTT 安全</h3>
+            <p>
+              操作者选定目标——sequencer 在正确的对侧 TX 时隙自动完成一场标准 QSO，
+              配手动回复决策窗口、fit guard 与中央 PTT 安全控制器。
+            </p>
+            <ul>
+              <li>对侧相位由解码时隙奇偶计算</li>
+              <li>Fit guard：12.64 秒波形适配 15 秒时隙</li>
+              <li>任何已认证会话可立即 STOP TX</li>
+            </ul>
+          </div>
+
+          <div class="feature-card animate">
+            <div class="icon"><i class="fas fa-plug"></i></div>
+            <h3>rigctld 电台控制</h3>
+            <p>
+              串口只有一个 owner：rigctld。服务器经 loopback TCP 走 CAT——
+              频率、模式、PTT——任何模块都不得直接打开串口设备。
+            </p>
+            <ul>
+              <li>单一串口 owner——无 CAT 交错损坏</li>
+              <li>Loopback TCP / unix socket</li>
+              <li>经 rigctl / hamlib 指令 PTT</li>
+            </ul>
+          </div>
+
+          <div class="feature-card animate">
+            <div class="icon"><i class="fas fa-database"></i></div>
+            <h3>持久化 QSO 日志 + ADIF</h3>
+            <p>
+              每场完成的 QSO 落入 canonical SQLite 存储，sequencer 完成时捕获
+              起始/波段上下文，并可导出 ADIF 交给你的日志软件。
+            </p>
+            <ul>
+              <li>SQLite canonical QSO/审计/历史记录</li>
+              <li>拨号频率 → ADIF 波段名映射</li>
+              <li>on_qso 在完成时只触发一次，而非每段</li>
+            </ul>
+          </div>
+
+          <div class="feature-card animate">
+            <div class="icon"><i class="fas fa-chart-area"></i></div>
+            <h3>3 kHz 瀑布图</h3>
+            <p>
+              FT8 通带约 0–3 kHz，因此频谱帧只输出 3 kHz 跨度——没有空白半画布、
+              载荷减半，客户端把每个 bin 映射到整个瀑布图。
+            </p>
+            <ul>
+              <li>显示带宽可配置</li>
+              <li>校验保持在 0..rate/2 内</li>
+              <li>波段选择：7/14/21/28 MHz</li>
+            </ul>
+          </div>
+
+          <div class="feature-card animate">
+            <div class="icon"><i class="fas fa-mobile-alt"></i></div>
+            <h3>横屏移动驾驶舱</h3>
+            <p>
+              为横放在电台旁的手机打造的移动优先 PWA：横屏完整控制，
+              竖屏降级为观察者/STOP 视图。无构建步骤——纯 vanilla JS 模块。
+            </p>
+            <ul>
+              <li>多观察者会话共享一个控制租约</li>
+              <li>5 秒心跳 / 15 秒 TTL 租约续期</li>
+              <li>WebSocket secure-cookie 认证，Caddy TLS 边缘</li>
+            </ul>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Live Station -->
+    <section class="section" id="live" style="background: var(--bg-primary)">
+      <div class="container" style="text-align: center">
+        <div class="section-header">
+          <span class="section-label">在线电台</span>
+          <h2 class="section-title">BG1SB / FT-710 · ON80DA 实战</h2>
+          <p class="section-subtitle">
+            v0.1.0 正在真实 FT-710 电台上运行。2026-08-03 实战闭环了 RX/TX 根因——
+            UTC-ring 驱逐错位、Replay 对侧时隙相位、手动回复决策窗口——
+            真实 FT8 QSO 已通过移动驾驶舱持续完成。
+          </p>
+        </div>
+        <div style="display: flex; gap: 1rem; justify-content: center; flex-wrap: wrap">
+          <a
+            href="https://radio.vlsc.net:9988"
+            class="btn btn-primary btn-large"
+            target="_blank"
+            rel="noopener"
+          >
+            <i class="fas fa-play"></i> 打开在线驾驶舱
+          </a>
+          <a
+            href="https://github.com/cheenle/mrrc_ft8"
+            class="btn btn-secondary btn-large"
+            target="_blank"
+            rel="noopener"
+          >
+            <i class="fab fa-github"></i> 源码
+          </a>
+        </div>
+        <p style="color: var(--text-muted); font-size: 0.85rem; margin-top: 1.25rem">
+          在线边缘：<code>https://radio.vlsc.net:9988</code>——Caddy TLS 配
+          acme.sh DNS-01 证书；FastAPI 与 rigctld 保持仅本机监听。
+        </p>
+      </div>
+    </section>
+
+    <!-- Quick Start -->
+    <section class="section" id="start" style="background: var(--bg-secondary)">
+      <div class="container">
+        <div class="section-header">
+          <span class="section-label">快速上手</span>
+          <h2 class="section-title">五步构建并运行</h2>
+          <p class="section-subtitle">
+            macOS 或 Linux。DSP 核心需要 gfortran-mp-13 + FFTW3f，服务器本体一个
+            Python venv 即可。
+          </p>
+        </div>
+
+        <div class="steps">
+          <div class="step">
+            <h4>1 · 构建 DSP 核心</h4>
+            <p>CMake 将 Fortran shim + 精选 Improved 源码编译为 <code>wsjt_core</code>。</p>
+            <code>cmake -S dsp -B dsp/build -DCMAKE_Fortran_COMPILER=gfortran-mp-13 && cmake --build dsp/build -j</code>
+          </div>
+          <div class="step">
+            <h4>2 · 安装 Python 环境</h4>
+            <p>Editable 安装拉取 FastAPI、uvicorn、numpy 与测试依赖。</p>
+            <code>python3 -m venv venv && venv/bin/pip install -e '.[dev]'</code>
+          </div>
+          <div class="step">
+            <h4>3 · 设置 OMP_STACKSIZE</h4>
+            <p>Improved <code>sync8var</code> 在线程栈分配大型工作数组——10 MB，须在 NumPy/OpenMP 加载前设置。</p>
+            <code>export OMP_STACKSIZE=10M</code>
+          </div>
+          <div class="step">
+            <h4>4 · 配置并启动</h4>
+            <p>设置 <code>MRRC_FT8_*</code> 环境变量（密码哈希用 <code>--hash-password</code> 生成、呼号、网格、音频设备、允许主机）。</p>
+            <code>venv/bin/python -m server.main</code>
+          </div>
+          <div class="step">
+            <h4>5 · 浏览器打开</h4>
+            <p>打开驾驶舱、登录、选定电台并完成一场 QSO。完整部署模板（Caddy、LaunchAgent、systemd）在 <code>deploy/</code>。</p>
+            <code>https://your-host:9988 → 登录 → 选波段 → 开打</code>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Requirements -->
+    <section
+      class="section"
+      id="requirements"
+      style="background: var(--bg-primary)"
+    >
+      <div class="container" style="text-align: center">
+        <div class="section-header">
+          <span class="section-label">环境要求</span>
+          <h2 class="section-title">你需要什么</h2>
+        </div>
+        <div class="tech-stack" style="margin-bottom: 0">
+          <span class="tech-tag"><i class="fas fa-broadcast-tower"></i> 任意带 CAT 的 HF 电台</span>
+          <span class="tech-tag"><i class="fas fa-microchip"></i> rigctld（hamlib）</span>
+          <span class="tech-tag"><i class="fas fa-server"></i> macOS / Linux</span>
+          <span class="tech-tag"><i class="fas fa-compiler"></i> gfortran-mp-13 + FFTW3f</span>
+          <span class="tech-tag"><i class="fab fa-python"></i> Python 3.11+</span>
+          <span class="tech-tag"><i class="fas fa-code-branch"></i> CMake ≥ 3.16</span>
+          <span class="tech-tag"><i class="fas fa-globe"></i> 现代移动浏览器</span>
+          <span class="tech-tag"><i class="fas fa-shield-halved"></i> Caddy TLS 边缘（可选）</span>
+        </div>
+      </div>
+    </section>
+
+    <!-- Architecture -->
+    <section
+      class="section"
+      id="architecture"
+      style="background: var(--bg-primary)"
+    >
+      <div class="container">
+        <div class="section-header">
+          <span class="section-label">系统架构</span>
+          <h2 class="section-title">分层 · 受监督 · 确定</h2>
+          <p class="section-subtitle">
+            浏览器 → TLS 边缘 → FastAPI 控制面 → 受监督 DSP Worker → 共享原生库。
+            每个资源只有一个 owner。
+          </p>
+        </div>
+
+        <div class="arch-diagram">
+          <svg viewBox="0 0 880 200" xmlns="http://www.w3.org/2000/svg">
+            <defs>
+              <linearGradient id="gBoxApp" x1="0" y1="0" x2="1" y2="1">
+                <stop offset="0%" stop-color="rgba(34,211,238,0.08)" />
+                <stop offset="100%" stop-color="rgba(34,211,238,0.02)" />
+              </linearGradient>
+              <linearGradient id="gBoxSrv" x1="0" y1="0" x2="1" y2="1">
+                <stop offset="0%" stop-color="rgba(93,173,226,0.08)" />
+                <stop offset="100%" stop-color="rgba(93,173,226,0.02)" />
+              </linearGradient>
+              <linearGradient id="gBoxWkr" x1="0" y1="0" x2="1" y2="1">
+                <stop offset="0%" stop-color="rgba(155,89,182,0.08)" />
+                <stop offset="100%" stop-color="rgba(155,89,182,0.02)" />
+              </linearGradient>
+              <linearGradient id="gBoxHw" x1="0" y1="0" x2="1" y2="1">
+                <stop offset="0%" stop-color="rgba(46,204,113,0.08)" />
+                <stop offset="100%" stop-color="rgba(46,204,113,0.02)" />
+              </linearGradient>
+            </defs>
+
+            <rect
+              x="10"
+              y="15"
+              width="230"
+              height="110"
+              rx="14"
+              fill="url(#gBoxApp)"
+              stroke="rgba(34,211,238,0.35)"
+              stroke-width="1.5"
+            />
+            <text
+              x="125"
+              y="44"
+              text-anchor="middle"
+              fill="#22d3ee"
+              font-size="15"
+              font-weight="700"
+              font-family="inherit"
+            >
+              浏览器
+            </text>
+            <text
+              x="125"
+              y="66"
+              text-anchor="middle"
+              fill="#8899aa"
+              font-size="12"
+              font-family="inherit"
+            >
+              横屏移动驾驶舱
+            </text>
+            <text
+              x="125"
+              y="88"
+              text-anchor="middle"
+              fill="#5c6370"
+              font-size="11"
+              font-family="inherit"
+            >
+              瀑布图 · 解码信息流
+            </text>
+            <text
+              x="125"
+              y="107"
+              text-anchor="middle"
+              fill="#5c6370"
+              font-size="11"
+              font-family="inherit"
+            >
+              Vanilla JS · PWA
+            </text>
+
+            <rect
+              x="460"
+              y="15"
+              width="230"
+              height="110"
+              rx="14"
+              fill="url(#gBoxSrv)"
+              stroke="rgba(93,173,226,0.35)"
+              stroke-width="1.5"
+            />
+            <text
+              x="575"
+              y="44"
+              text-anchor="middle"
+              fill="#5dade2"
+              font-size="15"
+              font-weight="700"
+              font-family="inherit"
+            >
+              FastAPI 主进程
+            </text>
+            <text
+              x="575"
+              y="66"
+              text-anchor="middle"
+              fill="#8899aa"
+              font-size="12"
+              font-family="inherit"
+            >
+              认证 · 租约 · UTC · 音频 · rig
+            </text>
+            <text
+              x="575"
+              y="88"
+              text-anchor="middle"
+              fill="#5c6370"
+              font-size="11"
+              font-family="inherit"
+            >
+              sequencer · PTT 安全
+            </text>
+            <text
+              x="575"
+              y="107"
+              text-anchor="middle"
+              fill="#5c6370"
+              font-size="11"
+              font-family="inherit"
+            >
+              SQLite · ADIF · 瀑布图
+            </text>
+
+            <rect
+              x="260"
+              y="30"
+              width="180"
+              height="95"
+              rx="14"
+              fill="url(#gBoxWkr)"
+              stroke="rgba(155,89,182,0.35)"
+              stroke-width="1.5"
+            />
+            <text
+              x="350"
+              y="58"
+              text-anchor="middle"
+              fill="#9b59b6"
+              font-size="14"
+              font-weight="700"
+              font-family="inherit"
+            >
+              DSP Worker
+            </text>
+            <text
+              x="350"
+              y="78"
+              text-anchor="middle"
+              fill="#8899aa"
+              font-size="11"
+              font-family="inherit"
+            >
+              受监督 IPC
+            </text>
+            <text
+              x="350"
+              y="96"
+              text-anchor="middle"
+              fill="#5c6370"
+              font-size="10"
+              font-family="inherit"
+            >
+              binding 锁 · packjt77
+            </text>
+            <text
+              x="350"
+              y="112"
+              text-anchor="middle"
+              fill="#5c6370"
+              font-size="10"
+              font-family="inherit"
+            >
+              OpenMP 分带 1–12
+            </text>
+
+            <rect
+              x="710"
+              y="30"
+              width="160"
+              height="95"
+              rx="14"
+              fill="url(#gBoxHw)"
+              stroke="rgba(46,204,113,0.35)"
+              stroke-width="1.5"
+            />
+            <text
+              x="790"
+              y="58"
+              text-anchor="middle"
+              fill="#2ecc71"
+              font-size="14"
+              font-weight="700"
+              font-family="inherit"
+            >
+              HF 电台
+            </text>
+            <text
+              x="790"
+              y="78"
+              text-anchor="middle"
+              fill="#8899aa"
+              font-size="11"
+              font-family="inherit"
+            >
+              FT-710 实战电台
+            </text>
+            <text
+              x="790"
+              y="96"
+              text-anchor="middle"
+              fill="#5c6370"
+              font-size="10"
+              font-family="inherit"
+            >
+              经 rigctld 走 CAT
+            </text>
+            <text
+              x="790"
+              y="112"
+              text-anchor="middle"
+              fill="#5c6370"
+              font-size="10"
+              font-family="inherit"
+            >
+              USB 音频 48 kHz
+            </text>
+
+            <line
+              x1="240"
+              y1="70"
+              x2="460"
+              y2="70"
+              stroke="rgba(34,211,238,0.4)"
+              stroke-width="1.5"
+            />
+            <polygon
+              points="452,64 466,70 452,76"
+              fill="rgba(34,211,238,0.5)"
+            />
+            <polygon
+              points="248,64 234,70 248,76"
+              fill="rgba(34,211,238,0.5)"
+            />
+            <text
+              x="350"
+              y="62"
+              text-anchor="middle"
+              fill="#22d3ee"
+              font-size="11"
+              font-weight="600"
+              font-family="inherit"
+            >
+              HTTPS / WSS
+            </text>
+            <text
+              x="350"
+              y="82"
+              text-anchor="middle"
+              fill="#8899aa"
+              font-size="10"
+              font-family="inherit"
+            >
+              Caddy TLS 边缘
+            </text>
+
+            <line
+              x1="440"
+              y1="70"
+              x2="260"
+              y2="70"
+              stroke="rgba(155,89,182,0.4)"
+              stroke-width="1.5"
+            />
+            <polygon
+              points="268,64 254,70 268,76"
+              fill="rgba(155,89,182,0.5)"
+            />
+            <text
+              x="350"
+              y="128"
+              text-anchor="middle"
+              fill="#9b59b6"
+              font-size="10"
+              font-weight="600"
+              font-family="inherit"
+            >
+              受监督 IPC
+            </text>
+
+            <path
+              d="M 690 70 L 690 77 L 710 77"
+              stroke="rgba(46,204,113,0.35)"
+              stroke-width="1.5"
+              fill="none"
+            />
+            <polygon
+              points="718,73 710,77 718,81"
+              fill="rgba(46,204,113,0.45)"
+            />
+            <text
+              x="700"
+              y="135"
+              text-anchor="middle"
+              fill="#2ecc71"
+              font-size="10"
+              font-weight="600"
+              font-family="inherit"
+            >
+              loopback
+            </text>
+
+            <g transform="translate(10,145)">
+              <rect
+                x="0"
+                y="0"
+                width="195"
+                height="36"
+                rx="6"
+                fill="rgba(255,255,255,0.03)"
+                stroke="rgba(255,255,255,0.05)"
+                stroke-width="1"
+              />
+              <text
+                x="8"
+                y="15"
+                fill="#22d3ee"
+                font-size="9"
+                font-family="monospace"
+              >
+                /WScontrol
+              </text>
+              <text
+                x="8"
+                y="29"
+                fill="#8899aa"
+                font-size="9"
+                font-family="inherit"
+              >
+                JSON · 选择 / 回复 / CQ
+              </text>
+            </g>
+            <g transform="translate(215,145)">
+              <rect
+                x="0"
+                y="0"
+                width="195"
+                height="36"
+                rx="6"
+                fill="rgba(255,255,255,0.03)"
+                stroke="rgba(255,255,255,0.05)"
+                stroke-width="1"
+              />
+              <text
+                x="8"
+                y="15"
+                fill="#5dade2"
+                font-size="9"
+                font-family="monospace"
+              >
+                /WSstate
+              </text>
+              <text
+                x="8"
+                y="29"
+                fill="#8899aa"
+                font-size="9"
+                font-family="inherit"
+              >
+                解码流 · 波段 · 租约
+              </text>
+            </g>
+            <g transform="translate(430,145)">
+              <rect
+                x="0"
+                y="0"
+                width="195"
+                height="36"
+                rx="6"
+                fill="rgba(255,255,255,0.03)"
+                stroke="rgba(255,255,255,0.05)"
+                stroke-width="1"
+              />
+              <text
+                x="8"
+                y="15"
+                fill="#2ecc71"
+                font-size="9"
+                font-family="monospace"
+              >
+                /WSwaterfall
+              </text>
+              <text
+                x="8"
+                y="29"
+                fill="#8899aa"
+                font-size="9"
+                font-family="inherit"
+              >
+                3 kHz 跨度 bins
+              </text>
+            </g>
+            <g transform="translate(645,145)">
+              <rect
+                x="0"
+                y="0"
+                width="195"
+                height="36"
+                rx="6"
+                fill="rgba(255,255,255,0.03)"
+                stroke="rgba(255,255,255,0.05)"
+                stroke-width="1"
+              />
+              <text
+                x="8"
+                y="15"
+                fill="#e67e22"
+                font-size="9"
+                font-family="monospace"
+              >
+                /WSqso
+              </text>
+              <text
+                x="8"
+                y="29"
+                fill="#8899aa"
+                font-size="9"
+                font-family="inherit"
+              >
+                sequencer · QSO 日志事件
+              </text>
+            </g>
+          </svg>
+        </div>
+
+        <div class="arch-grid">
+          <div class="arch-card">
+            <div class="label"><i class="fas fa-code-branch"></i> DSP 流水线</div>
+            <div class="endpoint">12 kHz int16 单声道输入</div>
+            <div class="dir">ft8var OpenMP 解码</div>
+            <div class="payload">
+              受监督 Worker → wsjt_core → 解码；TX 波形恒为 48 kHz
+            </div>
+          </div>
+          <div class="arch-card">
+            <div class="label">
+              <i class="fas fa-clock"></i> UTC 时隙网格
+            </div>
+            <div class="endpoint">floor(epoch / TRperiod)</div>
+            <div class="dir">绝对时隙身份</div>
+            <div class="payload">
+              UtcRing 按绝对采样序号寻址；无驱逐漂移
+            </div>
+          </div>
+          <div class="arch-card">
+            <div class="label"><i class="fas fa-key"></i> 控制租约</div>
+            <div class="endpoint">多观察者，单一控制</div>
+            <div class="dir">5 秒心跳 / 15 秒 TTL</div>
+            <div class="payload">
+              任何已认证会话可 STOP TX；启动 TX 需持有租约
+            </div>
+          </div>
+          <div class="arch-card">
+            <div class="label">
+              <i class="fas fa-network-wired"></i> 公网边缘
+            </div>
+            <div class="endpoint">仅 Caddy :80/:443</div>
+            <div class="dir">acme.sh DNS-01 TLS</div>
+            <div class="payload">
+              FastAPI + rigctld 仅本机监听；WebSocket secure-cookie 认证
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Key Numbers -->
+    <section class="section" id="numbers" style="background: var(--bg-secondary)">
+      <div class="container">
+        <div class="section-header">
+          <span class="section-label">关键数字</span>
+          <h2 class="section-title">DSP · 时隙 · 安全——量化一览</h2>
+        </div>
+
+        <div class="perf-grid">
+          <div class="perf-card">
+            <div class="metric">12 kHz</div>
+            <div class="metric-label">
+              解码器输入<br /><small>int16 单声道——唯一允许的采样率</small>
+            </div>
+          </div>
+          <div class="perf-card">
+            <div class="metric">48 kHz</div>
+            <div class="metric-label">
+              TX 波形<br /><small>固定 TX 采样率域</small>
+            </div>
+          </div>
+          <div class="perf-card">
+            <div class="metric">15 s</div>
+            <div class="metric-label">
+              FT8 时隙周期<br /><small>floor(epoch/TRperiod) 身份</small>
+            </div>
+          </div>
+          <div class="perf-card">
+            <div class="metric">1–12</div>
+            <div class="metric-label">
+              OpenMP 分带<br /><small>确定性分配</small>
+            </div>
+          </div>
+          <div class="perf-card">
+            <div class="metric">3 kHz</div>
+            <div class="metric-label">
+              瀑布图跨度<br /><small>FT8 通带，无空白半幅</small>
+            </div>
+          </div>
+          <div class="perf-card">
+            <div class="metric">40</div>
+            <div class="metric-label">
+              回归测试<br /><small>ft8sim/ft4sim 合成信号</small>
+            </div>
+          </div>
+        </div>
+
+        <h3
+          style="
+            text-align: center;
+            color: var(--text-primary);
+            margin-top: 3rem;
+            margin-bottom: 1.5rem;
+          "
+        >
+          技术栈
+        </h3>
+        <div class="tech-stack">
+          <span class="tech-tag">WSJT-X 3.0.2 Improved</span>
+          <span class="tech-tag">Fortran + OpenMP</span>
+          <span class="tech-tag">FastAPI + Uvicorn</span>
+          <span class="tech-tag">asyncio</span>
+          <span class="tech-tag">rigctld / hamlib</span>
+          <span class="tech-tag">SQLite</span>
+          <span class="tech-tag">ADIF</span>
+          <span class="tech-tag">Caddy TLS</span>
+          <span class="tech-tag">PortAudio 采集</span>
+          <span class="tech-tag">Vanilla JS PWA</span>
+        </div>
+      </div>
+    </section>
+
+    <!-- SDD Chapters -->
+    <section class="section" id="sdd" style="background: var(--bg-primary)">
+      <div class="container">
+        <div class="section-header">
+          <span class="section-label">设计记录</span>
+          <h2 class="section-title">SDD 15 章</h2>
+          <p class="section-subtitle">
+            完整 IBM TeamSD 风格系统设计说明书——需求、架构决策、安全分析与版本演进。
+          </p>
+        </div>
+        <div class="steps">
+          <div class="step"><h4><a href="../sdd/01-executive-summary.html">01 执行摘要</a></h4></div>
+          <div class="step"><h4><a href="../sdd/02-business-direction.html">02 业务方向</a></h4></div>
+          <div class="step"><h4><a href="../sdd/03-project-definition.html">03 项目定义</a></h4></div>
+          <div class="step"><h4><a href="../sdd/04-system-context.html">04 系统上下文</a></h4></div>
+          <div class="step"><h4><a href="../sdd/05-non-functional-requirements.html">05 非功能需求</a></h4></div>
+          <div class="step"><h4><a href="../sdd/06-use-case-model.html">06 用例模型</a></h4></div>
+          <div class="step"><h4><a href="../sdd/07-subject-area-model.html">07 主题域模型</a></h4></div>
+          <div class="step"><h4><a href="../sdd/08-architecture-decisions.html">08 架构决策</a></h4></div>
+          <div class="step"><h4><a href="../sdd/09-architecture-overview.html">09 架构总览</a></h4></div>
+          <div class="step"><h4><a href="../sdd/10-service-model.html">10 服务模型</a></h4></div>
+          <div class="step"><h4><a href="../sdd/11-component-model.html">11 组件模型</a></h4></div>
+          <div class="step"><h4><a href="../sdd/12-operational-model.html">12 运行模型</a></h4></div>
+          <div class="step"><h4><a href="../sdd/13-feasibility-assessment.html">13 可行性评估</a></h4></div>
+          <div class="step"><h4><a href="../sdd/14-version-history.html">14 版本历史</a></h4></div>
+          <div class="step"><h4><a href="../sdd/15-ptt-safety-architecture.html">15 PTT 安全架构</a></h4></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Architecture Decisions -->
+    <section class="section" id="decisions" style="background: var(--bg-secondary)">
+      <div class="container">
+        <div class="section-header">
+          <span class="section-label">架构决策</span>
+          <h2 class="section-title">AD-001 … AD-015</h2>
+        </div>
+        <div class="tech-stack">
+          <span class="tech-tag">AD-001 Headless 分层服务器</span>
+          <span class="tech-tag">AD-002 WSJT-X C ABI</span>
+          <span class="tech-tag">AD-003 受监督 DSP Worker</span>
+          <span class="tech-tag">AD-004 固定音频采样率域</span>
+          <span class="tech-tag">AD-005 单一 DSP owner + 锁</span>
+          <span class="tech-tag">AD-006 UTC 时隙纪律</span>
+          <span class="tech-tag">AD-007 Sequencer/PTT 安全</span>
+          <span class="tech-tag">AD-008 rigctld 串口 owner</span>
+          <span class="tech-tag">AD-009 Caddy 边缘 + Cookie 认证</span>
+          <span class="tech-tag">AD-010 单一控制租约</span>
+          <span class="tech-tag">AD-011 横屏优先驾驶舱</span>
+          <span class="tech-tag">AD-012 人工选台，单场 QSO</span>
+          <span class="tech-tag">AD-013 独立有界数据流</span>
+          <span class="tech-tag">AD-014 SQLite + ADIF</span>
+          <span class="tech-tag">AD-015 原生服务部署</span>
+        </div>
+      </div>
+    </section>
+
+    <footer class="footer">
+      <div class="container">
+        <div class="footer-grid">
+          <div class="footer-section">
+            <h4>MRRC-FT8</h4>
+            <p>
+              基于 WSJT-X 3.0.2 Improved DSP 核心的 headless FT8/FT4 服务器。
+              作者
+              <a href="https://github.com/cheenle" style="color: var(--accent)"
+                >BG1SB</a
+              >。
+            </p>
+          </div>
+          <div class="footer-section">
+            <h4>链接</h4>
+            <ul>
+              <li><a href="#">首页</a></li>
+              <li><a href="#features">功能特性</a></li>
+              <li><a href="#live">在线电台</a></li>
+              <li><a href="#architecture">系统架构</a></li>
+              <li><a href="#start">快速上手</a></li>
+            </ul>
+          </div>
+          <div class="footer-section">
+            <h4>资源</h4>
+            <ul>
+              <li>
+                <a
+                  href="https://radio.vlsc.net:9988"
+                  target="_blank"
+                  rel="noopener"
+                  >在线驾驶舱</a
+                >
+              </li>
+              <li>
+                <a
+                  href="https://github.com/cheenle/mrrc_ft8"
+                  target="_blank"
+                  rel="noopener"
+                  >GitHub</a
+                >
+              </li>
+              <li>
+                <a
+                  href="https://github.com/cheenle/mrrc_ft8/blob/main/README.md"
+                  target="_blank"
+                  rel="noopener"
+                  >README</a
+                >
+              </li>
+              <li><a href="../sdd.html">SDD 文档</a></li>
+              <li>
+                <a
+                  href="https://github.com/cheenle/mrrc_ft8/tree/main/SDD"
+                  target="_blank"
+                  rel="noopener"
+                  >SDD 源码</a
+                >
+              </li>
+              <li>
+                <a
+                  href="https://github.com/cheenle/mrrc_ft8/blob/main/LICENSE"
+                  target="_blank"
+                  rel="noopener"
+                  >GPLv3 许可证</a
+                >
+              </li>
+            </ul>
+          </div>
+        </div>
+        <div class="footer-bottom">
+          <p>
+            &copy; 2026 MRRC-FT8 Project. Open Source under GPLv3 License. ·
+            WSJT-X 与 FT8/FT4 为 WSJT Group 与 K1JT 的项目。
+          </p>
+        </div>
+      </div>
+    </footer>
+
+    <script>
+      function toggleMobileMenu() {
+        document.querySelector(".nav-links").classList.toggle("active");
+      }
+      document.querySelectorAll('a[href^="#"]').forEach((a) => {
+        a.addEventListener("click", function (e) {
+          e.preventDefault();
+          const t = document.querySelector(this.getAttribute("href"));
+          if (t) t.scrollIntoView({ behavior: "smooth", block: "start" });
+        });
+      });
+      const nav = document.querySelector(".navbar");
+      window.addEventListener("scroll", () => {
+        nav.style.background =
+          window.scrollY > 50 ? "rgba(10,10,10,0.98)" : "rgba(10,10,10,0.92)";
+      });
+    </script>
+    <script src="../js/global-nav.js?v=2" defer data-gn="1"></script>
+  </body>
+</html>

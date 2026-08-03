@@ -1,0 +1,207 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="MRRC-FT8 软件设计说明书（SDD）总览：架构决策、服务模型、组件模型与版本演进。">
+    <meta name="author" content="BG1SB">
+    <meta name="theme-color" content="#0a0a0a">
+    <title>MRRC-FT8 SDD</title>
+
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+
+    <link rel="stylesheet" href="../css/octen.css?v=4">
+    <link rel="stylesheet" href="../css/sunsdrmobile.css?v=1">
+    <link rel="stylesheet" href="../css/ft8.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+</head>
+<body data-site="mrrc_ft8">
+
+<nav class="navbar">
+    <div class="container navbar-content">
+        <a href="index.html" class="logo">
+            <span class="logo-icon"><i class="fas fa-file-lines"></i></span>
+            <span>FT-8 <span style="color: var(--accent);">SDD</span></span>
+        </a>
+        <ul class="nav-links">
+            <li><a href="#overview">总览</a></li>
+            <li><a href="#updates">最新更新</a></li>
+            <li><a href="#chapters">章节目录</a></li>
+            <li><a href="#decisions">AD 索引</a></li>
+            <li><a href="https://github.com/cheenle/mrrc_ft8/tree/main/SDD" target="_blank" rel="noopener">GitHub</a></li>
+        </ul>
+        <div class="nav-actions">
+            <a href="../sdd.html" class="lang-btn">English</a>
+            <button class="mobile-menu-toggle" onclick="toggleMobileMenu()"><i class="fas fa-bars"></i></button>
+        </div>
+    </div>
+</nav>
+
+<section class="hero">
+    <div class="hero-content">
+        <div class="hero-badge">
+            <i class="fas fa-book"></i>
+            <span>SDD V1.1 · 2026-08-03</span>
+        </div>
+        <h1 class="hero-title">MRRC-FT8<br><span class="gradient">软件设计说明书</span></h1>
+        <p class="hero-subtitle">
+            用于记录 headless FT8/FT4 服务器的架构、接口、运行模型与版本演进，
+            作为实现与设计的一致性基线文档。
+        </p>
+        <div class="hero-actions">
+            <a href="../sdd/index.html" class="btn btn-primary btn-large">
+                <i class="fas fa-book"></i> 浏览 SDD 章节
+            </a>
+            <a href="index.html" class="btn btn-secondary btn-large">
+                <i class="fas fa-arrow-left"></i> 返回产品页面
+            </a>
+        </div>
+    </div>
+</section>
+
+<section class="section" id="overview" style="background: var(--bg-secondary);">
+    <div class="container">
+        <div class="section-header">
+            <span class="section-label">总览</span>
+            <h2 class="section-title">SDD 范围</h2>
+            <p class="section-subtitle">IBM TeamSD 对齐，15 章，内容与实现状态一致。</p>
+        </div>
+        <table>
+            <thead>
+            <tr><th>属性</th><th>值</th></tr>
+            </thead>
+            <tbody>
+            <tr><td>文档 ID</td><td>SDD-MRRC-FT8-2026-001</td></tr>
+            <tr><td>版本</td><td>V1.1</td></tr>
+            <tr><td>基线日期</td><td>2026-08-03</td></tr>
+            <tr><td>阶段</td><td>radio.vlsc.net:9988 在线运行（BG1SB / ON80DA，FT-710）</td></tr>
+            <tr><td>运行时</td><td>WSJT-X 3.0.2 Improved DSP + FastAPI + Uvicorn + NumPy</td></tr>
+            <tr><td>前端</td><td>HTML5, CSS3, vanilla JavaScript, Canvas PWA</td></tr>
+            <tr><td>核心接口</td><td>FastAPI REST/WS + 受监督 DSP Worker IPC + rigctld loopback</td></tr>
+            </tbody>
+        </table>
+    </div>
+</section>
+
+<section class="section" id="updates" style="background: var(--bg-primary);">
+    <div class="container">
+        <div class="section-header">
+            <span class="section-label">最新更新</span>
+            <h2 class="section-title">V1.1 落地了什么</h2>
+        </div>
+        <div class="features-grid">
+            <div class="feature-card">
+                <div class="icon"><i class="fas fa-bug-slash"></i></div>
+                <h3>UtcRing 驱逐错位根因</h3>
+                <p>环形物理位置曾以 (absolute − base) % capacity 寻址，驱逐推进 base 后读取按新 base 寻址而数据从未移动——偏移随墙钟 1:1 增长、在容量处回绕。现改为仅按绝对采样序号寻址（X % capacity）：驱逐永不移动数据，base 仅作边界检查。</p>
+            </div>
+            <div class="feature-card">
+                <div class="icon"><i class="fas fa-exchange-alt"></i></div>
+                <h3>Replay 对侧 TX 时隙相位</h3>
+                <p>回复路径缺少 UC-003「对侧 TX 时隙」：TxDriver 曾门控在永不变化的硬编码偶相位上，回复同相位的台总是碰撞。sequencer 现携带 tx_phase = 1 − slot_id % 2，QSO 交替至完成。</p>
+            </div>
+            <div class="feature-card">
+                <div class="icon"><i class="fas fa-clock"></i></div>
+                <h3>手动回复决策窗口</h3>
+                <p>回复总是错过其所答消息之后的那个时隙。TX 决策现为临时性的：窗口保持打开至 decision_cutoff 并采用轮询而非睡眠，fit guard 将超过适配截止的回复推迟到下一个可用时隙。</p>
+            </div>
+            <div class="feature-card">
+                <div class="icon"><i class="fas fa-chart-area"></i></div>
+                <h3>3 kHz 瀑布 + 波段选择</h3>
+                <p>频谱帧现仅输出 3 kHz FT8 通带——无空白半画布、载荷减半。驾驶舱顶栏波段选择器经租约门控的 /radio/band 变更调谐 7/14/21/28 MHz FT8 拨号频率。</p>
+            </div>
+        </div>
+    </div>
+</section>
+
+<section class="section" id="chapters" style="background: var(--bg-secondary);">
+    <div class="container">
+        <div class="section-header">
+            <span class="section-label">章节目录</span>
+            <h2 class="section-title">SDD 15 章</h2>
+        </div>
+        <div class="steps">
+            <div class="step"><h4><a href="../sdd/01-executive-summary.html">01 执行摘要</a></h4></div>
+            <div class="step"><h4><a href="../sdd/02-business-direction.html">02 业务方向</a></h4></div>
+            <div class="step"><h4><a href="../sdd/03-project-definition.html">03 项目定义</a></h4></div>
+            <div class="step"><h4><a href="../sdd/04-system-context.html">04 系统上下文</a></h4></div>
+            <div class="step"><h4><a href="../sdd/05-non-functional-requirements.html">05 非功能需求</a></h4></div>
+            <div class="step"><h4><a href="../sdd/06-use-case-model.html">06 用例模型</a></h4></div>
+            <div class="step"><h4><a href="../sdd/07-subject-area-model.html">07 主题域模型</a></h4></div>
+            <div class="step"><h4><a href="../sdd/08-architecture-decisions.html">08 架构决策</a></h4></div>
+            <div class="step"><h4><a href="../sdd/09-architecture-overview.html">09 架构总览</a></h4></div>
+            <div class="step"><h4><a href="../sdd/10-service-model.html">10 服务模型</a></h4></div>
+            <div class="step"><h4><a href="../sdd/11-component-model.html">11 组件模型</a></h4></div>
+            <div class="step"><h4><a href="../sdd/12-operational-model.html">12 运行模型</a></h4></div>
+            <div class="step"><h4><a href="../sdd/13-feasibility-assessment.html">13 可行性评估</a></h4></div>
+            <div class="step"><h4><a href="../sdd/14-version-history.html">14 版本历史</a></h4></div>
+            <div class="step"><h4><a href="../sdd/15-ptt-safety-architecture.html">15 PTT 安全架构</a></h4></div>
+        </div>
+    </div>
+</section>
+
+<section class="section" id="decisions" style="background: var(--bg-primary);">
+    <div class="container">
+        <div class="section-header">
+            <span class="section-label">架构决策</span>
+            <h2 class="section-title">AD-001 … AD-015</h2>
+        </div>
+        <div class="tech-stack">
+            <span class="tech-tag">AD-001 Headless 分层服务器</span>
+            <span class="tech-tag">AD-002 WSJT-X C ABI</span>
+            <span class="tech-tag">AD-003 受监督 DSP Worker</span>
+            <span class="tech-tag">AD-004 固定音频采样率域</span>
+            <span class="tech-tag">AD-005 单一 DSP owner + 锁</span>
+            <span class="tech-tag">AD-006 UTC 时隙纪律</span>
+            <span class="tech-tag">AD-007 Sequencer/PTT 安全</span>
+            <span class="tech-tag">AD-008 rigctld 串口 owner</span>
+            <span class="tech-tag">AD-009 Caddy 边缘 + Cookie 认证</span>
+            <span class="tech-tag">AD-010 单一控制租约</span>
+            <span class="tech-tag">AD-011 横屏优先驾驶舱</span>
+            <span class="tech-tag">AD-012 人工选台，单场 QSO</span>
+            <span class="tech-tag">AD-013 独立有界数据流</span>
+            <span class="tech-tag">AD-014 SQLite + ADIF</span>
+            <span class="tech-tag">AD-015 原生服务部署</span>
+        </div>
+    </div>
+</section>
+
+<footer class="footer">
+    <div class="container">
+        <div class="footer-grid">
+            <div class="footer-section">
+                <h4>MRRC-FT8 SDD</h4>
+                <p>与实现状态对齐的设计文档。</p>
+            </div>
+            <div class="footer-section">
+                <h4>链接</h4>
+                <ul>
+                    <li><a href="index.html">FT-8 网站</a></li>
+                    <li><a href="https://github.com/cheenle/mrrc_ft8/tree/main/SDD" target="_blank" rel="noopener">SDD 目录</a></li>
+                    <li><a href="https://github.com/cheenle/mrrc_ft8/blob/main/SDD/README.md" target="_blank" rel="noopener">SDD README</a></li>
+                </ul>
+            </div>
+        </div>
+        <div class="footer-bottom">
+            <p>&copy; 2026 MRRC-FT8 Project. Open Source under GPLv3 License.</p>
+        </div>
+    </div>
+</footer>
+
+<script>
+function toggleMobileMenu() {
+    document.querySelector('.nav-links').classList.toggle('active');
+}
+document.querySelectorAll('a[href^="#"]').forEach((a) => {
+    a.addEventListener('click', function (e) {
+        e.preventDefault();
+        const t = document.querySelector(this.getAttribute('href'));
+        if (t) t.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    });
+});
+</script>
+<script src="../js/global-nav.js?v=2" defer data-gn="1"></script>
+</body>
+</html>

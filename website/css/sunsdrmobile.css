@@ -1,0 +1,41 @@
+/* SunsdrMobile — Amber brand colour overrides for octen.css */
+
+:root {
+  --bg-primary: #0a0e14;
+  --bg-secondary: #0d1117;
+  --bg-tertiary: #10161e;
+  --bg-card: rgba(255,255,255,0.025);
+  --accent: #f39c12;
+  --accent-dim: #e67e22;
+  --accent-glow: rgba(243,156,18,0.12);
+  --text-secondary: #8899aa;
+  --text-muted: #5c6370;
+  --border: rgba(255,255,255,0.06);
+  --border-hover: rgba(243,156,18,0.25);
+  --nav-h: 56px;
+}
+
+/* ── Brand typography ── */
+.logo span { color: var(--accent); }
+
+/* ── Gradient text — amber → orange ── */
+.gradient {
+  background: linear-gradient(135deg, #f39c12, #e67e22);
+  -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text;
+}
+
+/* ── Buttons ── */
+.btn-primary { background: var(--accent); color: #0a0e14; }
+.btn-primary:hover { background: #e67e22; box-shadow: 0 8px 24px rgba(243,156,18,0.3); }
+.btn-outline { background: transparent; color: var(--text-secondary); border: 1px solid rgba(255,255,255,0.15); }
+.btn-outline:hover { border-color: var(--accent); color: var(--accent); }
+.btn-secondary { color: var(--text-secondary); }
+
+/* ── Section labels ── */
+.section-label { text-transform: uppercase; letter-spacing: 0.05em; font-size: 0.875rem; font-weight: 600; color: var(--accent); margin-bottom: 0.75rem; }
+
+/* ── Scroll progress bar — amber gradient (overrides octen's cyan→purple) ── */
+.vlsc-scroll-progress { background: linear-gradient(90deg, #f39c12, #e67e22); }
+
+/* ── Focus ring (overrides octen base in case --accent doesn't propagate) ── */
+a:focus-visible, button:focus-visible, .btn:focus-visible { outline-color: var(--accent); }

@@ -1,0 +1,310 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Version History — MRRC-FT8 SDD</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="../css/octen.css?v=4">
+    <link rel="stylesheet" href="../css/sunsdrmobile.css?v=1">
+    <link rel="stylesheet" href="../css/ft8.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-7442510147240155" crossorigin="anonymous"></script>
+    <style>
+        .sdd-layout { display: flex; max-width: 1400px; margin: 0 auto; padding: 0 2rem; gap: 2rem; }
+        .sdd-sidebar {
+            width: 260px; flex-shrink: 0; position: sticky; top: 80px;
+            max-height: calc(100vh - 100px); overflow-y: auto;
+            background: var(--bg-card); border: 1px solid var(--border);
+            border-radius: 0.75rem; padding: 1.25rem 0;
+        }
+        .sdd-sidebar h4 {
+            font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.08em;
+            color: var(--accent); padding: 0 1.25rem; margin-bottom: 0.75rem;
+        }
+        .sdd-sidebar ul { list-style: none; }
+        .sdd-sidebar a {
+            display: block; padding: 0.375rem 1.25rem; font-size: 0.8125rem;
+            color: var(--text-secondary); transition: all 0.15s;
+            border-left: 2px solid transparent;
+        }
+        .sdd-sidebar a:hover { color: var(--text-primary); border-left-color: var(--border-hover); }
+        .sdd-sidebar a.active {
+            color: var(--accent); background: var(--accent-glow);
+            border-left-color: var(--accent); font-weight: 500;
+        }
+        .sdd-content { flex: 1; min-width: 0; padding-bottom: 4rem; }
+        .sdd-content h1 { font-size: 2rem; font-weight: 700; margin: 2rem 0 0.5rem; letter-spacing: -0.02em; }
+        .sdd-content h2 { font-size: 1.375rem; font-weight: 600; margin: 2rem 0 0.75rem; color: var(--accent); }
+        .sdd-content h3 { font-size: 1.125rem; font-weight: 600; margin: 1.5rem 0 0.5rem; }
+        .sdd-content h4 { font-size: 1rem; font-weight: 600; margin: 1.25rem 0 0.5rem; }
+        .sdd-content p, .sdd-content li { color: var(--text-secondary); line-height: 1.7; margin-bottom: 0.75rem; }
+        .sdd-content table {
+            width: 100%; border-collapse: collapse; margin: 1.25rem 0;
+            font-size: 0.875rem;
+        }
+        .sdd-content th, .sdd-content td {
+            padding: 0.625rem 0.875rem; text-align: left;
+            border: 1px solid var(--border);
+        }
+        .sdd-content th { background: var(--bg-tertiary); color: var(--text-primary); font-weight: 600; }
+        .sdd-content td { color: var(--text-secondary); }
+        .sdd-content code {
+            font-family: var(--font-mono); font-size: 0.85em;
+            background: var(--bg-tertiary); padding: 1px 6px; border-radius: 3px;
+            color: var(--accent);
+        }
+        .sdd-content pre {
+            background: var(--bg-tertiary); border: 1px solid var(--border);
+            border-radius: 0.5rem; padding: 1rem; overflow-x: auto;
+            margin: 1rem 0; font-size: 0.8125rem; line-height: 1.6;
+        }
+        .sdd-content pre code {
+            background: none; padding: 0; color: var(--text-secondary);
+        }
+        .sdd-content blockquote {
+            border-left: 3px solid var(--accent); padding: 0.5rem 1rem;
+            margin: 1rem 0; color: var(--text-muted); font-size: 0.9375rem;
+            background: var(--bg-tertiary); border-radius: 0 0.375rem 0.375rem 0;
+        }
+        .sdd-content ul, .sdd-content ol { margin-left: 1.5rem; margin-bottom: 1rem; }
+        .sdd-content hr { border: none; border-top: 1px solid var(--border); margin: 2rem 0; }
+        .sdd-content a { color: var(--accent); }
+        .sdd-content img { max-width: 100%; border-radius: 0.5rem; margin: 1rem 0; }
+        @media (max-width: 900px) {
+            .sdd-layout { flex-direction: column; padding: 0 1rem; }
+            .sdd-sidebar { width: 100%; position: static; max-height: none; }
+        }
+    </style>
+</head>
+<body data-site="mrrc_ft8">
+
+<nav class="navbar">
+    <div class="container navbar-content">
+        <a href="../index.html" class="logo">
+            <span class="logo-icon"><i class="fas fa-microchip"></i></span>
+            <span>MRRC-FT<span style="color: var(--accent);">8</span></span>
+        </a>
+        <ul class="nav-links">
+            <li><a href="../index.html#features">Features</a></li>
+            <li><a href="../index.html#architecture">Architecture</a></li>
+            <li><a href="index.html">SDD Docs</a></li>
+            <li><a href="https://github.com/cheenle/mrrc_ft8" target="_blank"><i class="fab fa-github"></i> GitHub</a></li>
+        </ul>
+        <div class="nav-actions">
+            <a href="../zh/index.html" class="lang-btn">中文</a>
+            <button class="mobile-menu-toggle" onclick="toggleMobileMenu()"><i class="fas fa-bars"></i></button>
+        </div>
+    </div>
+</nav>
+
+<div class="sdd-layout">
+    <aside class="sdd-sidebar">
+        <h4>SDD Chapters</h4>
+        <ul>
+            <li><a href="index.html">Overview</a></li>
+            <li><a href="01-executive-summary.html">1. Executive Summary</a></li>
+            <li><a href="02-business-direction.html">2. Business Direction</a></li>
+            <li><a href="03-project-definition.html">3. Project Definition</a></li>
+            <li><a href="04-system-context.html">4. System Context</a></li>
+            <li><a href="05-non-functional-requirements.html">5. NFRs</a></li>
+            <li><a href="06-use-case-model.html">6. Use Cases</a></li>
+            <li><a href="07-subject-area-model.html">7. Subject Model</a></li>
+            <li><a href="08-architecture-decisions.html">8. Architecture Decisions</a></li>
+            <li><a href="09-architecture-overview.html">9. Architecture Overview</a></li>
+            <li><a href="10-service-model.html">10. Service Model</a></li>
+            <li><a href="11-component-model.html">11. Component Model</a></li>
+            <li><a href="12-operational-model.html">12. Operational Model</a></li>
+            <li><a href="13-feasibility-assessment.html">13. Feasibility</a></li>
+            <li><a href="14-version-history.html" class="active">14. Version History</a></li>
+            <li><a href="15-ptt-safety-architecture.html">15. PTT Safety</a></li>
+        </ul>
+    </aside>
+    <main class="sdd-content">
+<h1 id="version-history">14. Version History</h1>
+<h2 id="unreleased-2026-08-03-sdd-refresh-to-v1.1">Unreleased — 2026-08-03 — SDD Refresh to V1.1</h2>
+<ul>
+<li>Brought the SDD body up to the implemented state: README quick facts (live deployment, v0.1.0), UC-003 marked implemented with the reply decision window, new UC-011 (FT8 band select), AD-006 (UTC ring absolute-index keying), §9.2/§9.3/§9.4 (3 kHz waterfall span, TX decision window + fit guard, dual cutoffs), §11 component table, §12 (public Host ACL / config), §15.6 (provisional TX decision), and the AGENTS.md/README module and status lines.</li>
+</ul>
+<h2 id="unreleased-2026-08-03-repo-tidy-v0.1.0">Unreleased — 2026-08-03 — Repo Tidy (v0.1.0)</h2>
+<ul>
+<li>Removed the legacy <code>SDD-legacy-mrrc_ft710/</code> archive (old design docs for the predecessor project; references in <code>AGENTS.md</code> and <code>SDD/02</code> updated).</li>
+<li>Untracked <code>wsjtx-3.0.2/</code> (98 MB WSJT-X 3.0.2 Improved vendor source) from git and gitignored it, keeping it on disk so the DSP build (<code>dsp/CMakeLists.txt</code>), the vendor-policy tests and the <code>ALLCALL7.TXT</code>/<code>cty.dat</code> symlinks keep working. Tagged the first GitHub push as <code>v0.1.0</code>.</li>
+</ul>
+<h2 id="unreleased-2026-08-03-ft8-band-selector-7142128-mhz">Unreleased — 2026-08-03 — FT8 Band Selector (7/14/21/28 MHz)</h2>
+<ul>
+<li>Added a band <code>&lt;select&gt;</code> in the cockpit top bar (left of the decode-counter hourglass): 7/14/21/28 MHz, tuned to the FT8 dial frequencies (7.074 / 14.074 / 21.074 / 28.074 MHz) via the existing lease-gated <code>/radio/band</code> mutation. Selection acquires a free control lease implicitly (UC-002, same as a candidate tap), rejects while TX is armed, toasts failures and reverts to the last known rig frequency. The control reflects the rig’s polled dial frequency when it lands on one of the four bands; <code>band.js</code> populates the options so <code>index.html</code> stays logic-free.</li>
+</ul>
+<h2 id="unreleased-2026-08-03-waterfall-bandwidth-3-khz">Unreleased — 2026-08-03 — Waterfall Bandwidth = 3 kHz</h2>
+<ul>
+<li><code>SpectrumComputer</code> emitted the full <code>0..rate/2</code> (0..6 kHz) spectrum, so the upper half of the waterfall canvas was always blank (the FT8 passband is ~0..3 kHz). The frame now emits only <code>DISPLAY_BANDWIDTH_HZ</code> (3.0 kHz) of bins; the client maps whatever bins it receives across the full canvas, so the span fills with no blank half (and the frame payload halves). Configurable via <code>display_bandwidth_hz</code>; validated to stay within <code>0..rate/2</code>. Regression: emitted span is ~3 kHz, not 6 kHz.</li>
+</ul>
+<h2 id="unreleased-2026-08-03-reply-decision-window-polling-fit-guard">Unreleased — 2026-08-03 — Reply Decision Window: Polling + Fit Guard</h2>
+<ul>
+<li>The manual-Reply TX window now polls instead of sleeping to the cutoff: a Reply transmits as soon as it is armed (within ~0.1 s) rather than waiting until the decision deadline, and the window stays open <code>TX_DECISION_CUTOFF_SECONDS</code> (5.0, operator-selected) past slot start. A fit guard enforces the FT8 physical limit — the fixed 12.64 s waveform in a 15 s slot can only start by ~2.4 s in, so a Reply armed past that deadline defers to the next eligible slot instead of overrunning the boundary (an overrun is undecodable at the partner and deafens the next slot’s RX). TX-window decisions (armed/transmitted, deferred past fit, cutoff reached) are logged at DEBUG under <code>mrrc-ft8.tx</code>. Regressions: in-window tap transmits, wrong-parity slot is rejected, no-tap closes silently, past-fit-deadline defers.</li>
+</ul>
+<h2 id="unreleased-2026-08-03-public-host-acl-opened">Unreleased — 2026-08-03 — Public Host ACL Opened</h2>
+<ul>
+<li><code>.env</code> <code>MRRC_FT8_ALLOWED_HOSTS</code> now includes the public domain <code>radio.vlsc.net</code> (was <code>localhost,127.0.0.1</code>). The NFR-035 Host/Origin checks gate WebSocket and every mutation (login, select, reply, CQ, STOP …) — with only loopback names allowed, all public POST/WS traffic was 403 and only GETs worked, so the PWA loaded but could never log in. Adding the domain lets the Caddy edge (<code>radio.vlsc.net:9988</code>, dual-stack) reach the full API over IPv4 or IPv6; the Host header is the domain either way, so no protocol-specific entry is needed. <code>.env</code> is operator config (gitignored); the deploy templates already document setting it.</li>
+</ul>
+<h2 id="unreleased-2026-08-03-manual-reply-decision-window-feed-red-text">Unreleased — 2026-08-03 — Manual Reply Decision Window + Feed Red Text</h2>
+<ul>
+<li>Fixed the manual Reply always missing the slot right after the message it answers: the orchestrator locks a slot’s TX decision at the same instant the previous slot’s decode reaches the UI, so an operator-tapped Reply could never make that slot and always transmitted a full T/R cycle (2 slots) late — by which time the partner had often moved on. The TX decision is now provisional (I9): <code>TxDriver.on_slot_start</code> keeps the slot’s window open until <code>decision_cutoff</code> (2.0 s, the latest a 12.64 s waveform still fits) when the sequencer is idle, re-checks the armed parity at the cutoff, and transmits a fast manual Reply in the current slot. Auto-sequencer transmissions still go out immediately, unchanged. Regressions: in-window tap transmits, wrong-parity slot is rejected, no-tap closes silently.</li>
+<li>Band Activity text: self-transmitted echoes (<code>mine</code>, decoded <code>from_call</code> = own call) and stations calling/reply to me (<code>to_me</code>) render red (<code>#ff7b72</code>) instead of the old maroon background alone.</li>
+</ul>
+<h2 id="unreleased-2026-08-03-replay-opposite-tx-slot-phase-uc-003">Unreleased — 2026-08-03 — Replay Opposite-TX-Slot Phase (UC-003)</h2>
+<ul>
+<li>Implemented the UC-003 “opposite TX slot” the reply path was missing: <code>TxDriver</code> gated on a hard-coded <code>tx_parity = 0</code> (even slots) that never changed, so a reply to a partner transmitting on the server’s <em>own</em> phase always collided with the partner’s ongoing CQ — the retransmission budget burned into a deaf partner and the QSO silently failed. The phase is now carried by the sequencer (<code>tx_phase</code>, 0 = even / 1 = odd): <code>reply_to</code> takes the parity opposite the slot the partner’s message was decoded from (<code>1 − slot_id % 2</code>, plumbed through <code>operation/select</code>’s new <code>slot_id</code> field from the UI candidate), and <code>TxDriver.on_slot_start</code> gates on <code>sequencer.tx_phase</code> instead of a fixed parity. CQ always runs on the default even phase (<code>start_cq</code> resets). A message without a known slot still defaults to even. End-to-end check: a CQ heard in an even slot is answered on odd slots and the full QSO alternates to completion. Regressions: sequencer phase set/reset, driver odd-phase gating, and API slot→phase selection.</li>
+</ul>
+<h2 id="unreleased-2026-08-03-utcring-eviction-index-root-cause">Unreleased — 2026-08-03 — UtcRing Eviction-Index Root Cause</h2>
+<ul>
+<li>Root cause of the ~90 s aligned↔︎shifted oscillation left open in the previous slice: <code>UtcRing</code> physical positions were keyed to <code>(absolute − base) % capacity</code>, so once the ring filled (~60–75 s in) and eviction advanced <code>base</code>, already-written samples were never moved while reads addressed them with the new <code>base</code>. Every later slot read content shifted by the cumulative base advance (“D”) — growing 1:1 with wall clock (the +5 s/+10 s lags), wrapping at capacity (the aligned↔︎shifted cycle), and exactly repeating a slot when D hit an integer slot multiple (the BD2LA / morning stale-repeat decodes). Ring metrics stayed green because loss accounting was untouched; any recording probe that never traversed the ring always looked healthy. Positions are now keyed to the absolute sample index alone (<code>X % capacity</code>), so eviction never requires moving data and <code>base</code> is purely a bounds/gap-check boundary. Regression: <code>test_ring_slot_content_is_unaligned_after_eviction</code> writes known-pattern slots across three evictions and requires a fully retained earlier slot to read back byte-exact — constant-value slots had masked the shift.</li>
+</ul>
+<h2 id="unreleased-2026-08-03-isolated-capture-process">Unreleased — 2026-08-03 — Isolated Capture Process</h2>
+<ul>
+<li>Audio capture moved into a supervised subprocess (<code>capture_proc.py</code>), mirroring the DSP Worker isolation. Overnight A/B evidence: the server process’s own CoreAudio stream silently degrades ~60 s in (content permanently ~10.5 s stale, decodes die, ring metrics stay green) and in-process stream recreation never heals it, while any fresh process — direct or spawn child — captures the same device indefinitely. The child reuses <code>AudioCapture</code> verbatim and forwards every converted block as a <code>(seq, epoch, payload)</code> tuple; the parent’s reader thread feeds the unchanged <code>UtcRing</code> and waterfall tap (moving the FFT off the audio callback thread); a watchdog restarts a dead or stalled child with bounded backoff. The <code>CaptureHealthMonitor</code> recovery action is now a child-process restart — a guaranteed-fresh capture session — with the AUDIO interlock latch and three-per-episode budget unchanged.</li>
+</ul>
+<h2 id="unreleased-2026-08-03-rx-timestamp-root-cause">Unreleased — 2026-08-03 — RX Timestamp Root Cause</h2>
+<ul>
+<li>Decode list UX rework per operator request: the candidate list is now a chronological feed (WSJT-X main window style) — every message a row, newest slot on top, each 15 s slot headed by a separator carrying the slot UTC and the dial frequency. The dial frequency comes from a new 5 s rig poll feeding <code>radio.freq_hz</code> in the state snapshot (display-only; poll failures never fault). Re-applied slots replace their rows, so reconnect replay can no longer duplicate entries; stale-row aging is unchanged.</li>
+<li>Root cause of the permanent time-shifted sessions: when the audio callback stalls ≥250 ms, CoreAudio delivers the stalled period as backlog; the legacy wall-clock re-anchor stamped that backlog as live audio, shifting every later slot by the backlog length (+6 s/+10.5 s measured) and killing all decodes while ring metrics stayed green. Block epochs are now anchored to CoreAudio’s <strong>ADC hardware timestamp</strong> (<code>time_info.inputBufferAdcTime</code>, calibrated per block against <code>currentTime</code>): the timestamp travels with the audio, so a stall becomes one recorded gap (one skipped slot) instead of a permanent shift. The wall-clock sample-count chain remains as the fallback for hosts without ADC timestamps; stalls log an explicit “input stall” warning.</li>
+<li>Root cause of the degraded capture sessions found by A/B isolation on the live device: the FT-710 UAC endpoint’s CoreAudio <strong>float32 path</strong> intermittently delivers toneless noise at band level (rms fine, spectral structure gone), while int16 opens deliver the real band every time — including moments when the float32 server session was already dead. RX capture therefore switched from float32 to int16 with in-seam normalization; the converter contract (float32 → 12 kHz int16, AD-004) is unchanged. The monitor/self-heal from this slice stays as defense in depth.</li>
+</ul>
+<h2 id="unreleased-2026-08-02-capture-self-healing-and-debug-logging">Unreleased — 2026-08-02 — Capture Self-Healing and Debug Logging</h2>
+<ul>
+<li>Stale-display hardening on the cockpit: the waterfall canvas now dims and desaturates while its WebSocket is offline (a frozen canvas used to impersonate a live band), candidate rows age into a dimmed <code>stale</code> class after ten minutes on a slow re-render tick, and row time is derived from the slot itself so replayed decode history can no longer re-float old stations to the top as if freshly decoded.</li>
+<li>Added RX-chain debug logging (<code>MRRC_FT8_LOG_LEVEL</code>, <code>restart.sh</code> defaults to DEBUG): per-slot ring state (base/high_water/gaps/dropped/overruns), per-message decode detail, decode-broadcast publish/replay counts, and capture re-anchor/overflow events.</li>
+<li>Root-caused the recurring dead-decode incidents with that evidence: a USB capture session can silently degrade mid-run — slot content time-shifted by a constant (~6 s/~10.5 s measured), zero-tailed, or looping a stale buffer — while ring metrics stay perfect and PortAudio reports no overflow. Fresh streams on the same device are always clean; degraded sessions never recover by themselves.</li>
+<li>Added <code>CaptureHealthMonitor</code> (four consecutive hot-band, zero-decode slots) wired in the composition root: on detection it latches the AUDIO interlock (TX disarms; manual clear/re-arm still required, §12) and automatically reopens the capture stream in monitor state, at most three bounces per episode. <code>AudioCapture.start()</code> now recreates a stopped stream.</li>
+<li>Regressions: monitor edge/reset/threshold behavior and stop→start stream recreation.</li>
+</ul>
+<h2 id="unreleased-2026-08-02-live-radio-field-fixes">Unreleased — 2026-08-02 — Live Radio Field Fixes</h2>
+<ul>
+<li>Fixed the TX-driver fault funnel: a <code>TxRefused</code> raised by the safety controller (STOP-cancelled playback, disarm, watchdog, already-latched interlock) is now only counted, never reported through the error hook into the DSP interlock latch. Previously, the dead-man STOP cancelling an in-flight playback latched a spurious DSP fault and every subsequent Reply/CQ arm was refused until a manual clear. Real CAT/audio faults continue to latch inside <code>transmit()</code> before it raises; encode-path failures still report <code>report_fault(DSP)</code>. Added the <code>test_tx_refused_does_not_report_dsp_fault</code> regression.</li>
+<li>Wired <code>SafetyController.on_event</code> and the DSP-fault funnel to the composition logger: every arm/TX start/TX stop/PTT-off/watchdog/fault transition is now visible in the server log without an authenticated client.</li>
+<li>Hardened <code>restart.sh</code>: the old server is found by the <code>:8000</code> LISTEN socket and <code>pgrep -f server.main</code> (case-safe), waited out, escalated to SIGKILL, and the audio device is given an 8 s settle before the new server opens it. Measured on the FT-710 UAC device: a process that opens the device while a previous holder is dying (or within ~2 s of its SIGKILL) gets a permanently degraded stream — full-level audio with starved/scrambled content that decodes zero messages for the process lifetime.</li>
+<li>Field finding recorded: the server never sets the radio mode; FT-710 must run USB-D (PKTUSB), not USB. In plain USB the CAT PTT keys the mic path and USB TX audio never reaches the modulator, so transmissions key with no RF drive.</li>
+</ul>
+<h2 id="unreleased-2026-08-01-standard-ft8-dsp-slices">Unreleased — 2026-08-01 — Standard FT8 DSP Slices</h2>
+<ul>
+<li>Added the stable <code>wsjt_ft8_encode</code> C ABI backed by vendor <code>genft8</code> and <code>gen_ft8wave</code> with an exact 48 kHz, 606,720-sample float waveform.</li>
+<li>Added fresh-build regressions for the waveform contract, standard sent text, deterministic failure-output clearing, rate/capacity validation, every nullable ABI pointer and failed message encoding.</li>
+<li>Registered <code>dsp/ft8_stdcall.f90</code>, an equivalent extraction of the vendor standard-callsign helper that keeps the headless FT8 source manifest independent of the unrelated Q65 codec chain.</li>
+<li>Kept the shared library dynamic export surface restricted to implemented C ABI entry points.</li>
+<li>Added <code>wsjt_ft8_decode_standard</code> for exact 12 kHz/180,000-sample int16 slots, returning a fixed 256-result Fortran-owned batch with deterministic result initialization and no Python/C callbacks from decoder code.</li>
+<li>Matched the vendor full-slot standard decode orchestration with staged 41/47/50 half-symbol calls on one decoder, preserving depth-2/3 saved-buffer behavior while disabling wall-clock bailout for complete synthetic slots.</li>
+<li>Added fresh-build synthetic CQ coverage plus rate, shape, capacity, ABI-size, every nullable pointer, failure-output clearing and no-partial-copy regressions; the dynamic export surface is now exactly the three implemented ABI entry points.</li>
+<li>Made the native standard-decode ABI fail closed on invalid QSO progress, sensitivity, UTC and frequency-window bounds before mapping sample/results or entering vendor code; added bounds-checked invalid-config coverage and same-process CQ→CQ→empty→CQ state-isolation regression.</li>
+<li>Added <code>wsjt_ft8_decode_improved</code> with profiles 0–4, exact 1–12-way inclusive frequency partitioning, cycles 1–3 and a pure-Fortran OpenMP result batch with stable cross-pass exact deduplication.</li>
+<li>Added fresh-build noiseless regressions for every Improved profile, all shared native fail-closed boundaries, Improved profile/thread/cycle limits and a 12-thread minimum-band case.</li>
+<li>Added the initial relocatable LDPC/FFTW include adaptations; the final seven-copy register below supersedes their original include-only scope, and inverse transformations still prove byte identity with immutable vendor sources.</li>
+<li>Recorded the upstream <code>OMP_STACKSIZE=10M</code> pre-load runtime contract after a bounds-checked 12-thread regression reproduced stack corruption without it and passed with it.</li>
+<li>Made every Improved request reset the six even/odd CQ, MyCall and QSO detection-history structures with the vendor <code>6000.0</code> frequency sentinel, zero offsets and zero complex symbols; A8 eligibility is now recomputed from AP plus a complete DX call/grid context instead of being permanently disabled.</li>
+<li>Removed Improved OpenMP data races with thread-private slot, downsample, FFTW plan and cycle scratch state; subtraction is now deterministic within each assigned band, OSD initialization is fully serialized and exact requested-team failure returns internal status without copying partial results.</li>
+<li>Made A8 ownership deterministic, added an atomic near-Rx suppression gate, and rebuilt all AP masks for every request; clean direct-A8, context-switch and native gate probes cover the behavior while the non-reproducible weak direct-A8 fixture remains a strict documented expected failure.</li>
+<li>Registered all seven exact reversible Improved vendor copies, added repeated parallel-region/multisignal regressions, and kept result append order explicitly unspecified.</li>
+<li>Kept production linkage at exactly four C ABI exports and added a configured ELF version-map regression; the optional direct-A8 test hook is available only in test-hook builds.</li>
+<li>Added frozen/slotted Python DSP request/result metadata and the sole ctypes binding, with pre-load <code>OMP_STACKSIZE=10M</code>, exact ABI/capability negotiation, strict 12/48 kHz buffer/config validation and immutable native-result copies.</li>
+<li>Serialized every ABI query, decode and encode through one global reentrant lock; dependency regressions reserve CDLL access to <code>binding.py</code> and binding imports to the supervised Worker boundary.</li>
+<li>Hardened the Python boundary to negotiate a zero ABI reserved field, require aligned native buffers plus writeable TX output, discard all failed native decode outputs and validate count/overflow again at the shared adapter boundary.</li>
+<li>Strengthened ctypes layout/signature regressions and exact-path dependency scanning, including standard DLL loader aliases; oversized integers now produce the same <code>ValueError</code> frequency contract as other invalid encode inputs.</li>
+<li>Added exact Protocol v1 UTF-8 JSON control frames with a 64 KiB limit, nine closed frame schemas, deterministic serialization, strict duplicate/type/finite-number validation, fixed shared-memory descriptors, bounded decode results and sanitized errors.</li>
+<li>Added the spawn-only synchronous DSP Worker with pre-import <code>OMP_STACKSIZE</code>, one explicit/default-path binding, generation-before-open validation, read-only RX/caller-owned TX mappings, metadata-only replies and nonzero exit on protocol/pipe corruption.</li>
+<li>Verified real fresh-build Worker ping/shutdown, shared-memory encode and known-CQ decode, observable allocation mismatch recovery, parent-only unlink and error sanitation; recorded Darwin’s unique page-rounded POSIX SHM size without weakening logical 12/48 kHz shapes.</li>
+<li>Resolved I8 with the implemented wire representation and exact logical buffer capacities; supervisor timeout/restart policy and I9 timing measurements remain future slices, so this does not declare M1 complete.</li>
+<li>Added <code>server/core/supervisor.py</code> as the sole parent-side owner of the Worker process and control pipe (AD-003, §10.4, §11.1): spawn-only startup with protocol-ping readiness verification, per-request IPC timeouts, generation/request-id correlation with stale-response, unexpected-type and malformed-frame rejection, sanitized <code>WorkerFault</code> codes and one bounded restart per fault with fresh generations and never-reset request ids.</li>
+<li>Added synchronous supervisor health reporting (state, generation, restart count, last failure) with a transition callback for engine/audit consumers; the asyncio engine will drive the supervisor through <code>asyncio.to_thread</code>.</li>
+<li>Added spawn-level supervisor regressions with scripted fake Workers covering IPC timeout, mid-request and pre-request crashes, stale/corrupt/unexpected responses, error frames without restart, outgoing-frame validation without touching the Worker, bounded crash-loop degradation, graceful and forced stop, idempotent lifecycle, double-start rejection and monotonic request ids across restarts.</li>
+<li>Added the opt-in I9 benchmark (<code>MRRC_FT8_I9_BENCHMARK=1</code>): a fresh build, the real supervised Worker and a deterministic five-signal noisy synthetic slot time the production request path across profiles 0–4, thread counts 1–12 and a cycles-3 spot check, writing a JSON artifact and asserting the default profile-3/Auto configuration meets the provisional cutoff.</li>
+<li>Resolved I9 on Apple M2 (4P+4E): profile 3 / Auto(7) decodes in 0.226–0.274 s wall with native time within IPC noise; scaling saturates at 4–6 threads and 12-thread oversubscription is slower. Recorded the V1.0 Auto thread policy <code>clamp(cpu_count - 1, 1, 12)</code> and the provisional TX decision cutoff of slot end + 2.5 s in SDD §9.4, §12.6 and §13.4.</li>
+<li>Implemented <code>server/engine/msgparse.py</code>, the supported standard-message subset of <code>decodedtext.cpp</code> token logic: CQ (with FD/DX modifiers), directed grid, report, R+report and RR73/RRR/73 shapes with hash-callsign and free-text rejection; end-of-message tokens are matched before the colliding grid/report regexes.</li>
+<li>Implemented <code>server/engine/sequencer.py</code>, the one-QSO Tx1–Tx5 state machine distilled from <code>mainwindow.cpp</code> auto-sequence rules with contest branches removed: CQ/answerer flows, NFR-055 one-plus-three retransmission budget with progress reset, retry exhaustion that disarms and retains context, anti-QRM auto-stop when the partner calls another station, RR73/73-triggered logging, a single courtesy 73 repeated only on partner repeats, and protocol-clamped (-50..+50) report formatting; SDD §15.6 was made precise about the CQ exemption and completion behavior in the same change.</li>
+<li>Added 49 engine regressions covering the parser shapes/edges and both full QSO flows, exhaustion, budget reset, partner-loss, third-station/free-text rejection, RRR and RR73-shortcut branches, report clamping and grid capture.</li>
+<li>Added <code>server/engine/orchestrator.py</code>, the UTC slot loop (AD-006, §9.2/§9.4): injectable epoch clock and sleeper with <code>floor(epoch/TRperiod)</code> slot identity, FT8/FT4 periods, boundary decode dispatch through an injected decoder over an exact 360,000-byte slot source, the I9 2.5 s decision cutoff with display-only late batches that are never fed to the sequencer, slot-mismatch/decoder-failure error events that keep the loop alive, and NFR-002 counters (slots, skips, decodes, deadline misses, errors). TX keying is intentionally absent; the sequencer is only fed on-time messages.</li>
+<li>Added deterministic fake-clock orchestrator regressions for slot math/parity, boundary dispatch order and start announcements, on-time sequencer feeding with decode SNR, late-result display-only handling, slot mismatch, decoder exception recovery and skipped/oversize slot sources.</li>
+<li>Added <code>server/engine/audio_rx.py</code> (AD-004): the single streaming 48 kHz float32 → 12 kHz int16 conversion (97-tap FIR anti-alias plus phase-consistent 4:1 decimation, sample-exact across arbitrary block boundaries), a UTC-indexed ring serving exact 180,000-sample slots with explicit gap ranges and overrun/eviction metrics, and the thin sounddevice capture seam with an injectable stream factory.</li>
+<li>Added <code>server/engine/dsp_decode.py</code> (§9.2, §11.2): the production SlotDecoder reusing one parent-owned 360,000-byte segment per supervisor request, mapping slot start to <code>utc_hhmmss</code>, forwarding the plain-str Protocol v1 config through <code>asyncio.to_thread</code> and converting decode_ok/error frames into <code>DecodeBatch</code>/<code>DecodeError</code>.</li>
+<li>Moved the I9 Auto thread policy into runtime code as <code>server/core/models.py:auto_thread_count</code> (<code>clamp(cpu_count - 1, 1, 12)</code>); the benchmark imports the single implementation.</li>
+<li>Added <code>server/engine/rig.py</code> (AD-005, §9.3, §11.2): the async rigctld short-command TCP client over <code>asyncio.open_connection</code>, serialized through one lock, with input validation before any I/O, <code>RPRT -n</code> surfaced as <code>RigError(code)</code>, and transparent reconnect on timeout/EOF/garbage replies so the safety layer can re-verify PTT-off after reconnect (§15.3).</li>
+<li>Added <code>server/engine/audio_tx.py</code> (AD-004, §11.2): the bounded 48 kHz float32 TX playback seam. <code>validate_tx_buffer</code> rejects anything but a non-empty 1-D float32 buffer of at most one 606,720-sample waveform before PTT can be keyed; <code>TxPlayer</code> writes blocks through an injectable stream factory (lazy <code>sounddevice.OutputStream</code> default), surfaces device loss as <code>TxAudioError</code>, and offers synchronous idempotent <code>cancel()</code> that aborts a blocked write.</li>
+<li>Added <code>server/engine/safety.py</code> (§15, NFR-050..058), the sole PTT authority: startup is monitor-only with best-effort PTT-off; manual <code>arm()</code> refuses while interlocks are faulted and retries PTT-off first when the line state is uncertain (§15.3); <code>transmit()</code> rechecks interlocks/armed/PTT-uncertainty and the aggregate budget immediately before keying, races playback against an injectable per-transmission deadline (waveform + margin), and always finalizes with best-effort PTT-off; <code>stop_tx()</code> is the idempotent priority STOP (cancel audio, disarm sequencer, non-blocking PTT-off, audit event) and <code>report_fault</code>/<code>clear_fault</code> implement the §15.5 fault matrix with manual re-arm only; every TX start/stop/reason emits a <code>SafetyEvent</code> (NFR-070) and <code>health</code> feeds NFR-076.</li>
+<li>Added 22 TX-path regressions: block-exact playback, stream contract, cancel of a blocked write, device-loss mapping, concurrency and invalid-buffer rejection; plus the safety fault matrix — startup PTT-off, keying order around audio, unarmed/faulted refusal, idempotent mid-play STOP with sequencer disarm, PTT-on/PTT-off failure handling with reconnect retry, audio device loss, per-transmission and aggregate watchdogs via a controllable sleeper, and pre-PTT buffer rejection.</li>
+<li>Added <code>server/engine/waterfall.py</code> (§11.2, NFR-004, AD-007): <code>SpectrumComputer</code> turns the UTC-stamped 12 kHz int16 stream into fixed-cadence waterfall lines (Hann window, rFFT, dB-to-uint8 quantization, compact <code>WF01</code> binary frames with round-trip validation); epochs derive from absolute sample index so block boundaries never shift cadence, and UTC gaps reset the line accumulator instead of bridging. <code>SpectrumFanout</code> is the lossy delivery input with bounded drop-oldest per-subscriber queues and drop counters for NFR-076, so slow waterfall clients cannot delay safety traffic (SC8).</li>
+<li>Added 12 waterfall regressions: tone peak bin, silence floor, block-size-independent cadence/epochs, gap reset, binary round-trip and corruption rejection, invalid inputs, drop-oldest/newest-kept fan-out, idempotent close/detach and non-blocking publish under a flooded subscriber.</li>
+<li>Added <code>server/engine/repository.py</code> (AD-014, §7.5, NFR-071..073): the canonical SQLite store with <code>qso</code>/<code>qso_event</code>/<code>audit_event</code>/<code>decode_event</code>/<code>setting_meta</code> tables and <code>user_version</code> migrations. QSOs are recorded from the sequencer’s log record with a completion epoch; <code>void_qso</code> is the audited 30-second undo (§6) that marks void with actor/reason evidence instead of deleting; <code>abort_active_qsos</code> implements the NFR-058 <code>ABORTED_RESTART</code> transition; <code>enforce_retention</code> deletes only expired decode (7 d) and audit (90 d) rows while QSO data never expires; settings round-trip as JSON.</li>
+<li>Added <code>server/engine/adif.py</code> (NFR-072): ADIF 3.1.4 generation from non-void canonical rows only, with exact <code>&lt;NAME:LEN&gt;</code> field lengths, completion-epoch-derived <code>QSO_DATE</code>/<code>TIME_ON</code>, MHz <code>FREQ</code>, optional-field omission and non-printable content rejection.</li>
+<li>Added <code>server/web/auth.py</code> (AD-009, NFR-032..039): Argon2id hashing/verification with per-hash salt (new <code>argon2-cffi</code> dependency), opaque random runtime-only sessions with 30-minute idle and 12-hour absolute expiry, bounded progressive login delay with reset on success, the five-minute re-authentication window for diagnostics, and pure Host/Origin validation helpers for mutations and WS upgrades.</li>
+<li>Added <code>server/web/lease.py</code> (AD-010, §6, §15.4, NFR-037): the single renewable control lease with 15 s TTL and 5 s heartbeat contract, owner-only renewal, observer refusal, one-shot dead-man callback on TTL expiry and on controller disconnect without waiting for the TTL (wired to priority STOP TX in the composition layer), auditable acquire/release/expire/disconnect events and no lease restoration across restarts.</li>
+<li>Added <code>server/web/api.py</code> (§10.1, §10.3, §11.3): the versioned <code>/api/v1</code> REST surface with the hardened <code>Secure; HttpOnly; SameSite=Strict</code> session cookie, Host/Origin validation on every mutation, <code>Idempotency-Key</code> replay without side effects and <code>X-Expected-Revision</code> stale-client rejection. Control rules are enforced as designed: lease-gated select/Reply/CQ/TX-off/band, observer STOP bypassing the lease (NFR-038), re-auth-gated diagnostic tar.gz export that never contains password or cookie secrets (NFR-039/075), schema-validated settings with safety-impacting keys locked during TX, and audited login failures, Reply/CQ, STOP, void and export with session-prefix actors.</li>
+<li>Added <code>server/web/ws.py</code> (§10.2, AD-011): the three bounded streams. State coalesces newest-wins and closes irrecoverably slow clients; decodes stay ordered on a bounded queue with a 32-batch reconnect history and overflow-closed slow clients; waterfall reuses the lossy fan-out. Every upgrade authenticates by cookie plus Host/Origin, and a controller state-stream disconnect drops the lease through the §15.4 dead-man path.</li>
+<li>Added the build-step-free landscape PWA under <code>server/web/static/</code> (AD-011, NFR-060/063): vanilla-JS modules for REST intents with idempotency keys, three reconnecting stream clients, a WF01 canvas waterfall, candidate selection with Reply intent, an always-visible bottom safety bar with unconditional STOP, a portrait degraded observer/STOP view, and a service worker that pre-caches only the app shell and never API/WS traffic. <code>index.html</code> carries no inline JS logic.</li>
+<li>Added <code>server/main.py</code> (§11.3, §12.3): the lifespan composition root. <code>OMP_STACKSIZE=10M</code> is set before any NumPy/OpenMP import; startup marks interrupted QSOs <code>ABORTED_RESTART</code>, starts the safety controller monitor-only with best-effort PTT-off, then starts capture (with the waterfall tap), supervisor/orchestrator, the 1 s lease-expiry watchdog and hourly session-sweep/retention maintenance; shutdown runs priority STOP before audio/rig/worker teardown. Dead-man and lease-event callbacks are scheduled thread-safely onto the lifespan loop. Configuration comes from <code>MRRC_FT8_*</code> environment variables with fail-startup gaps; Uvicorn binds loopback only.</li>
+<li><code>AudioCapture</code> gained an optional converted-stream <code>tap</code> so the waterfall computer shares the single 48→12 kHz conversion, and the state snapshot reports the orchestrator’s NFR-002 counters.</li>
+<li>Added the deployment artifacts under <code>deploy/</code> (§12.1–12.3): the Caddyfile owning 80/443 and proxying to loopback FastAPI, the unprivileged systemd unit (audio/dialout groups, <code>OMP_STACKSIZE=10M</code>, secrets via an uncommitted env file, loopback-only hardening) and the macOS user LaunchAgent.</li>
+<li>Added the password bootstrap CLI <code>python -m server.main --hash-password</code> (§12.6): it prints a verifiable Argon2id hash for <code>MRRC_FT8_PASSWORD_HASH</code> and exits, prompting via getpass when no value is given so the password never lands in shell history.</li>
+<li>Fixed the PWA login overlay: author <code>display: grid</code> rules on <code>.overlay</code>/<code>#cockpit</code> overrode the UA <code>[hidden] { display: none }</code> rule, so both panels always rendered and the absolutely-positioned waterfall canvas painted over the login form, swallowing its taps (password field untypable). Added an explicit <code>[hidden] { display: none !important }</code> guard, bumped the service-worker shell cache to <code>v4</code> so clients pick up the fix, and pinned the guard with a static-contract regression.</li>
+<li>Fixed the waterfall canvas never accumulating history: <code>getBoundingClientRect()</code> returns fractional CSS pixels, so comparing raw <code>rect.width/height</code> against the integer <code>canvas.width/height</code> mismatched on every frame and the reassignment cleared the bitmap, leaving only the newest line. Resize now compares floored dimensions; shell cache bumped to <code>v5</code> and a static-contract regression pins the floored comparison.</li>
+<li>Fixed the candidate list freezing after the first slots: FT8 messages repeat verbatim every slot, and the client deduped by message text alone, so every later batch was discarded and the list never scrolled. The dedup key is now slot id + text, so each new slot’s decodes prepend; shell cache bumped to <code>v6</code> with a static-contract regression.</li>
+<li>Added seven hardware-free deploy contract tests: textual checks of the Caddyfile/systemd unit/plist (loopback proxy target, unprivileged user, stack size, no committed secrets) plus a real subprocess CLI round-trip verified through <code>PasswordHasher</code>.</li>
+<li>Implemented NFR-002 decode-latency visibility: <code>server/engine/latency.py</code> aggregates wall-clock decode duration per (profile, threads) in fixed buckets aligned with the 2.5 s decision cutoff; <code>SupervisorDecoder</code> records every successful request, <code>main.py</code> wires one histogram through <code>AppState</code>, and <code>/health</code> now exposes <code>decode_latency</code> plus the orchestrator’s <code>deadline_misses</code> counter.</li>
+<li>Added <code>acceptance/real_radio.py</code> (SC9, §12.2, §15), the hardware-gated FT-710 acceptance runner: preflight (rigctld/PTT-off/audio devices), monitor (tune to the FT8 QRG, capture one exact UTC slot, supervised live decode with latency histogram) and a <code>--tx</code>-gated TX phase (safety-keyed tone with PTT-off verification, mid-TX priority STOP timing). First run: 10 live 40 m FT8 decodes; STOP releases PTT in 0.26–0.31 s (SDD §13.5 I10).</li>
+<li>Fixed two defects found by that acceptance. (1) <code>AudioCapture</code> derived every block’s epoch from one jittery wall-clock read; real CoreAudio callback jitter (±ms) carved one-sample gaps into the UTC ring and invalidated every slot. Epochs are now anchored to the sample count and only re-anchored after a &gt;250 ms stall, and <code>UtcRing.write</code> quantizes to the nearest sample instead of truncating (the ±1-ulp product landed on alternating sides of the integer). (2) <code>TxPlayer.play</code> now treats a write failure after <code>cancel()</code> as normal cancellation — real PortAudio fails the blocked write with -9986 when <code>abort()</code> lands mid-write.</li>
+<li>Acceptance environment notes: the desk runs two rigctld instances (FT-710 = hamlib 1049 on <code>/dev/cu.usbserial-0121DB3A0</code> @ 38400, port 4532; a pre-existing IC-M710 profile instance on port 4531). The FT-710’s receiver audio arrives on the C-Media “USB Audio Device” (sounddevice #4), not on the TI “USB Audio CODEC” pair — verified by WWV on/off correlation.</li>
+<li>Deployment wiring caught up with §12.6: <code>MRRC_FT8_AUDIO_DEVICE</code> (index or name substring), <code>MRRC_FT8_DECODER_PROFILE</code> (0–4, default 3) and <code>MRRC_FT8_DECODER_THREADS</code> (<code>auto</code> = I9 clamp or 1–12) are now parsed with fail-startup validation and flow into the production <code>DecodeConfig</code>.</li>
+<li>Fixed the deployment-found slot-skip defect: the orchestrator read the just-ended slot exactly at the boundary, but real audio lands one block (~85 ms) plus scheduling after its sample time, so every slot read returned None (healthy ring, all slots skipped). Decode dispatch now waits a 0.4 s delivery grace past slot end, keeping ~2 s of cutoff headroom; the acceptance runner already read with a grace, which is why hardware acceptance never saw it.</li>
+<li>Production deployment on the Mac mini (BG1SB / ON80DA, radio.vlsc.net): user LaunchAgents <code>com.mrrc.rigctld-ft710</code> (rigctld 1049 on 4532) and <code>com.mrrc.ft8</code> (loopback uvicorn with the full <code>MRRC_FT8_*</code> environment, audio device by name, profile 3 / Auto threads). Verified under launchd: hardened login, health/safety clean, live supervised decodes with the NFR-002 histogram (p3/t7 max 0.283 s) and zero deadline misses.</li>
+<li>Public edge live: root LaunchDaemon <code>com.caddyserver.caddy</code> (deploy template added, <code>HOME=/var/lib/caddy</code> so the root daemon can write storage). The ISP/router blocks inbound 80/443 (LE HTTP-01 and TLS-ALPN-01 both unreachable over IPv6), so the edge serves <code>https://radio.vlsc.net:9988</code> using the operator’s existing acme.sh DNS-01 certificate files, which Caddy hot-reloads on renewal. Verified end-to-end through the proxy: TLS verification, PWA 200, API auth gating and login, health, and a WebSocket 101 upgrade (curl must force HTTP/1.1 — h2 strips the upgrade headers). §12.1’s “Caddy owns 80/443” is relaxed for this deployment to “Caddy owns the public TLS port” (9988). <code>/</code> now redirects to the PWA — the first phone visit hit FastAPI’s bare JSON 404. The first real phone session also exposed a mobile defect: <code>user-select: none</code> on <code>body</code> made the login password field untypable; the no-select rule now lives on <code>#cockpit</code> only (per-input overrides proved unreliable across mobile browsers) and the service-worker shell cache is versioned (v1 → v3) so mobile clients pick up asset fixes.</li>
+<li>Added the production TX path: <code>dsp_encode.SupervisorEncoder</code> (Protocol v1 encode over one reused TX segment), the slot-parity <code>TxDriver</code> (one sequencer message per eligible slot, encode → gated <code>safety.transmit</code>, failures counted and left to the fault matrix), and watchdog-polled QSO log wiring into the canonical store.</li>
+<li>Added <code>CqLoopController</code>: DONE re-arms CQ and resets the idle timer, retry-exhaustion/partner-loss re-arms without resetting, manual/fault disarm, lease loss and the configurable idle timeout (60–3600 s, default 600) stop the loop; loop state rides the state snapshot and every transition is audited. The CQ REST intent accepts <code>{"loop": true}</code>; TX off/STOP stop the loop through the existing paths.</li>
+<li>Upgraded the candidate pane to Band Activity rows (UTC/SNR/dt/freq/text, CQ bold, addressed-to-me highlight, late dimmed, double-click Reply through the gated path); decode batches now carry <code>dt</code>/<code>freq</code>/<code>to_me</code>; shell cache bumped to v8.</li>
+<li>Fixed the control UI never enabling: every WebSocket state frame (hello and each broadcast) is now decorated per connection with the subscribing session’s own lease view, since the shared broadcast snapshot always reported <code>lease.mine</code> as false for the holder. The snapshot’s <code>selected</code> became a <code>{"call", "grid"}</code> object while REST mutation responses keep returning the callsign string, and the CQ LOOP countdown now ticks locally at 1 Hz between snapshots and resynchronizes whenever a new state snapshot arrives.</li>
+<li>Hardened the TX/safety edge: a deliberate lease RELEASE now disarms manually (sequencer stop, armed flag dropped, PTT untouched so an in-flight waveform plays out and releases PTT itself) while expiry/disconnect keep the dead-man priority STOP; TX-driver and orchestrator decode errors both <code>report_fault(DSP)</code>, faults latch per interlock until <code>clear_fault</code> (a dead Worker faults once, not once per slot); STOP reasons map to sequencer semantics (<code>manual</code>/<code>api:&lt;actor&gt;</code> → MANUAL, everything else → FAULT); and the hourly maintenance loop catches per-tick exceptions so one failed sweep cannot kill it.</li>
+<li>Added the fault-recovery channel: the lease-gated, idempotent <code>POST /api/v1/operation/clear-fault</code> clears every latched interlock (empty body) or one named interlock (<code>{"interlock": "&lt;name&gt;"}</code>, unknown name → 422), audits the scope, and never auto-re-arms. The state bar gained a CLEAR FAULT button (visible while faulted, disabled for observers) that clears all; the shell cache stays at v8.</li>
+<li>Fixed silent 409s when an observer tapped a decode row: <code>operation/select</code> is lease-gated, and the client swallowed the rejection, so the tap looked dead. A tap on a candidate now acquires a free control lease implicitly through the standard grant path (WSJT-X-style single tap, UC-003; a lease held by another session still rejects), and select/Reply rejections surface through a new cockpit toast instead of failing silently. The login form gained a visually-hidden username field (password-manager/a11y pairing); shell cache bumped to v9 with static-contract regressions.</li>
+<li>Fixed the cockpit freezing on stale data after a server restart: sessions are intentionally in-memory (NFR-075), so a restart wipes every cookie, but the client only checked the session at boot — dead streams and 401s left the old snapshot on screen with no way back. REST 401s outside <code>/session/</code> and a 4401 WebSocket close now both reload into the login view; shell cache bumped to v10 with a static-contract regression.</li>
+</ul>
+<h2 id="v1.0-2026-08-01-approved-design-baseline">V1.0 — 2026-08-01 — Approved Design Baseline</h2>
+<ul>
+<li>Established the TeamSD 15-chapter MRRC-FT8 design.</li>
+<li>Replaced the early in-process DSP concept with a supervised DSP Worker that owns WSJT-X Improved <code>ft8var</code> OpenMP state.</li>
+<li>Required 12 kHz int16 decoder input, 48 kHz TX, binding global lock and <code>floor(epoch/TRperiod)</code> timing.</li>
+<li>Defined Caddy public TLS, secure-cookie password sessions, Host/Origin validation and no URL token authentication.</li>
+<li>Defined multiple observer sessions, one 5 s heartbeat/15 s TTL control lease and authenticated universal STOP TX.</li>
+<li>Adopted a qFT8-inspired landscape cockpit while retaining WSJT-X interaction semantics.</li>
+<li>Limited V1.0 automation to a human-selected, single standard QSO with three retries, automatic logging and post-completion disarm.</li>
+<li>Defined fail-closed fault/restart behavior, local retention, raw diagnostic export re-authentication, and no third-party telemetry.</li>
+<li>Defined macOS LaunchAgent real-radio and Linux systemd simulated acceptance.</li>
+<li>Migrated <code>sdd-guardian</code> from legacy mrrc_ft710 rules to MRRC-FT8 constraints and added a trace regression test.</li>
+</ul>
+    </main>
+</div>
+
+<footer class="footer" style="margin-top: 0;">
+    <div class="container">
+        <div class="footer-bottom">
+            <p>&copy; 2026 MRRC-FT8 Project · SDD V1.1 · <a href="https://github.com/cheenle/mrrc_ft8" style="color:var(--accent);">GitHub</a></p>
+        </div>
+    </div>
+</footer>
+
+<script>
+function toggleMobileMenu() {
+    document.querySelector('.nav-links').classList.toggle('active');
+}
+document.querySelectorAll('a[href^="#"]').forEach(a => {
+    a.addEventListener('click', function(e) {
+        e.preventDefault();
+        const t = document.querySelector(this.getAttribute('href'));
+        if (t) t.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    });
+});
+const nav = document.querySelector('.navbar');
+window.addEventListener('scroll', () => {
+    nav.style.background = window.scrollY > 50 ? 'rgba(0,0,0,0.95)' : 'rgba(0,0,0,0.8)';
+});
+</script>
+    <script src="../js/global-nav.js?v=2" defer data-gn="1"></script>
+</body>
+</html>

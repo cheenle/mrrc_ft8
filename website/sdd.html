@@ -1,0 +1,207 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="MRRC-FT8 Software Design Description (SDD) overview: architecture decisions, service model, component model and version history.">
+    <meta name="author" content="BG1SB">
+    <meta name="theme-color" content="#0a0a0a">
+    <title>MRRC-FT8 SDD</title>
+
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+
+    <link rel="stylesheet" href="css/octen.css?v=4">
+    <link rel="stylesheet" href="css/sunsdrmobile.css?v=1">
+    <link rel="stylesheet" href="css/ft8.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+</head>
+<body data-site="mrrc_ft8">
+
+<nav class="navbar">
+    <div class="container navbar-content">
+        <a href="index.html" class="logo">
+            <span class="logo-icon"><i class="fas fa-file-lines"></i></span>
+            <span>FT-8 <span style="color: var(--accent);">SDD</span></span>
+        </a>
+        <ul class="nav-links">
+            <li><a href="#overview">Overview</a></li>
+            <li><a href="#updates">Latest</a></li>
+            <li><a href="#chapters">Chapters</a></li>
+            <li><a href="#decisions">AD Index</a></li>
+            <li><a href="https://github.com/cheenle/mrrc_ft8/tree/main/SDD" target="_blank" rel="noopener">GitHub</a></li>
+        </ul>
+        <div class="nav-actions">
+            <a href="zh/sdd.html" class="lang-btn">中文</a>
+            <button class="mobile-menu-toggle" onclick="toggleMobileMenu()"><i class="fas fa-bars"></i></button>
+        </div>
+    </div>
+</nav>
+
+<section class="hero">
+    <div class="hero-content">
+        <div class="hero-badge">
+            <i class="fas fa-book"></i>
+            <span>SDD V1.1 · 2026-08-03</span>
+        </div>
+        <h1 class="hero-title">MRRC-FT8<br><span class="gradient">Software Design Description</span></h1>
+        <p class="hero-subtitle">
+            Canonical design record for the headless FT8/FT4 server — architecture,
+            interfaces, operational model, and runtime evolution.
+        </p>
+        <div class="hero-actions">
+            <a href="sdd/index.html" class="btn btn-primary btn-large">
+                <i class="fas fa-book"></i> Browse SDD Chapters
+            </a>
+            <a href="index.html" class="btn btn-secondary btn-large">
+                <i class="fas fa-arrow-left"></i> Back to Product Page
+            </a>
+        </div>
+    </div>
+</section>
+
+<section class="section" id="overview" style="background: var(--bg-secondary);">
+    <div class="container">
+        <div class="section-header">
+            <span class="section-label">Overview</span>
+            <h2 class="section-title">SDD Scope</h2>
+            <p class="section-subtitle">IBM TeamSD aligned, 15 chapters, implementation-grounded content.</p>
+        </div>
+        <table>
+            <thead>
+            <tr><th>Attribute</th><th>Value</th></tr>
+            </thead>
+            <tbody>
+            <tr><td>Document ID</td><td>SDD-MRRC-FT8-2026-001</td></tr>
+            <tr><td>Version</td><td>V1.1</td></tr>
+            <tr><td>Baseline Date</td><td>2026-08-03</td></tr>
+            <tr><td>Phase</td><td>Live on radio.vlsc.net:9988 (BG1SB / ON80DA, FT-710)</td></tr>
+            <tr><td>Runtime</td><td>WSJT-X 3.0.2 Improved DSP + FastAPI + Uvicorn + NumPy</td></tr>
+            <tr><td>Frontend</td><td>HTML5, CSS3, vanilla JavaScript, Canvas PWA</td></tr>
+            <tr><td>Core Interfaces</td><td>FastAPI REST/WS + supervised DSP Worker IPC + rigctld loopback</td></tr>
+            </tbody>
+        </table>
+    </div>
+</section>
+
+<section class="section" id="updates" style="background: var(--bg-primary);">
+    <div class="container">
+        <div class="section-header">
+            <span class="section-label">Latest Update</span>
+            <h2 class="section-title">What Landed In V1.1</h2>
+        </div>
+        <div class="features-grid">
+            <div class="feature-card">
+                <div class="icon"><i class="fas fa-bug-slash"></i></div>
+                <h3>UtcRing Eviction Root Cause</h3>
+                <p>Physical ring positions were keyed to (absolute − base) % capacity, so once eviction advanced base, reads addressed samples with the new base while data never moved — a shift growing 1:1 with wall clock, wrapping at capacity. Positions now key to the absolute sample index alone (X % capacity): eviction never moves data, base is purely a bounds check.</p>
+            </div>
+            <div class="feature-card">
+                <div class="icon"><i class="fas fa-exchange-alt"></i></div>
+                <h3>Replay Opposite-TX-Slot Phase</h3>
+                <p>The reply path was missing the UC-003 "opposite TX slot": TxDriver gated on a hard-coded even parity that never changed, so replies to partners on the same phase always collided. The sequencer now carries tx_phase = 1 − slot_id % 2 and the QSO alternates to completion.</p>
+            </div>
+            <div class="feature-card">
+                <div class="icon"><i class="fas fa-clock"></i></div>
+                <h3>Manual Reply Decision Window</h3>
+                <p>Replies always missed the slot right after the message they answer. The TX decision is now provisional: the window stays open until decision_cutoff with polling instead of sleeping, and a fit guard defers past-fit-deadline replies to the next eligible slot.</p>
+            </div>
+            <div class="feature-card">
+                <div class="icon"><i class="fas fa-chart-area"></i></div>
+                <h3>3 kHz Waterfall + Band Selector</h3>
+                <p>Spectrum frames now emit only the 3 kHz FT8 passband — no blank half-canvas, half the payload. A band selector in the cockpit top bar tunes 7/14/21/28 MHz FT8 dial frequencies via the lease-gated /radio/band mutation.</p>
+            </div>
+        </div>
+    </div>
+</section>
+
+<section class="section" id="chapters" style="background: var(--bg-secondary);">
+    <div class="container">
+        <div class="section-header">
+            <span class="section-label">Chapter Index</span>
+            <h2 class="section-title">15 SDD Chapters</h2>
+        </div>
+        <div class="steps">
+            <div class="step"><h4><a href="sdd/01-executive-summary.html">01 Executive Summary</a></h4></div>
+            <div class="step"><h4><a href="sdd/02-business-direction.html">02 Business Direction</a></h4></div>
+            <div class="step"><h4><a href="sdd/03-project-definition.html">03 Project Definition</a></h4></div>
+            <div class="step"><h4><a href="sdd/04-system-context.html">04 System Context</a></h4></div>
+            <div class="step"><h4><a href="sdd/05-non-functional-requirements.html">05 Non-Functional Requirements</a></h4></div>
+            <div class="step"><h4><a href="sdd/06-use-case-model.html">06 Use Case Model</a></h4></div>
+            <div class="step"><h4><a href="sdd/07-subject-area-model.html">07 Subject Area Model</a></h4></div>
+            <div class="step"><h4><a href="sdd/08-architecture-decisions.html">08 Architecture Decisions</a></h4></div>
+            <div class="step"><h4><a href="sdd/09-architecture-overview.html">09 Architecture Overview</a></h4></div>
+            <div class="step"><h4><a href="sdd/10-service-model.html">10 Service Model</a></h4></div>
+            <div class="step"><h4><a href="sdd/11-component-model.html">11 Component Model</a></h4></div>
+            <div class="step"><h4><a href="sdd/12-operational-model.html">12 Operational Model</a></h4></div>
+            <div class="step"><h4><a href="sdd/13-feasibility-assessment.html">13 Feasibility Assessment</a></h4></div>
+            <div class="step"><h4><a href="sdd/14-version-history.html">14 Version History</a></h4></div>
+            <div class="step"><h4><a href="sdd/15-ptt-safety-architecture.html">15 PTT Safety Architecture</a></h4></div>
+        </div>
+    </div>
+</section>
+
+<section class="section" id="decisions" style="background: var(--bg-primary);">
+    <div class="container">
+        <div class="section-header">
+            <span class="section-label">Architecture Decisions</span>
+            <h2 class="section-title">AD-001 ... AD-015</h2>
+        </div>
+        <div class="tech-stack">
+            <span class="tech-tag">AD-001 Headless Layered Server</span>
+            <span class="tech-tag">AD-002 WSJT-X C ABI</span>
+            <span class="tech-tag">AD-003 Supervised DSP Worker</span>
+            <span class="tech-tag">AD-004 Fixed Audio Rate Domains</span>
+            <span class="tech-tag">AD-005 Single DSP Owner + Lock</span>
+            <span class="tech-tag">AD-006 UTC Epoch Slot Discipline</span>
+            <span class="tech-tag">AD-007 Sequencer/PTT Safety</span>
+            <span class="tech-tag">AD-008 rigctld Serial Owner</span>
+            <span class="tech-tag">AD-009 Caddy Edge + Cookie Auth</span>
+            <span class="tech-tag">AD-010 Single Control Lease</span>
+            <span class="tech-tag">AD-011 Landscape-First Cockpit</span>
+            <span class="tech-tag">AD-012 Human Selection, Single QSO</span>
+            <span class="tech-tag">AD-013 Separate Bounded Streams</span>
+            <span class="tech-tag">AD-014 SQLite + ADIF</span>
+            <span class="tech-tag">AD-015 Native Service Deployment</span>
+        </div>
+    </div>
+</section>
+
+<footer class="footer">
+    <div class="container">
+        <div class="footer-grid">
+            <div class="footer-section">
+                <h4>MRRC-FT8 SDD</h4>
+                <p>Design documentation aligned with implementation state.</p>
+            </div>
+            <div class="footer-section">
+                <h4>Links</h4>
+                <ul>
+                    <li><a href="index.html">FT-8 Website</a></li>
+                    <li><a href="https://github.com/cheenle/mrrc_ft8/tree/main/SDD" target="_blank" rel="noopener">SDD Folder</a></li>
+                    <li><a href="https://github.com/cheenle/mrrc_ft8/blob/main/SDD/README.md" target="_blank" rel="noopener">SDD README</a></li>
+                </ul>
+            </div>
+        </div>
+        <div class="footer-bottom">
+            <p>&copy; 2026 MRRC-FT8 Project. Open Source under GPLv3 License.</p>
+        </div>
+    </div>
+</footer>
+
+<script>
+function toggleMobileMenu() {
+    document.querySelector('.nav-links').classList.toggle('active');
+}
+document.querySelectorAll('a[href^="#"]').forEach((a) => {
+    a.addEventListener('click', function (e) {
+        e.preventDefault();
+        const t = document.querySelector(this.getAttribute('href'));
+        if (t) t.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    });
+});
+</script>
+<script src="js/global-nav.js?v=2" defer data-gn="1"></script>
+</body>
+</html>

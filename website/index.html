@@ -1,0 +1,1088 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta
+      name="description"
+      content="MRRC-FT8 — headless FT8/FT4 server built on the WSJT-X 3.0.2 Improved DSP core. Python FastAPI control plane, rigctld radio control and a landscape mobile Web cockpit for real FT8 QSOs."
+    />
+    <meta
+      name="keywords"
+      content="FT8, FT4, WSJT-X, headless, amateur radio, digital modes, DSP, OpenMP, FastAPI, rigctld, Caddy, PTT safety, waterfall"
+    />
+    <meta name="author" content="BG1SB" />
+    <meta name="theme-color" content="#0a0a0a" />
+
+    <title>MRRC-FT8 — Headless FT8/FT4 Server</title>
+
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap"
+      rel="stylesheet"
+    />
+
+    <link rel="stylesheet" href="css/octen.css?v=4" />
+    <link rel="stylesheet" href="css/sunsdrmobile.css?v=1" />
+    <link rel="stylesheet" href="css/ft8.css" />
+    <link
+      rel="stylesheet"
+      href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css"
+    />
+
+    <link
+      rel="icon"
+      type="image/svg+xml"
+      href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect fill='%2322d3ee' width='100' height='100' rx='20'/><text y='.9em' x='50%' text-anchor='middle' font-size='60'>📡</text></svg>"
+    />
+  </head>
+  <body data-site="mrrc_ft8">
+    <nav class="navbar">
+      <div class="container navbar-content">
+        <a href="#" class="logo">
+          <span class="logo-icon"><i class="fas fa-satellite-dish"></i></span>
+          <span>MRRC-FT<span style="color: var(--accent)">8</span></span>
+        </a>
+        <ul class="nav-links">
+          <li><a href="#features">Features</a></li>
+          <li><a href="#live">Live Station</a></li>
+          <li><a href="#start">Quick Start</a></li>
+          <li><a href="#architecture">Architecture</a></li>
+          <li><a href="sdd.html">SDD</a></li>
+          <li>
+            <a
+              href="https://github.com/cheenle/mrrc_ft8"
+              target="_blank"
+              rel="noopener"
+            >
+              <i class="fab fa-github"></i> GitHub
+            </a>
+          </li>
+        </ul>
+        <div class="nav-actions">
+          <a href="zh/index.html" class="lang-btn">中文</a>
+          <button class="mobile-menu-toggle" onclick="toggleMobileMenu()">
+            <i class="fas fa-bars"></i>
+          </button>
+        </div>
+      </div>
+    </nav>
+
+    <section class="hero">
+      <div class="hero-content">
+        <div class="hero-badge">
+          <i class="fas fa-check-circle"></i>
+          <span>v0.1.0 · Live on the FT-710 station</span>
+        </div>
+        <h1 class="hero-title">
+          Headless FT8 Server<br />
+          <span class="gradient">Real DSP. Real QSOs.</span>
+        </h1>
+        <p class="hero-subtitle">
+          MRRC-FT8 runs the WSJT-X 3.0.2 Improved DSP core (FT8/FT4 decode and
+          encode) behind a supervised worker, with a Python FastAPI control
+          plane, rigctld radio control and a landscape mobile Web cockpit.
+          Point a browser at it — decode the band, pick a station, and let the
+          sequencer close one standard QSO.
+        </p>
+        <div class="hero-actions">
+          <a
+            href="https://radio.vlsc.net:9988"
+            class="btn btn-primary btn-large"
+            target="_blank"
+            rel="noopener"
+          >
+            <i class="fas fa-play"></i> Live Cockpit
+          </a>
+          <a href="#features" class="btn btn-secondary btn-large">
+            <i class="fas fa-arrow-down"></i> Explore Features
+          </a>
+          <a
+            href="https://github.com/cheenle/mrrc_ft8"
+            class="btn btn-secondary btn-large"
+            target="_blank"
+            rel="noopener"
+          >
+            <i class="fab fa-github"></i> GitHub
+          </a>
+        </div>
+      </div>
+    </section>
+
+    <!-- Features -->
+    <section
+      class="section"
+      id="features"
+      style="background: var(--bg-secondary)"
+    >
+      <div class="container">
+        <div class="section-header">
+          <span class="section-label">Features</span>
+          <h2 class="section-title">WSJT-X DSP, Server-Grade</h2>
+          <p class="section-subtitle">
+            The same improved decoder you know from WSJT-X, wrapped in a
+            headless server with safe, deterministic scheduling.
+          </p>
+        </div>
+
+        <div class="features-grid">
+          <div class="feature-card animate">
+            <div class="icon"><i class="fas fa-microchip"></i></div>
+            <h3>WSJT-X 3.0.2 Improved DSP</h3>
+            <p>
+              Compiled selected Improved `ft8var` sources behind a C ABI into a
+              shared library. FT8 standard + Improved decoding with OpenMP
+              Auto/1–12 sub-bands, FT4 following the FT8 acceptance.
+            </p>
+            <ul>
+              <li>Relocatable build — no vendor tree in production</li>
+              <li>Deterministic sub-band partition across OpenMP teams</li>
+              <li>FT8 174-bit messages, exact LDPC encode/decode</li>
+            </ul>
+          </div>
+
+          <div class="feature-card animate">
+            <div class="icon"><i class="fas fa-shield-halved"></i></div>
+            <h3>Supervised DSP Worker</h3>
+            <p>
+              Fortran/OpenMP state lives only in a dedicated worker process
+              behind supervised IPC. Every DSP call goes through one binding
+              lock — no cross-thread packjt77 races, no Python callbacks from
+              OpenMP threads.
+            </p>
+            <ul>
+              <li>Crash-restart supervision with clean state recovery</li>
+              <li>Global DSP lock serialises all ctypes calls</li>
+              <li>Process boundary isolates native memory</li>
+            </ul>
+          </div>
+
+          <div class="feature-card animate">
+            <div class="icon"><i class="fas fa-wave-square"></i></div>
+            <h3>UTC Slot Discipline</h3>
+            <p>
+              Every schedule decision uses <code>floor(epoch/TRperiod)</code> —
+              the only slot identity rule. RX, TX, decode and sequencing all
+              align to the same absolute UTC slot grid.
+            </p>
+            <ul>
+              <li>UtcRing keyed by absolute sample index</li>
+              <li>No drift, no eviction misalignment</li>
+              <li>15 s FT8 / 7.5 s FT4 periods</li>
+            </ul>
+          </div>
+
+          <div class="feature-card animate">
+            <div class="icon"><i class="fas fa-tower-broadcast"></i></div>
+            <h3>Sequencer + PTT Safety</h3>
+            <p>
+              Human selects the target — the sequencer drives one standard QSO
+              to completion on the correct opposite TX slot, with a manual
+              reply decision window, fit guard and central PTT safety
+              controller.
+            </p>
+            <ul>
+              <li>Opposite-slot phase computed from decode slot parity</li>
+              <li>Fit guard: 12.64 s waveform fits the 15 s slot</li>
+              <li>Any authenticated session can STOP TX instantly</li>
+            </ul>
+          </div>
+
+          <div class="feature-card animate">
+            <div class="icon"><i class="fas fa-plug"></i></div>
+            <h3>rigctld Radio Control</h3>
+            <p>
+              The serial port has exactly one owner: rigctld. The server talks
+              CAT over loopback TCP — frequency, mode, PTT — with no module
+              ever opening the serial device directly.
+            </p>
+            <ul>
+              <li>Single serial owner — no interleaved CAT corruption</li>
+              <li>Loopback TCP, unix-socket option</li>
+              <li>PTT via rigctl / hamlib commands</li>
+            </ul>
+          </div>
+
+          <div class="feature-card animate">
+            <div class="icon"><i class="fas fa-database"></i></div>
+            <h3>Durable QSO Logging + ADIF</h3>
+            <p>
+              Every completed QSO lands in the canonical SQLite store with
+              start/band context captured at sequencer completion, plus ADIF
+              export for your favourite logging suite.
+            </p>
+            <ul>
+              <li>SQLite canonical QSO/audit/history records</li>
+              <li>Dial frequency → ADIF band name mapping</li>
+              <li>on_qso fires once at completion, not per leg</li>
+            </ul>
+          </div>
+
+          <div class="feature-card animate">
+            <div class="icon"><i class="fas fa-chart-area"></i></div>
+            <h3>3 kHz Waterfall</h3>
+            <p>
+              The FT8 passband is ~0–3 kHz, so the spectrum frame emits exactly
+              the 3 kHz span — no blank half-canvas, half the payload, and the
+              client maps every bin across the full waterfall.
+            </p>
+            <ul>
+              <li>Display bandwidth configurable</li>
+              <li>Validated within 0..rate/2</li>
+              <li>Band selector: 7/14/21/28 MHz</li>
+            </ul>
+          </div>
+
+          <div class="feature-card animate">
+            <div class="icon"><i class="fas fa-mobile-alt"></i></div>
+            <h3>Landscape Mobile Cockpit</h3>
+            <p>
+              A mobile-first PWA built for a phone lying in landscape next to
+              the rig: full control in landscape, degraded observer/STOP view
+              in portrait. No build step — vanilla JS modules.
+            </p>
+            <ul>
+              <li>One control lease across many observer sessions</li>
+              <li>5 s heartbeat / 15 s TTL lease renewal</li>
+              <li>WebSocket auth via secure cookie, Caddy TLS edge</li>
+            </ul>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Live Station -->
+    <section class="section" id="live" style="background: var(--bg-primary)">
+      <div class="container" style="text-align: center">
+        <div class="section-header">
+          <span class="section-label">Live Station</span>
+          <h2 class="section-title">BG1SB / FT-710, ON80DA Field Sessions</h2>
+          <p class="section-subtitle">
+            v0.1.0 is running the real FT-710 station. The 2026-08-03 field
+            session closed the RX/TX root causes — UTC-ring eviction
+            misalignment, Replay opposite-slot phase and the manual-Reply
+            decision window — and real FT8 QSOs are being worked through the
+            mobile cockpit.
+          </p>
+        </div>
+        <div style="display: flex; gap: 1rem; justify-content: center; flex-wrap: wrap">
+          <a
+            href="https://radio.vlsc.net:9988"
+            class="btn btn-primary btn-large"
+            target="_blank"
+            rel="noopener"
+          >
+            <i class="fas fa-play"></i> Open Live Cockpit
+          </a>
+          <a
+            href="https://github.com/cheenle/mrrc_ft8"
+            class="btn btn-secondary btn-large"
+            target="_blank"
+            rel="noopener"
+          >
+            <i class="fab fa-github"></i> Source Code
+          </a>
+        </div>
+        <p style="color: var(--text-muted); font-size: 0.85rem; margin-top: 1.25rem">
+          Live edge: <code>https://radio.vlsc.net:9988</code> — Caddy TLS with
+          acme.sh DNS-01 certificates; FastAPI and rigctld stay loopback-only.
+        </p>
+      </div>
+    </section>
+
+    <!-- Quick Start -->
+    <section class="section" id="start" style="background: var(--bg-secondary)">
+      <div class="container">
+        <div class="section-header">
+          <span class="section-label">Quick Start</span>
+          <h2 class="section-title">Build and Run in Five Steps</h2>
+          <p class="section-subtitle">
+            macOS or Linux. Requires gfortran-mp-13 + FFTW3f for the DSP core,
+            then a plain Python venv for the server.
+          </p>
+        </div>
+
+        <div class="steps">
+          <div class="step">
+            <h4>1 · Build the DSP Core</h4>
+            <p>CMake builds the Fortran shim + selected Improved sources into <code>wsjt_core</code>.</p>
+            <code>cmake -S dsp -B dsp/build -DCMAKE_Fortran_COMPILER=gfortran-mp-13 && cmake --build dsp/build -j</code>
+          </div>
+          <div class="step">
+            <h4>2 · Install Python Environment</h4>
+            <p>Editable install pulls FastAPI, uvicorn, numpy and the test deps.</p>
+            <code>python3 -m venv venv && venv/bin/pip install -e '.[dev]'</code>
+          </div>
+          <div class="step">
+            <h4>3 · Set OMP_STACKSIZE</h4>
+            <p>Improved <code>sync8var</code> allocates large work arrays on the thread stack — 10 MB, set before NumPy/OpenMP load.</p>
+            <code>export OMP_STACKSIZE=10M</code>
+          </div>
+          <div class="step">
+            <h4>4 · Configure and Launch</h4>
+            <p>Set <code>MRRC_FT8_*</code> env vars (password hash via <code>--hash-password</code>, call, grid, audio device, allowed hosts).</p>
+            <code>venv/bin/python -m server.main</code>
+          </div>
+          <div class="step">
+            <h4>5 · Point a Browser at It</h4>
+            <p>Open the cockpit, log in, select a station and run a QSO. Full deployment templates (Caddy, LaunchAgent, systemd) live in <code>deploy/</code>.</p>
+            <code>https://your-host:9988 → login → band select → work the pileup</code>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Requirements -->
+    <section
+      class="section"
+      id="requirements"
+      style="background: var(--bg-primary)"
+    >
+      <div class="container" style="text-align: center">
+        <div class="section-header">
+          <span class="section-label">Requirements</span>
+          <h2 class="section-title">What You Need</h2>
+        </div>
+        <div class="tech-stack" style="margin-bottom: 0">
+          <span class="tech-tag"><i class="fas fa-broadcast-tower"></i> Any CAT-capable HF rig</span>
+          <span class="tech-tag"><i class="fas fa-microchip"></i> rigctld (hamlib)</span>
+          <span class="tech-tag"><i class="fas fa-server"></i> macOS / Linux</span>
+          <span class="tech-tag"><i class="fas fa-compiler"></i> gfortran-mp-13 + FFTW3f</span>
+          <span class="tech-tag"><i class="fab fa-python"></i> Python 3.11+</span>
+          <span class="tech-tag"><i class="fas fa-code-branch"></i> CMake ≥ 3.16</span>
+          <span class="tech-tag"><i class="fas fa-globe"></i> Modern mobile browser</span>
+          <span class="tech-tag"><i class="fas fa-shield-halved"></i> Caddy TLS edge (optional)</span>
+        </div>
+      </div>
+    </section>
+
+    <!-- Architecture -->
+    <section
+      class="section"
+      id="architecture"
+      style="background: var(--bg-primary)"
+    >
+      <div class="container">
+        <div class="section-header">
+          <span class="section-label">Architecture</span>
+          <h2 class="section-title">Layered, Supervised, Deterministic</h2>
+          <p class="section-subtitle">
+            Browser → TLS edge → FastAPI control plane → supervised DSP worker
+            → shared native library. One owner per resource.
+          </p>
+        </div>
+
+        <div class="arch-diagram">
+          <svg viewBox="0 0 880 200" xmlns="http://www.w3.org/2000/svg">
+            <defs>
+              <linearGradient id="gBoxApp" x1="0" y1="0" x2="1" y2="1">
+                <stop offset="0%" stop-color="rgba(34,211,238,0.08)" />
+                <stop offset="100%" stop-color="rgba(34,211,238,0.02)" />
+              </linearGradient>
+              <linearGradient id="gBoxSrv" x1="0" y1="0" x2="1" y2="1">
+                <stop offset="0%" stop-color="rgba(93,173,226,0.08)" />
+                <stop offset="100%" stop-color="rgba(93,173,226,0.02)" />
+              </linearGradient>
+              <linearGradient id="gBoxWkr" x1="0" y1="0" x2="1" y2="1">
+                <stop offset="0%" stop-color="rgba(155,89,182,0.08)" />
+                <stop offset="100%" stop-color="rgba(155,89,182,0.02)" />
+              </linearGradient>
+              <linearGradient id="gBoxHw" x1="0" y1="0" x2="1" y2="1">
+                <stop offset="0%" stop-color="rgba(46,204,113,0.08)" />
+                <stop offset="100%" stop-color="rgba(46,204,113,0.02)" />
+              </linearGradient>
+            </defs>
+
+            <rect
+              x="10"
+              y="15"
+              width="230"
+              height="110"
+              rx="14"
+              fill="url(#gBoxApp)"
+              stroke="rgba(34,211,238,0.35)"
+              stroke-width="1.5"
+            />
+            <text
+              x="125"
+              y="44"
+              text-anchor="middle"
+              fill="#22d3ee"
+              font-size="15"
+              font-weight="700"
+              font-family="inherit"
+            >
+              Browser
+            </text>
+            <text
+              x="125"
+              y="66"
+              text-anchor="middle"
+              fill="#8899aa"
+              font-size="12"
+              font-family="inherit"
+            >
+              Landscape Mobile Cockpit
+            </text>
+            <text
+              x="125"
+              y="88"
+              text-anchor="middle"
+              fill="#5c6370"
+              font-size="11"
+              font-family="inherit"
+            >
+              Waterfall · Decode Feed
+            </text>
+            <text
+              x="125"
+              y="107"
+              text-anchor="middle"
+              fill="#5c6370"
+              font-size="11"
+              font-family="inherit"
+            >
+              Vanilla JS · PWA
+            </text>
+
+            <rect
+              x="460"
+              y="15"
+              width="230"
+              height="110"
+              rx="14"
+              fill="url(#gBoxSrv)"
+              stroke="rgba(93,173,226,0.35)"
+              stroke-width="1.5"
+            />
+            <text
+              x="575"
+              y="44"
+              text-anchor="middle"
+              fill="#5dade2"
+              font-size="15"
+              font-weight="700"
+              font-family="inherit"
+            >
+              FastAPI Main
+            </text>
+            <text
+              x="575"
+              y="66"
+              text-anchor="middle"
+              fill="#8899aa"
+              font-size="12"
+              font-family="inherit"
+            >
+              auth · lease · UTC · audio · rig
+            </text>
+            <text
+              x="575"
+              y="88"
+              text-anchor="middle"
+              fill="#5c6370"
+              font-size="11"
+              font-family="inherit"
+            >
+              sequencer · PTT safety
+            </text>
+            <text
+              x="575"
+              y="107"
+              text-anchor="middle"
+              fill="#5c6370"
+              font-size="11"
+              font-family="inherit"
+            >
+              SQLite · ADIF · waterfall
+            </text>
+
+            <rect
+              x="260"
+              y="145"
+              width="0"
+              height="0"
+              fill="none"
+            />
+            <rect
+              x="260"
+              y="30"
+              width="180"
+              height="95"
+              rx="14"
+              fill="url(#gBoxWkr)"
+              stroke="rgba(155,89,182,0.35)"
+              stroke-width="1.5"
+            />
+            <text
+              x="350"
+              y="58"
+              text-anchor="middle"
+              fill="#9b59b6"
+              font-size="14"
+              font-weight="700"
+              font-family="inherit"
+            >
+              DSP Worker
+            </text>
+            <text
+              x="350"
+              y="78"
+              text-anchor="middle"
+              fill="#8899aa"
+              font-size="11"
+              font-family="inherit"
+            >
+              supervised IPC
+            </text>
+            <text
+              x="350"
+              y="96"
+              text-anchor="middle"
+              fill="#5c6370"
+              font-size="10"
+              font-family="inherit"
+            >
+              binding lock · packjt77
+            </text>
+            <text
+              x="350"
+              y="112"
+              text-anchor="middle"
+              fill="#5c6370"
+              font-size="10"
+              font-family="inherit"
+            >
+              OpenMP teams 1–12
+            </text>
+
+            <rect
+              x="710"
+              y="30"
+              width="160"
+              height="95"
+              rx="14"
+              fill="url(#gBoxHw)"
+              stroke="rgba(46,204,113,0.35)"
+              stroke-width="1.5"
+            />
+            <text
+              x="790"
+              y="58"
+              text-anchor="middle"
+              fill="#2ecc71"
+              font-size="14"
+              font-weight="700"
+              font-family="inherit"
+            >
+              HF Radio
+            </text>
+            <text
+              x="790"
+              y="78"
+              text-anchor="middle"
+              fill="#8899aa"
+              font-size="11"
+              font-family="inherit"
+            >
+              FT-710 field station
+            </text>
+            <text
+              x="790"
+              y="96"
+              text-anchor="middle"
+              fill="#5c6370"
+              font-size="10"
+              font-family="inherit"
+            >
+              CAT via rigctld
+            </text>
+            <text
+              x="790"
+              y="112"
+              text-anchor="middle"
+              fill="#5c6370"
+              font-size="10"
+              font-family="inherit"
+            >
+              USB audio 48 kHz
+            </text>
+
+            <line
+              x1="240"
+              y1="70"
+              x2="460"
+              y2="70"
+              stroke="rgba(34,211,238,0.4)"
+              stroke-width="1.5"
+            />
+            <polygon
+              points="452,64 466,70 452,76"
+              fill="rgba(34,211,238,0.5)"
+            />
+            <polygon
+              points="248,64 234,70 248,76"
+              fill="rgba(34,211,238,0.5)"
+            />
+            <text
+              x="350"
+              y="62"
+              text-anchor="middle"
+              fill="#22d3ee"
+              font-size="11"
+              font-weight="600"
+              font-family="inherit"
+            >
+              HTTPS / WSS
+            </text>
+            <text
+              x="350"
+              y="82"
+              text-anchor="middle"
+              fill="#8899aa"
+              font-size="10"
+              font-family="inherit"
+            >
+              Caddy TLS edge
+            </text>
+
+            <line
+              x1="440"
+              y1="70"
+              x2="260"
+              y2="70"
+              stroke="rgba(155,89,182,0.4)"
+              stroke-width="1.5"
+            />
+            <polygon
+              points="268,64 254,70 268,76"
+              fill="rgba(155,89,182,0.5)"
+            />
+            <text
+              x="350"
+              y="128"
+              text-anchor="middle"
+              fill="#9b59b6"
+              font-size="10"
+              font-weight="600"
+              font-family="inherit"
+            >
+              supervised IPC
+            </text>
+
+            <path
+              d="M 690 70 L 690 77 L 710 77"
+              stroke="rgba(46,204,113,0.35)"
+              stroke-width="1.5"
+              fill="none"
+            />
+            <polygon
+              points="718,73 710,77 718,81"
+              fill="rgba(46,204,113,0.45)"
+            />
+            <text
+              x="700"
+              y="135"
+              text-anchor="middle"
+              fill="#2ecc71"
+              font-size="10"
+              font-weight="600"
+              font-family="inherit"
+            >
+              loopback
+            </text>
+
+            <g transform="translate(10,145)">
+              <rect
+                x="0"
+                y="0"
+                width="195"
+                height="36"
+                rx="6"
+                fill="rgba(255,255,255,0.03)"
+                stroke="rgba(255,255,255,0.05)"
+                stroke-width="1"
+              />
+              <text
+                x="8"
+                y="15"
+                fill="#22d3ee"
+                font-size="9"
+                font-family="monospace"
+              >
+                /WScontrol
+              </text>
+              <text
+                x="8"
+                y="29"
+                fill="#8899aa"
+                font-size="9"
+                font-family="inherit"
+              >
+                JSON · select / reply / CQ
+              </text>
+            </g>
+            <g transform="translate(215,145)">
+              <rect
+                x="0"
+                y="0"
+                width="195"
+                height="36"
+                rx="6"
+                fill="rgba(255,255,255,0.03)"
+                stroke="rgba(255,255,255,0.05)"
+                stroke-width="1"
+              />
+              <text
+                x="8"
+                y="15"
+                fill="#5dade2"
+                font-size="9"
+                font-family="monospace"
+              >
+                /WSstate
+              </text>
+              <text
+                x="8"
+                y="29"
+                fill="#8899aa"
+                font-size="9"
+                font-family="inherit"
+              >
+                decode feed · band · lease
+              </text>
+            </g>
+            <g transform="translate(430,145)">
+              <rect
+                x="0"
+                y="0"
+                width="195"
+                height="36"
+                rx="6"
+                fill="rgba(255,255,255,0.03)"
+                stroke="rgba(255,255,255,0.05)"
+                stroke-width="1"
+              />
+              <text
+                x="8"
+                y="15"
+                fill="#2ecc71"
+                font-size="9"
+                font-family="monospace"
+              >
+                /WSwaterfall
+              </text>
+              <text
+                x="8"
+                y="29"
+                fill="#8899aa"
+                font-size="9"
+                font-family="inherit"
+              >
+                3 kHz span bins
+              </text>
+            </g>
+            <g transform="translate(645,145)">
+              <rect
+                x="0"
+                y="0"
+                width="195"
+                height="36"
+                rx="6"
+                fill="rgba(255,255,255,0.03)"
+                stroke="rgba(255,255,255,0.05)"
+                stroke-width="1"
+              />
+              <text
+                x="8"
+                y="15"
+                fill="#e67e22"
+                font-size="9"
+                font-family="monospace"
+              >
+                /WSqso
+              </text>
+              <text
+                x="8"
+                y="29"
+                fill="#8899aa"
+                font-size="9"
+                font-family="inherit"
+              >
+                sequencer · QSO log events
+              </text>
+            </g>
+          </svg>
+        </div>
+
+        <div class="arch-grid">
+          <div class="arch-card">
+            <div class="label"><i class="fas fa-code-branch"></i> DSP Pipeline</div>
+            <div class="endpoint">12 kHz int16 mono in</div>
+            <div class="dir">ft8var OpenMP decode</div>
+            <div class="payload">
+              Supervised worker → wsjt_core → decodes; TX waveform always 48 kHz
+            </div>
+          </div>
+          <div class="arch-card">
+            <div class="label">
+              <i class="fas fa-clock"></i> UTC Slot Grid
+            </div>
+            <div class="endpoint">floor(epoch / TRperiod)</div>
+            <div class="dir">Absolute slot identity</div>
+            <div class="payload">
+              UtcRing keyed by absolute sample index; no eviction drift
+            </div>
+          </div>
+          <div class="arch-card">
+            <div class="label"><i class="fas fa-key"></i> Control Lease</div>
+            <div class="endpoint">Many observers, one control</div>
+            <div class="dir">5 s heartbeat / 15 s TTL</div>
+            <div class="payload">
+              Any authenticated session may STOP TX; lease required to start
+            </div>
+          </div>
+          <div class="arch-card">
+            <div class="label">
+              <i class="fas fa-network-wired"></i> Public Edge
+            </div>
+            <div class="endpoint">Caddy :80/:443 only</div>
+            <div class="dir">acme.sh DNS-01 TLS</div>
+            <div class="payload">
+              FastAPI + rigctld loopback-only; secure-cookie WebSocket auth
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Key Numbers -->
+    <section class="section" id="numbers" style="background: var(--bg-secondary)">
+      <div class="container">
+        <div class="section-header">
+          <span class="section-label">Key Numbers</span>
+          <h2 class="section-title">DSP, Timing, Safety — by the Numbers</h2>
+        </div>
+
+        <div class="perf-grid">
+          <div class="perf-card">
+            <div class="metric">12 kHz</div>
+            <div class="metric-label">
+              Decoder Input<br /><small>int16 mono — the only allowed rate</small>
+            </div>
+          </div>
+          <div class="perf-card">
+            <div class="metric">48 kHz</div>
+            <div class="metric-label">
+              TX Waveform<br /><small>Fixed TX rate domain</small>
+            </div>
+          </div>
+          <div class="perf-card">
+            <div class="metric">15 s</div>
+            <div class="metric-label">
+              FT8 Slot Period<br /><small>floor(epoch/TRperiod) identity</small>
+            </div>
+          </div>
+          <div class="perf-card">
+            <div class="metric">1–12</div>
+            <div class="metric-label">
+              OpenMP Sub-Bands<br /><small>Deterministic partition</small>
+            </div>
+          </div>
+          <div class="perf-card">
+            <div class="metric">3 kHz</div>
+            <div class="metric-label">
+              Waterfall Span<br /><small>FT8 passband, no blank half</small>
+            </div>
+          </div>
+          <div class="perf-card">
+            <div class="metric">40</div>
+            <div class="metric-label">
+              Regression Tests<br /><small>ft8sim/ft4sim synthetic signals</small>
+            </div>
+          </div>
+        </div>
+
+        <h3
+          style="
+            text-align: center;
+            color: var(--text-primary);
+            margin-top: 3rem;
+            margin-bottom: 1.5rem;
+          "
+        >
+          Technology Stack
+        </h3>
+        <div class="tech-stack">
+          <span class="tech-tag">WSJT-X 3.0.2 Improved</span>
+          <span class="tech-tag">Fortran + OpenMP</span>
+          <span class="tech-tag">FastAPI + Uvicorn</span>
+          <span class="tech-tag">asyncio</span>
+          <span class="tech-tag">rigctld / hamlib</span>
+          <span class="tech-tag">SQLite</span>
+          <span class="tech-tag">ADIF</span>
+          <span class="tech-tag">Caddy TLS</span>
+          <span class="tech-tag">PortAudio capture</span>
+          <span class="tech-tag">Vanilla JS PWA</span>
+        </div>
+      </div>
+    </section>
+
+    <!-- SDD Chapters -->
+    <section class="section" id="sdd" style="background: var(--bg-primary)">
+      <div class="container">
+        <div class="section-header">
+          <span class="section-label">Design Record</span>
+          <h2 class="section-title">15 SDD Chapters</h2>
+          <p class="section-subtitle">
+            Full IBM TeamSD-style System Design Description — requirements,
+            architecture decisions, safety analysis and version history.
+          </p>
+        </div>
+        <div class="steps">
+          <div class="step"><h4><a href="sdd/01-executive-summary.html">01 Executive Summary</a></h4></div>
+          <div class="step"><h4><a href="sdd/02-business-direction.html">02 Business Direction</a></h4></div>
+          <div class="step"><h4><a href="sdd/03-project-definition.html">03 Project Definition</a></h4></div>
+          <div class="step"><h4><a href="sdd/04-system-context.html">04 System Context</a></h4></div>
+          <div class="step"><h4><a href="sdd/05-non-functional-requirements.html">05 Non-Functional Requirements</a></h4></div>
+          <div class="step"><h4><a href="sdd/06-use-case-model.html">06 Use Case Model</a></h4></div>
+          <div class="step"><h4><a href="sdd/07-subject-area-model.html">07 Subject Area Model</a></h4></div>
+          <div class="step"><h4><a href="sdd/08-architecture-decisions.html">08 Architecture Decisions</a></h4></div>
+          <div class="step"><h4><a href="sdd/09-architecture-overview.html">09 Architecture Overview</a></h4></div>
+          <div class="step"><h4><a href="sdd/10-service-model.html">10 Service Model</a></h4></div>
+          <div class="step"><h4><a href="sdd/11-component-model.html">11 Component Model</a></h4></div>
+          <div class="step"><h4><a href="sdd/12-operational-model.html">12 Operational Model</a></h4></div>
+          <div class="step"><h4><a href="sdd/13-feasibility-assessment.html">13 Feasibility Assessment</a></h4></div>
+          <div class="step"><h4><a href="sdd/14-version-history.html">14 Version History</a></h4></div>
+          <div class="step"><h4><a href="sdd/15-ptt-safety-architecture.html">15 PTT Safety Architecture</a></h4></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Architecture Decisions -->
+    <section class="section" id="decisions" style="background: var(--bg-secondary)">
+      <div class="container">
+        <div class="section-header">
+          <span class="section-label">Architecture Decisions</span>
+          <h2 class="section-title">AD-001 ... AD-015</h2>
+        </div>
+        <div class="tech-stack">
+          <span class="tech-tag">AD-001 Headless Layered Server</span>
+          <span class="tech-tag">AD-002 WSJT-X C ABI</span>
+          <span class="tech-tag">AD-003 Supervised DSP Worker</span>
+          <span class="tech-tag">AD-004 Fixed Audio Rate Domains</span>
+          <span class="tech-tag">AD-005 Single DSP Owner + Lock</span>
+          <span class="tech-tag">AD-006 UTC Epoch Slot Discipline</span>
+          <span class="tech-tag">AD-007 Sequencer/PTT Safety</span>
+          <span class="tech-tag">AD-008 rigctld Serial Owner</span>
+          <span class="tech-tag">AD-009 Caddy Edge + Cookie Auth</span>
+          <span class="tech-tag">AD-010 Single Control Lease</span>
+          <span class="tech-tag">AD-011 Landscape-First Cockpit</span>
+          <span class="tech-tag">AD-012 Human Selection, Single QSO</span>
+          <span class="tech-tag">AD-013 Separate Bounded Streams</span>
+          <span class="tech-tag">AD-014 SQLite + ADIF</span>
+          <span class="tech-tag">AD-015 Native Service Deployment</span>
+        </div>
+      </div>
+    </section>
+
+    <footer class="footer">
+      <div class="container">
+        <div class="footer-grid">
+          <div class="footer-section">
+            <h4>MRRC-FT8</h4>
+            <p>
+              Headless FT8/FT4 server powered by the WSJT-X 3.0.2 Improved DSP
+              core. Built by
+              <a href="https://github.com/cheenle" style="color: var(--accent)"
+                >BG1SB</a
+              >.
+            </p>
+          </div>
+          <div class="footer-section">
+            <h4>Links</h4>
+            <ul>
+              <li><a href="#">Home</a></li>
+              <li><a href="#features">Features</a></li>
+              <li><a href="#live">Live Station</a></li>
+              <li><a href="#architecture">Architecture</a></li>
+              <li><a href="#start">Quick Start</a></li>
+            </ul>
+          </div>
+          <div class="footer-section">
+            <h4>Resources</h4>
+            <ul>
+              <li>
+                <a
+                  href="https://radio.vlsc.net:9988"
+                  target="_blank"
+                  rel="noopener"
+                  >Live Cockpit</a
+                >
+              </li>
+              <li>
+                <a
+                  href="https://github.com/cheenle/mrrc_ft8"
+                  target="_blank"
+                  rel="noopener"
+                  >GitHub</a
+                >
+              </li>
+              <li>
+                <a
+                  href="https://github.com/cheenle/mrrc_ft8/blob/main/README.md"
+                  target="_blank"
+                  rel="noopener"
+                  >README</a
+                >
+              </li>
+              <li><a href="sdd.html">SDD Docs</a></li>
+              <li>
+                <a
+                  href="https://github.com/cheenle/mrrc_ft8/tree/main/SDD"
+                  target="_blank"
+                  rel="noopener"
+                  >SDD Source</a
+                >
+              </li>
+              <li>
+                <a
+                  href="https://github.com/cheenle/mrrc_ft8/blob/main/LICENSE"
+                  target="_blank"
+                  rel="noopener"
+                  >GPLv3 License</a
+                >
+              </li>
+            </ul>
+          </div>
+        </div>
+        <div class="footer-bottom">
+          <p>
+            &copy; 2026 MRRC-FT8 Project. Open Source under GPLv3 License. ·
+            WSJT-X and FT8/FT4 are projects of the WSJT Group and K1JT.
+          </p>
+        </div>
+      </div>
+    </footer>
+
+    <script>
+      function toggleMobileMenu() {
+        document.querySelector(".nav-links").classList.toggle("active");
+      }
+      document.querySelectorAll('a[href^="#"]').forEach((a) => {
+        a.addEventListener("click", function (e) {
+          e.preventDefault();
+          const t = document.querySelector(this.getAttribute("href"));
+          if (t) t.scrollIntoView({ behavior: "smooth", block: "start" });
+        });
+      });
+      const nav = document.querySelector(".navbar");
+      window.addEventListener("scroll", () => {
+        nav.style.background =
+          window.scrollY > 50 ? "rgba(10,10,10,0.98)" : "rgba(10,10,10,0.92)";
+      });
+    </script>
+    <script src="js/global-nav.js?v=2" defer data-gn="1"></script>
+  </body>
+</html>

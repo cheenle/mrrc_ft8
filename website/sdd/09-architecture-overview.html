@@ -1,0 +1,198 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Architecture Overview — MRRC-FT8 SDD</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="../css/octen.css?v=4">
+    <link rel="stylesheet" href="../css/sunsdrmobile.css?v=1">
+    <link rel="stylesheet" href="../css/ft8.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-7442510147240155" crossorigin="anonymous"></script>
+    <style>
+        .sdd-layout { display: flex; max-width: 1400px; margin: 0 auto; padding: 0 2rem; gap: 2rem; }
+        .sdd-sidebar {
+            width: 260px; flex-shrink: 0; position: sticky; top: 80px;
+            max-height: calc(100vh - 100px); overflow-y: auto;
+            background: var(--bg-card); border: 1px solid var(--border);
+            border-radius: 0.75rem; padding: 1.25rem 0;
+        }
+        .sdd-sidebar h4 {
+            font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.08em;
+            color: var(--accent); padding: 0 1.25rem; margin-bottom: 0.75rem;
+        }
+        .sdd-sidebar ul { list-style: none; }
+        .sdd-sidebar a {
+            display: block; padding: 0.375rem 1.25rem; font-size: 0.8125rem;
+            color: var(--text-secondary); transition: all 0.15s;
+            border-left: 2px solid transparent;
+        }
+        .sdd-sidebar a:hover { color: var(--text-primary); border-left-color: var(--border-hover); }
+        .sdd-sidebar a.active {
+            color: var(--accent); background: var(--accent-glow);
+            border-left-color: var(--accent); font-weight: 500;
+        }
+        .sdd-content { flex: 1; min-width: 0; padding-bottom: 4rem; }
+        .sdd-content h1 { font-size: 2rem; font-weight: 700; margin: 2rem 0 0.5rem; letter-spacing: -0.02em; }
+        .sdd-content h2 { font-size: 1.375rem; font-weight: 600; margin: 2rem 0 0.75rem; color: var(--accent); }
+        .sdd-content h3 { font-size: 1.125rem; font-weight: 600; margin: 1.5rem 0 0.5rem; }
+        .sdd-content h4 { font-size: 1rem; font-weight: 600; margin: 1.25rem 0 0.5rem; }
+        .sdd-content p, .sdd-content li { color: var(--text-secondary); line-height: 1.7; margin-bottom: 0.75rem; }
+        .sdd-content table {
+            width: 100%; border-collapse: collapse; margin: 1.25rem 0;
+            font-size: 0.875rem;
+        }
+        .sdd-content th, .sdd-content td {
+            padding: 0.625rem 0.875rem; text-align: left;
+            border: 1px solid var(--border);
+        }
+        .sdd-content th { background: var(--bg-tertiary); color: var(--text-primary); font-weight: 600; }
+        .sdd-content td { color: var(--text-secondary); }
+        .sdd-content code {
+            font-family: var(--font-mono); font-size: 0.85em;
+            background: var(--bg-tertiary); padding: 1px 6px; border-radius: 3px;
+            color: var(--accent);
+        }
+        .sdd-content pre {
+            background: var(--bg-tertiary); border: 1px solid var(--border);
+            border-radius: 0.5rem; padding: 1rem; overflow-x: auto;
+            margin: 1rem 0; font-size: 0.8125rem; line-height: 1.6;
+        }
+        .sdd-content pre code {
+            background: none; padding: 0; color: var(--text-secondary);
+        }
+        .sdd-content blockquote {
+            border-left: 3px solid var(--accent); padding: 0.5rem 1rem;
+            margin: 1rem 0; color: var(--text-muted); font-size: 0.9375rem;
+            background: var(--bg-tertiary); border-radius: 0 0.375rem 0.375rem 0;
+        }
+        .sdd-content ul, .sdd-content ol { margin-left: 1.5rem; margin-bottom: 1rem; }
+        .sdd-content hr { border: none; border-top: 1px solid var(--border); margin: 2rem 0; }
+        .sdd-content a { color: var(--accent); }
+        .sdd-content img { max-width: 100%; border-radius: 0.5rem; margin: 1rem 0; }
+        @media (max-width: 900px) {
+            .sdd-layout { flex-direction: column; padding: 0 1rem; }
+            .sdd-sidebar { width: 100%; position: static; max-height: none; }
+        }
+    </style>
+</head>
+<body data-site="mrrc_ft8">
+
+<nav class="navbar">
+    <div class="container navbar-content">
+        <a href="../index.html" class="logo">
+            <span class="logo-icon"><i class="fas fa-microchip"></i></span>
+            <span>MRRC-FT<span style="color: var(--accent);">8</span></span>
+        </a>
+        <ul class="nav-links">
+            <li><a href="../index.html#features">Features</a></li>
+            <li><a href="../index.html#architecture">Architecture</a></li>
+            <li><a href="index.html">SDD Docs</a></li>
+            <li><a href="https://github.com/cheenle/mrrc_ft8" target="_blank"><i class="fab fa-github"></i> GitHub</a></li>
+        </ul>
+        <div class="nav-actions">
+            <a href="../zh/index.html" class="lang-btn">中文</a>
+            <button class="mobile-menu-toggle" onclick="toggleMobileMenu()"><i class="fas fa-bars"></i></button>
+        </div>
+    </div>
+</nav>
+
+<div class="sdd-layout">
+    <aside class="sdd-sidebar">
+        <h4>SDD Chapters</h4>
+        <ul>
+            <li><a href="index.html">Overview</a></li>
+            <li><a href="01-executive-summary.html">1. Executive Summary</a></li>
+            <li><a href="02-business-direction.html">2. Business Direction</a></li>
+            <li><a href="03-project-definition.html">3. Project Definition</a></li>
+            <li><a href="04-system-context.html">4. System Context</a></li>
+            <li><a href="05-non-functional-requirements.html">5. NFRs</a></li>
+            <li><a href="06-use-case-model.html">6. Use Cases</a></li>
+            <li><a href="07-subject-area-model.html">7. Subject Model</a></li>
+            <li><a href="08-architecture-decisions.html">8. Architecture Decisions</a></li>
+            <li><a href="09-architecture-overview.html" class="active">9. Architecture Overview</a></li>
+            <li><a href="10-service-model.html">10. Service Model</a></li>
+            <li><a href="11-component-model.html">11. Component Model</a></li>
+            <li><a href="12-operational-model.html">12. Operational Model</a></li>
+            <li><a href="13-feasibility-assessment.html">13. Feasibility</a></li>
+            <li><a href="14-version-history.html">14. Version History</a></li>
+            <li><a href="15-ptt-safety-architecture.html">15. PTT Safety</a></li>
+        </ul>
+    </aside>
+    <main class="sdd-content">
+<h1 id="architecture-overview">9. Architecture Overview</h1>
+<h2 id="process-topology">9.1 Process Topology</h2>
+<p>The FastAPI main process owns all safety-critical state and spawns/supervises one DSP Worker. <code>rigctld</code> may be externally managed or supervised locally, but it is always reached over loopback TCP. Caddy is an independent edge service. Main–Worker control uses bounded Protocol v1 JSON frames over a duplex pipe; exact RX/TX arrays remain in parent-owned named shared memory and never enter the control frame.</p>
+<h2 id="receive-pipeline">9.2 Receive Pipeline</h2>
+<ol type="1">
+<li>Open configured 48 kHz mono input.</li>
+<li>Convert once to 12 kHz int16.</li>
+<li>Write samples into a UTC-indexed ring addressed by absolute sample index (<code>X % capacity</code>); eviction advances the base boundary without moving data.</li>
+<li>Produce bounded waterfall frames spanning only the ~3 kHz FT8 passband (<code>DISPLAY_BANDWIDTH_HZ</code>); the client maps those bins across the full canvas.</li>
+<li>At the configured profile cutoff, copy the decode window into a fixed parent-owned shared-memory segment and send only its exact descriptor.</li>
+<li>Worker validates generation before opening the segment, maps a read-only 12 kHz int16 view, serializes the DSP call, closes without unlinking, and returns one bounded immutable batch.</li>
+<li>Main validates slot/deadline, updates candidate state and broadcasts immutable decode events.</li>
+</ol>
+<p>Improved profiles map exactly to <code>41+49</code>, <code>41+46+50</code>, <code>48</code>, <code>49</code> and <code>50</code> half-symbol pass sequences for profiles 0–4. Improved frequency work is divided into the requested 1–12 adjacent inclusive bands, while all callbacks remain in Fortran and the final batch performs stable exact decode-key deduplication. The runtime must form exactly the requested OpenMP team; otherwise the ABI returns <code>WSJT_E_INTERNAL=8</code> and copies no result records. Each thread receives its own slot work buffer, downsample cache, FFTW plan registry and cycle 2/3 scratch. Subtraction is deliberately band-local subtraction: unlike the upstream GUI’s unsynchronized shared-buffer subtraction, one thread cannot change another band’s input, making the headless batch deterministic. FFTW plans remain cached for the DSP Worker lifetime and are reclaimed at process exit.</p>
+<p>Ordinary decode callbacks atomically clear the request’s A8 gate only for a decode strictly within 3 Hz of Rx. After all bands reach the A8 barrier, exactly the deterministic band owner that contains Rx reads the gate and may attempt A8; band 1 owns an out-of-window Rx fallback. The OpenMP append order remains scheduling-dependent, so result order is unspecified and consumers compare or group decode keys rather than sorting inside the ABI.</p>
+<h2 id="transmit-pipeline">9.3 Transmit Pipeline</h2>
+<ol type="1">
+<li>Accept explicit CQ/Reply intent from the lease holder.</li>
+<li>Validate auth, lease, state revision, sequencer transition and interlocks.</li>
+<li>Give the worker an exact parent-owned TX shared-memory descriptor; the worker packs/encodes directly into its 606,720-sample 48 kHz float32 view and returns metadata only.</li>
+<li>Revalidate lease/health/slot immediately before keying.</li>
+<li>Key PTT through the safety controller, play audio, and release after the bounded window.</li>
+<li>Publish actual start/stop reason and disarm on completion/fault.</li>
+</ol>
+<p>The slot-parity TX driver pulls at most one sequencer message per eligible slot (gating on the sequencer’s per-QSO <code>tx_phase</code>, UC-003). The decision is provisional (I9): when the sequencer is idle at slot start, the driver keeps the slot’s TX window open until <code>TX_DECISION_CUTOFF_SECONDS</code> (5.0), polling so a Reply transmits as soon as it is armed; a fit guard refuses any start past ~2.4 s into the slot (the fixed 12.64 s waveform must fit a 15 s slot), deferring to the next eligible slot rather than overrunning the boundary (an overrun is undecodable at the partner and deafens the next slot’s RX).</p>
+<h2 id="timing">9.4 Timing</h2>
+<p>FT8 uses 15 s slots; FT4 uses 7.5 s slots. Profile 3 is the initial Improved FT8 default. The orchestrator records capture, dispatch, result, decision, PTT and audio timestamps. Two distinct cutoffs bound the loop:</p>
+<ul>
+<li><strong>Decode lateness</strong> (<code>DEFAULT_DECISION_CUTOFF_SECONDS = 2.5</code>, orchestrator): a batch that finishes more than 2.5 s after the slot ended is display-only for that slot, never fed to the sequencer — a late result cannot trigger a late TX.</li>
+<li><strong>TX decision window</strong> (<code>TX_DECISION_CUTOFF_SECONDS = 5.0</code>, tx driver): how long after the slot starts a manual Reply may still be armed; the fit guard caps the actual transmit at ~2.4 s into the slot (12.64 s waveform vs 15 s slot), deferring later arming to the next eligible slot.</li>
+</ul>
+<p>Decoder threads default to Auto = <code>clamp(cpu_count - 1, 1, 12)</code> (I9, measured on Apple M2; the opt-in benchmark re-verifies both per supported CPU).</p>
+<h2 id="web-delivery">9.5 Web Delivery</h2>
+<ul>
+<li>State/safety stream is low volume, revisioned and never intentionally dropped.</li>
+<li>Decode batches are immutable, ordered by slot and bounded by history policy.</li>
+<li>Waterfall is lossy under pressure; each client keeps only the newest useful frames.</li>
+<li>Reconnect begins with an authoritative snapshot. Commands are never replayed from browser queues.</li>
+</ul>
+<h2 id="failure-containment">9.6 Failure Containment</h2>
+<p>Malformed/oversize control frames and pipe corruption terminate the Worker nonzero for supervisor detection. Valid stale-generation, shared-memory, configuration and native-status failures return one sanitized correlated error and leave the loop usable. Worker crash, IPC timeout, rig failure, audio error, clock fault, lease loss and controller disconnect converge on one safe-stop operation. Restarted components return to monitor-only; no component independently resumes a QSO.</p>
+<h2 id="ui-architecture">9.7 UI Architecture</h2>
+<p>The Live cockpit maintains the entire frequent-operation loop in landscape. Settings and auxiliary functions are routed to menus. Static HTML contains no inline application logic; modules own state, stream clients, waterfall drawing, candidate cards, sequencer presentation and safety controls.</p>
+    </main>
+</div>
+
+<footer class="footer" style="margin-top: 0;">
+    <div class="container">
+        <div class="footer-bottom">
+            <p>&copy; 2026 MRRC-FT8 Project · SDD V1.1 · <a href="https://github.com/cheenle/mrrc_ft8" style="color:var(--accent);">GitHub</a></p>
+        </div>
+    </div>
+</footer>
+
+<script>
+function toggleMobileMenu() {
+    document.querySelector('.nav-links').classList.toggle('active');
+}
+document.querySelectorAll('a[href^="#"]').forEach(a => {
+    a.addEventListener('click', function(e) {
+        e.preventDefault();
+        const t = document.querySelector(this.getAttribute('href'));
+        if (t) t.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    });
+});
+const nav = document.querySelector('.navbar');
+window.addEventListener('scroll', () => {
+    nav.style.background = window.scrollY > 50 ? 'rgba(0,0,0,0.95)' : 'rgba(0,0,0,0.8)';
+});
+</script>
+    <script src="../js/global-nav.js?v=2" defer data-gn="1"></script>
+</body>
+</html>
