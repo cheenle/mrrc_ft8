@@ -32,6 +32,7 @@ from ..engine.repository import Repository, VoidWindowExpired
 from ..engine.safety import Interlock, SafetyController, TxRefused
 
 log = logging.getLogger("mrrc-ft8.api")
+from ..engine.rig import set_filter_width
 from ..engine.sequencer import DisarmReason, Sequencer
 from .auth import AuthService, Session, host_allowed, origin_allowed
 from .lease import LeaseService
@@ -116,6 +117,7 @@ class AppState:
     selected_snr_db: int | None = None
     selected_slot_id: int | None = None  # slot the selected message was heard in
     radio_freq_hz: int | None = None  # last polled dial frequency, if rig is up
+    filter_serial_port: str = ""
 
     def bump(self) -> int:
         self.revision += 1
@@ -544,6 +546,32 @@ def create_router(state: AppState) -> APIRouter:
         except Exception as exc:
             return _reject(502, "rig_error", detail=str(exc))
         return await mutate(request, request.headers.get("idempotency-key"), 200, {"mode": mode, "passband_hz": passband_hz})
+
+    @router.post("/radio/filter")
+    async def radio_filter(request: Request, session: Session = Depends(require_lease)) -> JSONResponse:
+        """Set FT-710 filter width (1800/2400/3000 Hz) via direct CAT SH command.
+
+        rigctld's M command passband does not stick on the FT-710 (hamlib
+        backend gap), so we poke the serial port directly for this one setting.
+        Requires ``FT710_FILTER_SERIAL_PORT`` to be configured.
+        """
+
+        await validate_mutation(request)
+        body = await request.json()
+        hz = body.get("hz") if isinstance(body, dict) else None
+        if not isinstance(hz, int) or hz not in (1800, 2400, 3000):
+            return _reject(422, "invalid_request")
+        if state.safety.armed or state.safety.ptt_on:
+            return _reject(409, REASON_TX_ACTIVE)
+        port = state.filter_serial_port
+        if not port:
+            return _reject(503, "filter_unavailable", detail="FT710_FILTER_SERIAL_PORT not set")
+        try:
+            await asyncio.to_thread(set_filter_width, port, hz)
+        except Exception as exc:
+            log.warning("filter set failed: %s", exc, exc_info=True)
+            return _reject(502, "rig_error", detail=str(exc))
+        return await mutate(request, request.headers.get("idempotency-key"), 200, {"filter_hz": hz})
 
     @router.post("/radio/rig/level")
     async def radio_rig_level(request: Request, session: Session = Depends(require_lease)) -> JSONResponse:

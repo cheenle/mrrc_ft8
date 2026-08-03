@@ -76,6 +76,12 @@ export const api = {
       idempotencyKey: key(),
       body: { mode, passband_hz: passbandHz },
     }),
+  rigFilter: (hz) =>
+    request("/radio/filter", {
+      method: "POST",
+      idempotencyKey: key(),
+      body: { hz },
+    }),
   qsos: () => request("/logs/qsos"),
   txOff: () => request("/operation/enable_tx_off", { method: "POST", idempotencyKey: key() }),
   stop: () => request("/operation/stop", { method: "POST", idempotencyKey: key() }),

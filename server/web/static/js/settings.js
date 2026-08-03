@@ -170,9 +170,24 @@ export function createSettingsDrawer() {
           showToast("Control is held by another session");
           return;
         }
-        const result = await api.rigModeSet(currentMode, Number(passbandSelect.value));
-        if (!result.ok) showToast(`Bandwidth: ${result.reason || result.status}`);
-        else showToast(`Filter → ${(result.passband_hz / 1000).toFixed(1)} kHz`);
+        const hz = Number(passbandSelect.value);
+        const result = await api.rigFilter(hz);
+        if (!result.ok) {
+          // Fallback: try the rigctld mode-set path (works on some rigs).
+          const fallback = await api.rigModeSet(currentMode, hz);
+          if (!fallback.ok) {
+            showToast(`Filter: ${result.status} — ${result.reason || "unavailable"}`);
+          } else {
+            showToast(`Filter → ${(hz / 1000).toFixed(1)} kHz`);
+          }
+        } else {
+          showToast(`Filter → ${(hz / 1000).toFixed(1)} kHz`);
+        }
+        // Read back so the drawer reflects the rig's actual passband.
+        const modeRes = await api.rigMode();
+        if (modeRes.ok && modeRes.passband_hz) {
+          passbandSelect.value = String(modeRes.passband_hz);
+        }
       });
     }
     for (const input of content.querySelectorAll("select[data-level], input[data-level]")) {

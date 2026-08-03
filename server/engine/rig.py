@@ -11,8 +11,13 @@ safety controller can re-verify RX health before any new TX (§15.3/§15.5).
 from __future__ import annotations
 
 import asyncio
+import logging
 import re
 from typing import Any
+
+import serial as _serial
+
+log = logging.getLogger("mrrc-ft8.rig")
 
 DEFAULT_PORT = 4532
 DEFAULT_TIMEOUT_SECONDS = 2.0
@@ -22,6 +27,38 @@ _LEVEL_RE = re.compile(r"^[A-Z][A-Z0-9_]{0,15}$")
 MIN_FREQUENCY_HZ = 1_000
 MAX_FREQUENCY_HZ = 9_999_999_999
 MAX_PASSBAND_HZ = 100_000
+
+# ── FT-710 filter-width table (USB mode) ──────────────────────────────
+# CAT ``SH00<NN>;``: NN index per FT-710 CAT spec Table 3.
+# hamlib's FT-710 backend does not expose width, so we bypass rigctld.
+_FILTER_WIDTH_HZ = {1800: 9, 2400: 13, 3000: 20}
+_FILTER_SERIAL_BAUD = 38400
+_FILTER_SERIAL_TIMEOUT = 0.5
+
+
+def set_filter_width(port: str, hz: int) -> None:
+    """Set FT-710 filter width via ``SH00<idx>;`` quick serial poke."""
+
+    idx = _FILTER_WIDTH_HZ.get(hz)
+    if idx is None:
+        raise ValueError(f"unsupported filter width: {hz} Hz")
+    cmd = f"SH{idx:02d};\r\n".encode()
+    for attempt in range(3):
+        try:
+            ser = _serial.Serial(port, _FILTER_SERIAL_BAUD,
+                                 timeout=_FILTER_SERIAL_TIMEOUT,
+                                 write_timeout=_FILTER_SERIAL_TIMEOUT)
+            try:
+                ser.write(cmd)
+                return
+            finally:
+                ser.close()
+        except Exception:
+            if attempt == 2:
+                raise
+        import time
+        time.sleep(0.5)
+    raise RuntimeError("filter width set failed")
 
 
 class RigError(Exception):
@@ -324,6 +361,7 @@ class RigClient:
     async def _write_locked(self, payload: str) -> None:
         assert self._writer is not None
         try:
+            log.debug("rig >>> %r", payload)
             self._writer.write(payload.encode("ascii") + b"\n")
             await asyncio.wait_for(self._writer.drain(), timeout=self._timeout)
         except (OSError, asyncio.TimeoutError):
@@ -361,6 +399,7 @@ class RigClient:
             # FT-710's rigctld interleaves blank lines after set replies;
             # skip them so every reply is a real payload line.
             if text:
+                log.debug("rig <<< %r", text)
                 return text
 
     async def _drop_locked(self) -> None:
