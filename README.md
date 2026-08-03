@@ -2,7 +2,7 @@
 
 Headless FT8/FT4 server using the WSJT-X 3.0.2 Improved DSP core, a Python FastAPI control plane, rigctld radio control and a landscape mobile Web cockpit.
 
-The project is currently at the approved V1.0 design baseline. Product implementation is not yet complete.
+v0.1.0 is live on the BG1SB/FT-710 station (edge `https://radio.vlsc.net:9988`), serving real FT8 QSOs after the 2026-08-03 field session closed the RX/TX root causes (UTC-ring eviction misalignment, Replay opposite-slot phase, manual-Reply decision window).
 
 ## Architecture Rules
 

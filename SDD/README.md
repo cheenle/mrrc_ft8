@@ -6,9 +6,9 @@ IBM TeamSD-style design record for the headless FT8/FT4 server.
 
 | Item | Value |
 |---|---|
-| SDD version | V1.0 |
-| Date | 2026-08-01 |
-| Phase | M1–M3 complete; deploy artifacts and NFR-002 latency histograms landed; FT-710 real-radio acceptance green (live decode + PTT/STOP) with two acceptance-driven fixes; Caddy/LaunchAgent install and Linux simulated acceptance remain |
+| SDD version | V1.1 |
+| Date | 2026-08-03 |
+| Phase | Live on `radio.vlsc.net:9988` (BG1SB / ON80DA, FT-710). 2026-08-03 field session closed the open RX/TX root causes: UtcRing eviction misalignment (absolute-index keying), Replay opposite-TX-slot phase (UC-003) and the manual-Reply decision window (polling + 5 s cutoff + fit guard). Public Host ACL opened so the Caddy edge reaches the full API. Waterfall span reduced to 3 kHz; FT8 band selector added. Repo tidied and pushed as v0.1.0 (vendor source untracked, kept on disk for builds). |
 | First vertical slice | Normal FT8 QSO |
 | DSP | WSJT-X 3.0.2 Improved, supervised worker, `ft8var` OpenMP |
 | Public edge | Caddy TLS; FastAPI loopback |

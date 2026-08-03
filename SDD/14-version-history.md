@@ -1,5 +1,9 @@
 # 14. Version History
 
+## Unreleased — 2026-08-03 — SDD Refresh to V1.1
+
+- Brought the SDD body up to the implemented state: README quick facts (live deployment, v0.1.0), UC-003 marked implemented with the reply decision window, new UC-011 (FT8 band select), AD-006 (UTC ring absolute-index keying), §9.2/§9.3/§9.4 (3 kHz waterfall span, TX decision window + fit guard, dual cutoffs), §11 component table, §12 (public Host ACL / config), §15.6 (provisional TX decision), and the AGENTS.md/README module and status lines.
+
 ## Unreleased — 2026-08-03 — Repo Tidy (v0.1.0)
 
 - Removed the legacy `SDD-legacy-mrrc_ft710/` archive (old design docs for the predecessor project; references in `AGENTS.md` and `SDD/02` updated).

@@ -123,16 +123,16 @@ signal and is never part of the production surface.
 | `orchestrator.py` | UTC slot identity, capture/decision deadlines, mode/profile scheduling |
 | `dsp_decode.py` | Supervisor-backed SlotDecoder: exact slot → shared memory → Protocol v1 batch |
 | `dsp_encode.py` | Supervisor-backed encoder: message → shared memory → Protocol v1 encode |
-| `tx_driver.py` | Slot-parity TX pump: one sequencer message per eligible slot, encode → gated transmit |
+| `tx_driver.py` | Slot-parity TX pump gated on the sequencer's per-QSO `tx_phase`; provisional (I9) decision window (polling, 5 s cutoff) with a fit guard deferring past ~2.4 s — one sequencer message per eligible slot, encode → gated transmit |
 | `cq_loop.py` | Automatic CQ loop: DONE/retry/partner-loss re-arm, lease/idle/manual/fault stop |
 | `qso_log.py` | Sequencer log record → canonical QSO store offload |
-| `audio_rx.py` | 48 kHz capture, one 4:1 conversion, UTC ring and overrun metrics |
+| `audio_rx.py` | 48 kHz capture, one 4:1 conversion, UTC ring (absolute-index `X % capacity` keying; eviction never shifts data) and overrun metrics |
 | `capture_proc.py` | Isolated capture subprocess + parent supervisor (fresh-session restart on stall/death) |
 | `audio_tx.py` | Bounded 48 kHz playback with cancellation |
-| `waterfall.py` | Spectrum frames and lossy fan-out input |
+| `waterfall.py` | Spectrum frames (3 kHz FT8 passband only) and lossy fan-out input |
 | `rig.py` | Async rigctld TCP client only |
 | `safety.py` | Interlocks, PTT watchdog, idempotent priority STOP |
-| `sequencer.py` | One-QSO transitions, Tx1–Tx6, retry and terminal behavior |
+| `sequencer.py` | One-QSO transitions, Tx1–Tx6, retry and terminal behavior; carries the per-QSO TX phase (UC-003 opposite slot) |
 | `msgparse.py` | Supported standard-message parsing and validation |
 | `repository.py` | SQLite transactions, retention and schema migrations |
 | `adif.py` | ADIF generation/export from canonical QSO data |
@@ -146,7 +146,7 @@ signal and is never part of the production surface.
 | `web/lease.py` | Acquire/heartbeat/release/expiry and dead-man callback |
 | `web/api.py` | Versioned REST intent endpoints |
 | `web/ws.py` | Separate state/decode/waterfall streams and bounded queues |
-| `web/static/` | Landscape PWA modules, CSS, manifest and service worker |
+| `web/static/` | Landscape PWA modules (candidates, waterfall, safety bar, `band.js` band selector), CSS, manifest and service worker |
 
 The lifespan's background maintenance loop (session sweep plus retention) catches and logs each tick's exceptions, so one failed sweep cannot kill the loop; the 1 s lease-expiry watchdog is guarded the same way.
 

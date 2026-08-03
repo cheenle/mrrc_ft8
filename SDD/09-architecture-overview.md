@@ -8,8 +8,10 @@ The FastAPI main process owns all safety-critical state and spawns/supervises on
 
 1. Open configured 48 kHz mono input.
 2. Convert once to 12 kHz int16.
-3. Write samples into a UTC-indexed ring.
-4. Produce bounded waterfall frames.
+3. Write samples into a UTC-indexed ring addressed by absolute sample index
+   (`X % capacity`); eviction advances the base boundary without moving data.
+4. Produce bounded waterfall frames spanning only the ~3 kHz FT8 passband
+   (`DISPLAY_BANDWIDTH_HZ`); the client maps those bins across the full canvas.
 5. At the configured profile cutoff, copy the decode window into a fixed
    parent-owned shared-memory segment and send only its exact descriptor.
 6. Worker validates generation before opening the segment, maps a read-only
@@ -48,9 +50,23 @@ group decode keys rather than sorting inside the ABI.
 5. Key PTT through the safety controller, play audio, and release after the bounded window.
 6. Publish actual start/stop reason and disarm on completion/fault.
 
+The slot-parity TX driver pulls at most one sequencer message per eligible slot
+(gating on the sequencer's per-QSO `tx_phase`, UC-003). The decision is
+provisional (I9): when the sequencer is idle at slot start, the driver keeps the
+slot's TX window open until `TX_DECISION_CUTOFF_SECONDS` (5.0), polling so a
+Reply transmits as soon as it is armed; a fit guard refuses any start past
+~2.4 s into the slot (the fixed 12.64 s waveform must fit a 15 s slot), deferring
+to the next eligible slot rather than overrunning the boundary (an overrun is
+undecodable at the partner and deafens the next slot's RX).
+
 ## 9.4 Timing
 
-FT8 uses 15 s slots; FT4 uses 7.5 s slots. Profile 3 is the initial Improved FT8 default. The orchestrator records capture, dispatch, result, decision, PTT and audio timestamps. A result that misses the decision cutoff is display-only for that slot. The TX decision cutoff defaults to slot end + 2.5 s and decoder threads default to Auto = `clamp(cpu_count - 1, 1, 12)` (I9, measured on Apple M2; the opt-in benchmark re-verifies both per supported CPU).
+FT8 uses 15 s slots; FT4 uses 7.5 s slots. Profile 3 is the initial Improved FT8 default. The orchestrator records capture, dispatch, result, decision, PTT and audio timestamps. Two distinct cutoffs bound the loop:
+
+- **Decode lateness** (`DEFAULT_DECISION_CUTOFF_SECONDS = 2.5`, orchestrator): a batch that finishes more than 2.5 s after the slot ended is display-only for that slot, never fed to the sequencer — a late result cannot trigger a late TX.
+- **TX decision window** (`TX_DECISION_CUTOFF_SECONDS = 5.0`, tx driver): how long after the slot starts a manual Reply may still be armed; the fit guard caps the actual transmit at ~2.4 s into the slot (12.64 s waveform vs 15 s slot), deferring later arming to the next eligible slot.
+
+Decoder threads default to Auto = `clamp(cpu_count - 1, 1, 12)` (I9, measured on Apple M2; the opt-in benchmark re-verifies both per supported CPU).
 
 ## 9.5 Web Delivery
 

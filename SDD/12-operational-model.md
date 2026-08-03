@@ -8,7 +8,7 @@ Caddy is the public service. FastAPI listens only on loopback and supervises the
 
 - User LaunchAgent starts MRRC-FT8 after the interactive user session is available.
 - The user grants microphone/audio device permissions.
-- Caddy owns the public TLS port and proxies to loopback FastAPI. (Reference topology keeps 80/443; the BG1SB deployment runs a root LaunchDaemon on 9988 with an operator-issued acme.sh DNS-01 certificate because inbound 80/443 are ISP-blocked.)
+- Caddy owns the public TLS port and proxies to loopback FastAPI. (Reference topology keeps 80/443; the BG1SB deployment runs a root LaunchDaemon on 9988 with an operator-issued acme.sh DNS-01 certificate because inbound 80/443 are ISP-blocked.) The app's Host/Origin ACL (`MRRC_FT8_ALLOWED_HOSTS`) must list the public domain — it now includes `radio.vlsc.net` — or every public mutation/WebSocket is 403 and only GETs work.
 - Release acceptance uses the real FT-710, USB audio, rigctld and PTT.
 
 ## 12.3 Linux
@@ -34,7 +34,7 @@ Priority STOP runs before audio/rig/worker teardown. An in-progress QSO becomes 
 
 ## 12.6 Configuration
 
-Configuration covers domain/proxy trust, password-hash bootstrap, radio/rigctld, audio devices, station identity, band table, decoder profile/threads, safety deadlines, storage/retention and logging. Secrets are never committed. Safety-impacting invalid values fail startup. V1.0 decoder defaults (I9): profile 3, threads Auto = `clamp(cpu_count - 1, 1, 12)`, TX decision cutoff slot end + 2.5 s.
+Configuration covers domain/proxy trust, password-hash bootstrap, radio/rigctld, audio devices, station identity, band table, decoder profile/threads, safety deadlines, storage/retention and logging. Secrets are never committed. Safety-impacting invalid values fail startup. V1.0 decoder defaults (I9): profile 3, threads Auto = `clamp(cpu_count - 1, 1, 12)`, decode-lateness cutoff slot end + 2.5 s. The reply TX decision window is `TX_DECISION_CUTOFF_SECONDS` (5.0) with a fit guard at ~2.4 s into the slot.
 
 ## 12.7 Backup and Retention
 

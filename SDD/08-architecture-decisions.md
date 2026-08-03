@@ -30,6 +30,11 @@
 **Decision:** Slot identity is `floor(epoch/TRperiod)` and late actions are skipped.  
 **Consequence:** Tests inject epoch time; relative timers cannot define protocol phase.
 
+The UTC ring keys physical positions to the absolute sample index (`X % capacity`),
+so eviction (advancing the oldest-retained base) never requires moving data — a
+base-relative key would leave every post-eviction read shifted by the cumulative
+base advance (2026-08-03 field bug "D").
+
 ## AD-007 — Central sequencer/PTT safety controller
 
 **Decision:** Every TX intent crosses sequencer validation, health interlocks and the main-process watchdog.  
