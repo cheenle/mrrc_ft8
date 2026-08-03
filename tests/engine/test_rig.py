@@ -20,9 +20,11 @@ class FakeRigctld:
         self.garbage = False         # reply with non-protocol bytes
         self.drop_after: int | None = None  # close session after N commands
         self.dump_caps_on_level: str | None = None  # level whose set triggers caps dump
+        self.stale_rprt_once: int | None = None  # send one stale RPRT before this command count
         self.commands: list[str] = []
         self.sessions = 0
         self._server: asyncio.AbstractServer | None = None
+        self._stale_sent = False
 
     async def start(self) -> int:
         self._server = await asyncio.start_server(self._handle, "127.0.0.1", 0)
@@ -52,6 +54,12 @@ class FakeRigctld:
                     writer.write(b"\xff\xfe not a reply\r\n")
                     await writer.drain()
                     continue
+                # Simulate a delayed RPRT from a previous command landing on
+                # a fresh session before the real reply (FT-710 level query).
+                if self.stale_rprt_once is not None and not self._stale_sent:
+                    self._stale_sent = True
+                    writer.write(b"RPRT -11\n")
+                    await writer.drain()
                 reply = self._reply(command)
                 for line in reply.split("\n"):
                     writer.write(line.encode("ascii") + b"\n")
@@ -191,6 +199,28 @@ def test_level_set_drains_caps_dump(rig: FakeRigctld) -> None:
             assert await client.get_level("ATT") == 0.0
             await client.set_level("AGC", 6)
             assert rig.levels["AGC"] == 6.0
+        finally:
+            await client.close()
+            await rig.stop()
+
+    run(main())
+
+
+def test_query_skips_stale_rprt_from_previous_command(rig: FakeRigctld) -> None:
+    """FT-710 delays the RPRT -11 of an unsupported level query; it can land
+    on the next session before our reply.  ``m``/``f`` queries must skip it."""
+
+    rig.stale_rprt_once = 1
+
+    async def main() -> None:
+        port = await rig.start()
+        client = RigClient(port=port, timeout=2.0)
+        try:
+            mode, passband = await client.get_mode()
+            assert mode == "USB"
+            assert passband == 2400
+            freq = await client.get_frequency()
+            assert freq == 14_074_000
         finally:
             await client.close()
             await rig.stop()

@@ -83,7 +83,7 @@ class RigClient:
     async def get_frequency(self) -> int:
         """Return the current VFO frequency in Hz."""
 
-        lines = await self._query("f", 1)
+        lines = await self._query("f", 1, skip_stale_rprt=True)
         return self._parse_int(lines[0], "frequency")
 
     async def set_frequency(self, frequency_hz: int) -> None:
@@ -99,7 +99,7 @@ class RigClient:
     async def get_ptt(self) -> bool:
         """Return True while the rig is transmitting."""
 
-        lines = await self._query("t", 1)
+        lines = await self._query("t", 1, skip_stale_rprt=True)
         return self._parse_int(lines[0], "PTT state") != 0
 
     async def set_ptt(self, transmit: bool) -> None:
@@ -115,7 +115,7 @@ class RigClient:
         two lines.  Both shapes are accepted.
         """
 
-        lines = await self._query("m", 1)
+        lines = await self._query("m", 1, skip_stale_rprt=True)
         first = lines[0].strip()
         if "." in first:
             # Single line ``MODE.passband.`` (rigctld dotted format).
@@ -128,7 +128,9 @@ class RigClient:
             rest = await self._readline_locked()
             passband_text = rest.strip()
         if not _MODE_RE.match(mode):
-            raise RigError("protocol", "rig returned an invalid mode token")
+            raise RigError(
+                "protocol", f"rig returned an invalid mode token: {mode!r}"
+            )
         return mode, self._parse_int(passband_text, "passband")
 
     async def set_mode(self, mode: str, passband_hz: int) -> None:
@@ -221,11 +223,25 @@ class RigClient:
                 self._raise_rprt(line)
                 return
 
-    async def _query(self, payload: str, reply_lines: int) -> list[str]:
+    async def _query(
+        self, payload: str, reply_lines: int, *, skip_stale_rprt: bool = False
+    ) -> list[str]:
         async with self._lock:
             await self._ensure_connected_locked()
             await self._write_locked(payload)
-            lines = [await self._readline_locked() for _ in range(reply_lines)]
+            lines: list[str] = []
+            for _ in range(reply_lines):
+                line = await self._readline_locked()
+                if skip_stale_rprt:
+                    # A stale ``RPRT`` from a previous command (e.g. the
+                    # delayed ``RPRT -11`` of an unsupported level query on
+                    # FT-710) can land on this session before our reply.
+                    # Skip up to a few RPRT lines and read the real payload.
+                    for _ in range(8):
+                        if not line.startswith("RPRT"):
+                            break
+                        line = await self._readline_locked()
+                lines.append(line)
             for line in lines:
                 if line.startswith("RPRT"):
                     self._raise_rprt(line)
@@ -360,4 +376,6 @@ class RigClient:
         try:
             return int(text)
         except ValueError:
-            raise RigError("protocol", f"rig returned an invalid {what}") from None
+            raise RigError(
+                "protocol", f"rig returned an invalid {what}: {text!r}"
+            ) from None

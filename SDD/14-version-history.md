@@ -1,5 +1,10 @@
 # 14. Version History
 
+## Unreleased — 2026-08-03 — Queries Skip Stale RPRT (final filter-switch fix)
+
+- Field report #3 with diagnostics: `GET /radio/mode` returned 502 with `rig_rprt` — rigctld rejected `m`. Root cause: FT-710 never answers `L <level>` queries; the timed-out command's delayed `RPRT -11` (unsupported) arrives *after* we drop and reconnect, landing on the new session **before** the `m`/`f` reply. `get_mode` read `RPRT -11` as its reply → 502. The write (`POST /radio/mode`) succeeded — the 3 kHz selection actually applied, only the readback failed.
+- Fix: `_query(..., skip_stale_rprt=True)` on `m`/`f`/`t` reads skips up to 8 leading RPRT lines (stale replies from prior commands) before taking the real payload; `L` queries keep strict RPRT handling so a genuine unsupported-level error still surfaces as `rig_unsupported`. Regression: fake rig injects a stale `RPRT -11` before the first `m` and the client still reads mode+frequency correctly.
+
 ## Unreleased — 2026-08-03 — Radio Drawer Takes the Control Lease Implicitly
 
 - Field report #2: filter-bandwidth switches kept returning 409 Conflict even with no TX active. Root cause: `/radio/mode` and `/radio/rig/level` require the control lease (`require_lease`), but the settings drawer never acquired it — every toggle before a lease was held returned `lease_required` (36 consecutive 409s in the log). Candidate taps had implicit lease acquisition (UC-002); the drawer now reuses the same pattern: `ensureLease()` takes a free lease before any rig mutation, shows "Control is held by another session" when another session owns it.
