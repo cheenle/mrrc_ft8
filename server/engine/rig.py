@@ -256,6 +256,41 @@ class RigClient:
             raise RigError(
                 "rig_unreachable", "rigctld connection could not be established"
             ) from None
+        # A fresh session may still have the previous session's trailing
+        # output buffered (e.g. a killed client mid-reply).  Drain any
+        # residual lines so the first command never reads stale data.
+        await self._drain_stale_input()
+
+    async def _drain_stale_input(self) -> None:
+        """Consume leftover bytes on a freshly-opened session.
+
+        rigctld keeps one connection per client; when a client dies mid-
+        command (restart, timeout drop), its pending reply can linger on
+        the new session.  Reading it here keeps the first real command
+        clean.  Timeouts are expected (usually nothing is buffered).
+        """
+
+        assert self._reader is not None
+        self._unread.clear()
+        for _ in range(64):
+            try:
+                raw = await asyncio.wait_for(
+                    self._reader.readline(), timeout=0.05
+                )
+            except asyncio.TimeoutError:
+                return  # stream quiet — clean start
+            except (OSError, RuntimeError):
+                return
+            if raw == b"":
+                await self._drop_locked()
+                return
+            if not raw.strip():
+                continue
+            # Real payload bytes before our first command: treat as stale
+            # and discard (we never sent anything on this session yet).
+            if len(raw) > _MAX_REPLY_LINE:
+                await self._drop_locked()
+                return
 
     async def _write_locked(self, payload: str) -> None:
         assert self._writer is not None

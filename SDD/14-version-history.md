@@ -1,5 +1,13 @@
 # 14. Version History
 
+## Unreleased — 2026-08-03 — Rig Level-Query Isolation (no more filter-switch corruption)
+
+- Field report: switching the filter bandwidth right after opening the Radio drawer failed intermittently (GET /radio/mode 502, rig_poll "invalid frequency"). Root cause: FT-710 never answers the `L <level>` query — every attempt timed out and dropped the rigctld session, and the reconnects corrupted concurrent rig_poll / mode traffic for minutes.
+- Fixes:
+  - `RigClient` drains stale bytes on a freshly-reopened session (`_drain_stale_input`), so a reconnect never reads the previous session's leftover reply.
+  - `/radio/rig/levels` caches results for 60 s (AppState `_rig_level_cache`): once a level read fails it is treated as unsupported instead of hammering the rig on every drawer open; the drawer still allows writes (`l <name> <value>`), which FT-710 answers.
+- Verified live: 4 level reads time out (expected), then frequency polls and mode switches are clean; USB bandwidth 1.8/2.4/3.0 kHz round-trips after the failed reads.
+
 ## Unreleased — 2026-08-03 — Rigctld Protocol Hardening (real FT-710)
 
 - Live verification against the station's rigctld (`-m 1049` FT-710) exposed three protocol mismatches the fake rig tests never caught; all fixed and regression-tested:

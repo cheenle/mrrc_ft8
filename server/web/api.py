@@ -470,17 +470,32 @@ def create_router(state: AppState) -> APIRouter:
     # rigctld level access (ATT / AGC / PREAMP / RF gain …).  Levels are
     # per-rig: unsupported ones answer ``rig_unsupported`` so the settings
     # drawer can show them greyed out instead of failing the whole request.
+    # NB: some rig models (FT-710) never answer the ``L <name>`` query —
+    # every attempt times out and drops the session, which would corrupt
+    # concurrent rig_poll/filter traffic.  Query results are therefore
+    # cached: once a level fails, it is treated as unsupported for a while
+    # instead of hammering the rig on every drawer open.
     @router.get("/radio/rig/levels")
     async def radio_rig_levels(session: Session = Depends(require_session)) -> JSONResponse:
         if state.rig is None:
             return _reject(503, "rig_unavailable")
+        now = time.monotonic()
+        cache = getattr(state, "_rig_level_cache", None)
+        if cache is None:
+            cache = state._rig_level_cache = {"at": 0.0, "levels": None}
+        if cache["levels"] is not None and now - cache["at"] < 60.0:
+            return _ok({"levels": cache["levels"]})
         wanted = ("ATT", "PREAMP", "RF", "AGC")
-        levels: dict[str, float | None] = {}
-        for name in wanted:
+
+        async def _read(name: str) -> tuple[str, float | None]:
             try:
-                levels[name] = await state.rig.get_level(name)
+                return name, await asyncio.wait_for(state.rig.get_level(name), timeout=0.4)
             except Exception:
-                levels[name] = None
+                return name, None
+
+        results = await asyncio.gather(*(_read(name) for name in wanted))
+        levels = dict(results)
+        state._rig_level_cache = {"at": now, "levels": levels}
         return _ok({"levels": levels})
 
     # Filter bandwidth (rigctld ``M <mode> <passband>`` — FT-710 supports
