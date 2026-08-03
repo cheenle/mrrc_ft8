@@ -15,8 +15,6 @@ import logging
 import re
 from typing import Any
 
-import serial as _serial
-
 log = logging.getLogger("mrrc-ft8.rig")
 
 DEFAULT_PORT = 4532
@@ -28,37 +26,31 @@ MIN_FREQUENCY_HZ = 1_000
 MAX_FREQUENCY_HZ = 9_999_999_999
 MAX_PASSBAND_HZ = 100_000
 
-# ── FT-710 filter-width table (USB mode) ──────────────────────────────
-# CAT ``SH00<NN>;``: NN index per FT-710 CAT spec Table 3.
-# hamlib's FT-710 backend does not expose width, so we bypass rigctld.
-_FILTER_WIDTH_HZ = {1800: 9, 2400: 13, 3000: 20}
-_FILTER_SERIAL_BAUD = 38400
-_FILTER_SERIAL_TIMEOUT = 0.5
-
-
-def set_filter_width(port: str, hz: int) -> None:
-    """Set FT-710 filter width via ``SH00<idx>;`` quick serial poke."""
-
-    idx = _FILTER_WIDTH_HZ.get(hz)
-    if idx is None:
-        raise ValueError(f"unsupported filter width: {hz} Hz")
-    cmd = f"SH{idx:02d};\r\n".encode()
-    for attempt in range(3):
-        try:
-            ser = _serial.Serial(port, _FILTER_SERIAL_BAUD,
-                                 timeout=_FILTER_SERIAL_TIMEOUT,
-                                 write_timeout=_FILTER_SERIAL_TIMEOUT)
-            try:
-                ser.write(cmd)
-                return
-            finally:
-                ser.close()
-        except Exception:
-            if attempt == 2:
-                raise
-        import time
-        time.sleep(0.5)
-    raise RuntimeError("filter width set failed")
+# ── FT-710 filter width (hamlib 4.6.2 workaround) ────────────────────
+# Hamlib 4.6.2's FT-710 backend (Yaesu newcat) is broken in BOTH
+# directions, so the raw CAT ``SH`` command goes through rigctld's
+# ``\send_raw`` pass-through (AD-008 preserved: rigctld stays the sole
+# serial owner):
+#
+# * SET: ``newcat_set_rx_bandwidth`` formats the command as ``SH0NN;``
+#   instead of ``SH00NN;`` for the FT-710 (it is missing from the
+#   4-digit branch), so ``M <mode> <width>`` reports RPRT 0 but the rig
+#   ignores the malformed frame — the width never changes.
+# * GET: ``newcat_get_rx_bandwidth`` has no FT-710 branch; the index
+#   falls through to the FT-450/FT-9000 bucketing (index <16 → narrow,
+#   16 → normal, >16 → wide), so ``m`` reports 2400 Hz (index 14) as
+#   1800 Hz.  The "reverts after 1-3 s" seen on the wire is just the
+#   500 ms hamlib set-cache expiring and exposing this misread.
+#
+# Index = position in hamlib's ftdx101_ssb_widths.widths[] array (the
+# FT-710 reuses it); ``SH00<idx>;`` sets it, ``SH0;`` reads it back.
+_FILTER_WIDTH_INDEX = {1800: 9, 2400: 14, 3000: 20}
+_SSB_WIDTH_TABLE_HZ = (
+    0, 300, 400, 600, 850, 1100, 1200, 1500, 1650, 1800,
+    1950, 2100, 2200, 2300, 2400, 2500, 2600, 2700, 2800,
+    2900, 3000, 3200, 3500, 4000,
+)
+_SH_REPLY_RE = re.compile(r"^SH(\d{4});")
 
 
 class RigError(Exception):
@@ -248,6 +240,53 @@ class RigClient:
                     "protocol", f"level set did not return a value or RPRT: {line!r}"
                 ) from None
             await self._drain_until_rprt()
+
+    async def set_filter_width(self, hz: int) -> None:
+        """Set the FT-710 SSB filter width via raw CAT ``SH00<NN>;``.
+
+        hamlib 4.6.2 mis-frames the command inside ``M <mode> <pb>``
+        (sends ``SH0NN;``), so the width is written as a correctly framed
+        raw command through rigctld's ``\\send_raw`` pass-through — AD-008
+        preserved.  Argument 1 of ``\\send_raw`` is the *expected reply*
+        spec (``0`` = no reply expected), not a VFO.  rigctld answers
+        ``No answer`` on success; an ``RPRT`` line means it failed.
+        """
+
+        idx = _FILTER_WIDTH_INDEX.get(hz)
+        if idx is None:
+            raise ValueError(f"unsupported filter width: {hz} Hz")
+        async with self._lock:
+            await self._ensure_connected_locked()
+            await self._write_locked(f"\\send_raw 0 SH{idx:04d};")
+            line = await self._readline_locked()
+            if line.startswith("RPRT"):
+                self._raise_rprt(line)
+
+    async def get_filter_width(self) -> int:
+        """Read the FT-710's actual SSB filter width via raw CAT ``SH0;``.
+
+        hamlib 4.6.2's ``m`` passband is unreliable on the FT-710 (index
+        14 / 2400 Hz reads back as 1800 Hz), so the SH register is read
+        through rigctld's ``\\send_raw`` and mapped with hamlib's
+        ``ftdx101_ssb_widths`` table.  ``\\send_raw ;`` reads the rig's
+        reply up to ``;`` and returns it newline-terminated.
+        """
+
+        async with self._lock:
+            await self._ensure_connected_locked()
+            await self._write_locked("\\send_raw ; SH0;")
+            line = await self._readline_locked()
+        match = _SH_REPLY_RE.match(line)
+        if match is None:
+            raise RigError(
+                "protocol", f"rig returned an invalid width reply: {line!r}"
+            )
+        idx = int(match.group(1))
+        if idx >= len(_SSB_WIDTH_TABLE_HZ):
+            raise RigError(
+                "protocol", f"rig returned an unknown width index: {idx}"
+            )
+        return _SSB_WIDTH_TABLE_HZ[idx]
 
     # ---- internals ------------------------------------------------------
 

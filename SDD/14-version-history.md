@@ -1,5 +1,14 @@
 # 14. Version History
 
+## Unreleased — 2026-08-04 — FT-710 Filter Width: Corrected Root Cause, Raw-SH Fix Through rigctld
+
+- The "filter width does not stick" investigation concluded with a **corrected** root cause (full record: `docs/FILTER_WIDTH_ISSUE.md`; the earlier direct-serial workaround ca9ec89 was based on a misdiagnosis and is reverted). Hamlib 4.6.2's FT-710 backend (Yaesu newcat) is broken in both directions:
+  - SET: `newcat_set_rx_bandwidth` misses the FT-710 in its 4-digit command branch and emits `SH0NN;` instead of `SH00NN;` — the rig ignores the malformed frame, so `M <mode> <width>` returns RPRT 0 yet never changes the width.
+  - GET: `newcat_get_rx_bandwidth` has no FT-710 branch; the SH index falls into the FT-450/FT-9000 narrow/normal/wide bucketing, so `m` reports 2400 Hz (index 14) as 1800 Hz. The supposed "1-3 s revert" is just the 500 ms hamlib set-cache expiring and exposing this misread — the rig never reverts; the supposed rigctld-restart reset is the same misread (`newcat_open` never touches SH).
+- Fix (AD-008 intact — rigctld stays the sole serial owner): `RigClient.set_filter_width` writes the correctly framed `SH00<NN>;` via rigctld's `\send_raw 0` pass-through; `RigClient.get_filter_width` reads the true width via `\send_raw ; SH0;` and maps it with hamlib's `ftdx101_ssb_widths` table. `GET /radio/mode` now prefers the raw SH read over hamlib's misreported passband; `POST /radio/mode` applies the width through the raw path as well (best effort); `POST /radio/filter` stays the dedicated width intent.
+- Removed the direct-serial machinery (pyserial/requirements.txt, `FT710_FILTER_SERIAL_PORT`), corrected the width index table (2400 → index 14; the committed 13 = 2300 Hz was wrong), and verified live against the station rigctld with interleaved raw reads while the server polled. Regressions: FakeRigctld only accepts 4-digit `SH00NN;` frames (the rig ignores malformed ones), and the API tests include the "hamlib claims 1800, register holds 2400" readback scenario.
+- Also fixed a stale SDD-harness assertion that still expected SDD version V1.0 after the V1.1 refresh.
+
 ## Unreleased — 2026-08-03 — Level-Probe Fast-Fail + Diagnostic Logging
 
 - The real culprit behind "filter switch does nothing": the server had been restarted BEFORE the rig.py/api.py fixes landed, so it kept running the old code (level probes holding the rig lock 8 s, stale RPRT poisoning reads). With the fixes deployed, a drawer open costs one 0.55 s probe (first unsupported level stops the batch), filter switches take ~0.25 s and read back correctly.

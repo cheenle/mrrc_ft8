@@ -103,7 +103,8 @@ export function createSettingsDrawer() {
       html.push("<p class='drawer-hint dim'>rigctld unreachable — controls unavailable</p>");
     }
 
-    // Filter bandwidth selector (rigctld M <mode> <passband>).
+    // Filter bandwidth selector (raw CAT SH via /radio/filter; hamlib's
+    // M-passband path is broken on the FT-710 with hamlib 4.6.2).
     html.push(`<label class="setting-row">
       <span>Mode</span>
       <b>${currentMode}</b>
@@ -173,7 +174,7 @@ export function createSettingsDrawer() {
         const hz = Number(passbandSelect.value);
         const result = await api.rigFilter(hz);
         if (!result.ok) {
-          // Fallback: try the rigctld mode-set path (works on some rigs).
+          // Fallback: the mode-set path applies the width too (best effort).
           const fallback = await api.rigModeSet(currentMode, hz);
           if (!fallback.ok) {
             showToast(`Filter: ${result.status} — ${result.reason || "unavailable"}`);

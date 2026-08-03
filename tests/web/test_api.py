@@ -50,6 +50,19 @@ class ApiRig(FakeRig):
             raise RigError("rig_unsupported", f"no level {level}", rprt=-11)
         self.levels[level] = value
 
+    async def set_filter_width(self, hz: int) -> None:
+        if hz not in (1800, 2400, 3000):
+            raise ValueError(f"unsupported filter width: {hz} Hz")
+        self.filter_hz = hz
+
+    async def get_filter_width(self) -> int:
+        # The true SH-register width; may legitimately disagree with the
+        # hamlib-reported passband in self.mode (the FT-710 hamlib bug).
+        if hasattr(self, "filter_hz"):
+            return self.filter_hz
+        _, passband_hz = await self.get_mode()
+        return passband_hz
+
 
 @pytest.fixture()
 def rig() -> ApiRig:
@@ -435,6 +448,100 @@ def test_radio_rig_levels_and_station_snapshot(
         headers=headers,
     )
     assert bad_mode.status_code == 422
+
+
+def test_radio_filter_sets_width_and_readback_follows_the_rig(
+    client: TestClient, state: AppState
+) -> None:
+    """POST /radio/filter writes the FT-710 width; GET /radio/mode must then
+    report the rig's true width, not hamlib's (which misreads 2400 as 1800
+    on hamlib 4.6.2)."""
+
+    session_id = login(client)
+    client.post("/api/v1/lease/acquire", headers=auth_headers(session_id))
+
+    set_filter = client.post(
+        "/api/v1/radio/filter", json={"hz": 2400}, headers=auth_headers(session_id)
+    )
+    assert set_filter.status_code == 200
+    assert set_filter.json()["filter_hz"] == 2400
+    assert state.rig.filter_hz == 2400  # type: ignore[union-attr]
+
+    mode = client.get("/api/v1/radio/mode", headers=auth_headers(session_id))
+    assert mode.status_code == 200
+    assert mode.json()["passband_hz"] == 2400
+
+
+def test_radio_mode_readback_prefers_true_rig_width_over_hamlib(
+    client: TestClient, state: AppState
+) -> None:
+    """Simulates the hamlib 4.6.2 misread: ``m`` claims 1800 while the rig's
+    SH register is at 2400 — the drawer must show 2400."""
+
+    rig = state.rig
+    assert rig is not None
+    rig.mode = ("USB", 1800)  # what hamlib's broken GET reports
+    rig.filter_hz = 2400      # what the rig is actually set to
+
+    session_id = login(client)
+    mode = client.get("/api/v1/radio/mode", headers=auth_headers(session_id))
+    assert mode.status_code == 200
+    assert mode.json()["mode"] == "USB"
+    assert mode.json()["passband_hz"] == 2400
+
+
+def test_radio_mode_set_also_applies_the_width(
+    client: TestClient, state: AppState
+) -> None:
+    """POST /radio/mode must not silently drop the width on hamlib 4.6.2."""
+
+    session_id = login(client)
+    client.post("/api/v1/lease/acquire", headers=auth_headers(session_id))
+
+    set_mode = client.post(
+        "/api/v1/radio/mode",
+        json={"mode": "USB", "passband_hz": 3000},
+        headers=auth_headers(session_id),
+    )
+    assert set_mode.status_code == 200
+    assert state.rig.filter_hz == 3000  # type: ignore[union-attr]
+
+
+def test_radio_filter_validation_and_control_rules(
+    client: TestClient, state: AppState
+) -> None:
+    session_id = login(client)
+
+    # No lease -> 409.
+    no_lease = client.post(
+        "/api/v1/radio/filter", json={"hz": 2400}, headers=auth_headers(session_id)
+    )
+    assert no_lease.status_code == 409
+    assert no_lease.json()["reason"] == "lease_required"
+
+    client.post("/api/v1/lease/acquire", headers=auth_headers(session_id))
+
+    # Unsupported width -> 422.
+    bad = client.post(
+        "/api/v1/radio/filter", json={"hz": 2300}, headers=auth_headers(session_id)
+    )
+    assert bad.status_code == 422
+
+    # TX armed -> 409 tx_active.
+    run(state.safety.arm())
+    blocked = client.post(
+        "/api/v1/radio/filter", json={"hz": 2400}, headers=auth_headers(session_id)
+    )
+    assert blocked.status_code == 409
+    assert blocked.json()["reason"] == "tx_active"
+    state.safety.disarm()
+
+    # Rig down -> 503.
+    state.rig = None
+    gone = client.post(
+        "/api/v1/radio/filter", json={"hz": 2400}, headers=auth_headers(session_id)
+    )
+    assert gone.status_code == 503
 
 
 def test_qso_listing_and_audited_void(client: TestClient, state: AppState) -> None:

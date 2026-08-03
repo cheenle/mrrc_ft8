@@ -32,7 +32,6 @@ from ..engine.repository import Repository, VoidWindowExpired
 from ..engine.safety import Interlock, SafetyController, TxRefused
 
 log = logging.getLogger("mrrc-ft8.api")
-from ..engine.rig import set_filter_width
 from ..engine.sequencer import DisarmReason, Sequencer
 from .auth import AuthService, Session, host_allowed, origin_allowed
 from .lease import LeaseService
@@ -117,7 +116,6 @@ class AppState:
     selected_snr_db: int | None = None
     selected_slot_id: int | None = None  # slot the selected message was heard in
     radio_freq_hz: int | None = None  # last polled dial frequency, if rig is up
-    filter_serial_port: str = ""
 
     def bump(self) -> int:
         self.revision += 1
@@ -512,9 +510,11 @@ def create_router(state: AppState) -> APIRouter:
         state._rig_level_cache = {"at": now, "levels": levels}
         return _ok({"levels": levels})
 
-    # Filter bandwidth (rigctld ``M <mode> <passband>`` — FT-710 supports
-    # 1.8/2.4/3.0 kHz on USB/LSB).  Returns the current pair so the drawer
-    # can show the rig's actual passband, not a stale local guess.
+    # Filter bandwidth (FT-710 supports 1.8/2.4/3.0 kHz on USB/LSB).
+    # Returns the current pair so the drawer can show the rig's actual
+    # passband, not a stale local guess.  The passband comes from the rig's
+    # SH register, not hamlib's ``m``: hamlib 4.6.2 has no FT-710 branch in
+    # newcat_get_rx_bandwidth and misreports 2400 Hz as 1800 Hz.
     @router.get("/radio/mode")
     async def radio_mode(session: Session = Depends(require_session)) -> JSONResponse:
         if state.rig is None:
@@ -524,6 +524,12 @@ def create_router(state: AppState) -> APIRouter:
         except Exception as exc:
             log.warning("radio mode read failed: %s", exc, exc_info=True)
             return _reject(502, "rig_error", detail=str(exc))
+        try:
+            passband_hz = await state.rig.get_filter_width()
+        except Exception as exc:
+            # Rig without raw SH access, or a transient protocol hiccup:
+            # fall back to the hamlib-reported passband.
+            log.debug("filter width read fell back to hamlib passband: %s", exc)
         return _ok({"mode": mode, "passband_hz": passband_hz})
 
     @router.post("/radio/mode")
@@ -545,15 +551,25 @@ def create_router(state: AppState) -> APIRouter:
             await state.rig.set_mode(mode, passband_hz)
         except Exception as exc:
             return _reject(502, "rig_error", detail=str(exc))
+        # hamlib 4.6.2 never applies the width on the FT-710 (its SH frame
+        # is mis-formatted, see RigClient.set_filter_width), so apply it via
+        # the raw path too.  Best effort: the mode set already succeeded.
+        try:
+            await state.rig.set_filter_width(passband_hz)
+        except ValueError:
+            pass  # not one of the FT-710 raw-table widths
+        except Exception as exc:
+            log.warning("mode set ok but filter width apply failed: %s", exc)
         return await mutate(request, request.headers.get("idempotency-key"), 200, {"mode": mode, "passband_hz": passband_hz})
 
     @router.post("/radio/filter")
     async def radio_filter(request: Request, session: Session = Depends(require_lease)) -> JSONResponse:
-        """Set FT-710 filter width (1800/2400/3000 Hz) via direct CAT SH command.
+        """Set FT-710 filter width (1800/2400/3000 Hz).
 
-        rigctld's M command passband does not stick on the FT-710 (hamlib
-        backend gap), so we poke the serial port directly for this one setting.
-        Requires ``FT710_FILTER_SERIAL_PORT`` to be configured.
+        hamlib 4.6.2's ``M <mode> <pb>`` never changes the FT-710 width
+        (backend mis-frames the SH command), so the correctly framed
+        ``SH00<NN>;`` CAT command is forwarded through rigctld's
+        ``\\send_raw`` (AD-008: rigctld stays the serial owner).
         """
 
         await validate_mutation(request)
@@ -563,11 +579,10 @@ def create_router(state: AppState) -> APIRouter:
             return _reject(422, "invalid_request")
         if state.safety.armed or state.safety.ptt_on:
             return _reject(409, REASON_TX_ACTIVE)
-        port = state.filter_serial_port
-        if not port:
-            return _reject(503, "filter_unavailable", detail="FT710_FILTER_SERIAL_PORT not set")
+        if state.rig is None:
+            return _reject(503, "rig_unavailable")
         try:
-            await asyncio.to_thread(set_filter_width, port, hz)
+            await state.rig.set_filter_width(hz)
         except Exception as exc:
             log.warning("filter set failed: %s", exc, exc_info=True)
             return _reject(502, "rig_error", detail=str(exc))

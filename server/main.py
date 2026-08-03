@@ -78,7 +78,6 @@ class ServerConfig:
     rigctld_host: str = "127.0.0.1"
     rigctld_port: int = 4532
     audio_device: int | str | None = None
-    filter_serial_port: str = ""
     decoder_profile: int = 3
     decoder_threads: int = 0  # 0 = Auto: clamp(cpu_count - 1, 1, 12) (I9, §12.6)
 
@@ -142,7 +141,6 @@ class ServerConfig:
             rigctld_host=rig_host,
             rigctld_port=int(rig_port or 4532),
             audio_device=audio_device,
-            filter_serial_port=os.environ.get("FT710_FILTER_SERIAL_PORT", ""),
             decoder_profile=profile,
             decoder_threads=threads,
         )
@@ -202,7 +200,6 @@ def create_server(
         repository=repository,
         my_call=config.my_call,
         my_grid=config.my_grid,
-        filter_serial_port=config.filter_serial_port,
         rig=rig_client,
         allowed_hosts=config.allowed_hosts,
         state_broadcast=StateBroadcaster(),

@@ -61,4 +61,4 @@ def test_task5_quality_fix_records_are_synchronized() -> None:
     assert "weak direct-A8 fixture" in feasibility
     assert "weak direct-A8 fixture" in inventory
     assert "## Unreleased" in history
-    assert "| SDD version | V1.0 |" in (root / "SDD/README.md").read_text()
+    assert "| SDD version | V1.1 |" in (root / "SDD/README.md").read_text()
