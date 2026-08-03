@@ -4,6 +4,8 @@ from server.engine.msgparse import parse_message
 from server.engine.sequencer import (
     DisarmReason,
     QSOState,
+    QSORecord,
+    QsoContext,
     Sequencer,
 )
 
@@ -12,8 +14,8 @@ MY_GRID = "FN42"
 DX = "K1ABC"
 
 
-def make() -> Sequencer:
-    return Sequencer(my_call=MY_CALL, my_grid=MY_GRID)
+def make(**kwargs: object) -> Sequencer:
+    return Sequencer(my_call=MY_CALL, my_grid=MY_GRID, **kwargs)  # type: ignore[arg-type]
 
 
 def feed(seq: Sequencer, text: str, snr_db: int | None = None) -> None:
@@ -21,7 +23,12 @@ def feed(seq: Sequencer, text: str, snr_db: int | None = None) -> None:
 
 
 def test_cq_side_full_qso() -> None:
-    seq = make()
+    captured: list[QSORecord] = []
+    seq = make(
+        clock=lambda: 1_700_000_000.0,  # 2023-11-14T22:13:20Z
+        context=lambda: QsoContext(freq_hz=14_074_000, band="20m"),
+    )
+    seq.on_qso = captured.append
     seq.start_cq()
     assert seq.state == QSOState.CALLING
     # CQ repeats without a retransmission budget (UC-004).
@@ -43,20 +50,21 @@ def test_cq_side_full_qso() -> None:
     assert seq.disarm_reason == DisarmReason.COMPLETE
     assert seq.next_tx_message() is None
 
-    record = seq.pop_log_record(started_utc="120000", freq_hz=14_074_000, band="20m")
-    assert record is not None
+    assert len(captured) == 1
+    record = captured[0]
     assert record.dx_call == DX
     assert record.dx_grid == "FN42"
     assert record.report_sent == -12
     assert record.report_rcvd == -5
-    assert record.started_utc == "120000"
+    assert record.started_utc == "221320"
     assert record.freq_hz == 14_074_000
     assert record.band == "20m"
-    assert seq.pop_log_record() is None
 
 
 def test_answerer_full_qso_logs_on_rr73_and_finishes_after_one_73() -> None:
+    captured: list[QSORecord] = []
     seq = make()
+    seq.on_qso = captured.append
     seq.reply_to(parse_message("CQ K1ABC FN42"), snr_db=-15)
     assert seq.state == QSOState.REPLYING
     assert seq.next_tx_message() == "K1ABC N0CALL FN42"
@@ -74,10 +82,9 @@ def test_answerer_full_qso_logs_on_rr73_and_finishes_after_one_73() -> None:
     assert seq.state == QSOState.DONE
     assert seq.disarm_reason == DisarmReason.COMPLETE
 
-    record = seq.pop_log_record()
-    assert record is not None
-    assert record.report_sent == -15
-    assert record.report_rcvd == -9
+    assert len(captured) == 1
+    assert captured[0].report_sent == -15
+    assert captured[0].report_rcvd == -9
 
 
 def test_reply_carries_the_opposite_tx_phase() -> None:
@@ -120,7 +127,9 @@ def test_answerer_resends_73_only_when_partner_repeats_rr73() -> None:
 
 
 def test_retry_exhaustion_disarms_and_retains_context() -> None:
+    captured: list[QSORecord] = []
     seq = make()
+    seq.on_qso = captured.append
     seq.reply_to(parse_message("CQ K1ABC FN42"), snr_db=-10)
     # One initial send plus three retransmissions (NFR-055).
     for _ in range(4):
@@ -129,11 +138,13 @@ def test_retry_exhaustion_disarms_and_retains_context() -> None:
     assert seq.state == QSOState.IDLE
     assert seq.disarm_reason == DisarmReason.RETRY_EXHAUSTED
     assert seq.dx_call == DX  # context retained for the operator
-    assert seq.pop_log_record() is None
+    assert len(captured) == 0  # retry exhaustion never fires on_qso
 
 
 def test_repeated_report_from_partner_resets_rogers_budget() -> None:
+    captured: list[QSORecord] = []
     seq = make()
+    seq.on_qso = captured.append
     seq.start_cq()
     feed(seq, "N0CALL K1ABC FN42", snr_db=-12)
     feed(seq, "N0CALL K1ABC R-05")
@@ -147,7 +158,7 @@ def test_repeated_report_from_partner_resets_rogers_budget() -> None:
         assert seq.next_tx_message() == "K1ABC N0CALL RR73"
     assert seq.next_tx_message() is None
     assert seq.disarm_reason == DisarmReason.RETRY_EXHAUSTED
-    assert seq.pop_log_record() is None
+    assert len(captured) == 0  # retry exhaustion never fires on_qso
 
 
 def test_partner_calling_someone_else_auto_stops() -> None:
@@ -201,7 +212,9 @@ def test_rrr_after_report_advances_to_rogers() -> None:
 
 
 def test_cq_side_accepts_rr73_shortcut_after_report() -> None:
+    captured: list[QSORecord] = []
     seq = make()
+    seq.on_qso = captured.append
     seq.start_cq()
     feed(seq, "N0CALL K1ABC FN42", snr_db=-12)
     feed(seq, "N0CALL K1ABC RR73")
@@ -209,9 +222,8 @@ def test_cq_side_accepts_rr73_shortcut_after_report() -> None:
     assert seq.next_tx_message() == "K1ABC N0CALL 73"
     assert seq.next_tx_message() is None
     assert seq.state == QSOState.DONE
-    record = seq.pop_log_record()
-    assert record is not None
-    assert record.report_rcvd is None
+    assert len(captured) == 1
+    assert captured[0].report_rcvd is None
 
 
 def test_done_is_terminal() -> None:
@@ -248,12 +260,57 @@ def test_partner_grid_is_captured_from_first_reply() -> None:
 
 
 def test_missing_grid_stays_empty_through_completion() -> None:
+    captured: list[QSORecord] = []
     seq = make()
+    seq.on_qso = captured.append
     seq.reply_to(parse_message("CQ K1ABC"), snr_db=-10)
     feed(seq, "N0CALL K1ABC -09")
     feed(seq, "N0CALL K1ABC RR73")
     assert seq.next_tx_message() == "K1ABC N0CALL 73"
     assert seq.next_tx_message() is None
-    record = seq.pop_log_record()
-    assert record is not None
-    assert record.dx_grid == ""
+    assert len(captured) == 1
+    assert captured[0].dx_grid == ""
+
+
+def drive_cq_qso(sequencer: Sequencer) -> None:
+    """CQ side full exchange mirroring test_cq_side_full_qso (ends DONE)."""
+    sequencer.start_cq()
+    feed(sequencer, "N0CALL K1ABC FN42", snr_db=-12)
+    feed(sequencer, "N0CALL K1ABC R-05", snr_db=-5)
+    feed(sequencer, "N0CALL K1ABC 73", snr_db=-5)
+
+
+def test_completed_qso_fires_on_qso_exactly_once() -> None:
+    captured: list[QSORecord] = []
+    seq = make()
+    seq.on_qso = captured.append
+    drive_cq_qso(seq)
+    assert len(captured) == 1
+    assert captured[0].dx_call == "K1ABC"
+
+
+def test_log_record_survives_immediate_reply_reset() -> None:
+    # The observed bug: reply_to()/_reset_partner() wiped a completed-but-
+    # unlogged record.  With on_qso fired at completion the record is already
+    # out of sequencer state.
+    captured: list[QSORecord] = []
+    seq = make()
+    seq.on_qso = captured.append
+    drive_cq_qso(seq)
+    seq.reply_to(parse_message("CQ W1AW FN42"), snr_db=-10)  # new QSO
+    assert len(captured) == 1
+    assert captured[0].dx_call == "K1ABC"
+
+
+def test_log_record_carries_start_time_and_context() -> None:
+    captured: list[QSORecord] = []
+    seq = make(
+        clock=lambda: 1_700_000_000.0,  # 2023-11-14T22:13:20Z
+        context=lambda: QsoContext(freq_hz=14_074_000, band="20m"),
+    )
+    seq.on_qso = captured.append
+    drive_cq_qso(seq)
+    record = captured[0]
+    assert record.started_utc == "221320"
+    assert record.freq_hz == 14_074_000
+    assert record.band == "20m"

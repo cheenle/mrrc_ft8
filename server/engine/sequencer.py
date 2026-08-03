@@ -17,6 +17,8 @@ to the text the next eligible TX slot should carry, and nothing else.
 
 from __future__ import annotations
 
+import time
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from enum import StrEnum
 
@@ -49,6 +51,18 @@ class DisarmReason(StrEnum):
     RETRY_EXHAUSTED = "retry_exhausted"
     PARTNER_LOST = "partner_lost"
     COMPLETE = "complete"
+
+
+@dataclass(frozen=True, slots=True)
+class QsoContext:
+    """Radio context the sequencer records into a completed QSO.
+
+    Injected by the composition root (keeps the sequencer hardware-agnostic);
+    ``freq_hz``/``band`` are the dial frequency and ADIF band at QSO start.
+    """
+
+    freq_hz: int = 0
+    band: str = ""
 
 
 @dataclass(frozen=True, slots=True)
@@ -95,7 +109,11 @@ class Sequencer:
     tx_phase: int = 0                # 0 = even slots, 1 = odd (UC-003)
     _tx_count: int = field(default=0, repr=False)
     _signoff_sent: bool = field(default=False, repr=False)
-    _log_ready: QSORecord | None = field(default=None, repr=False)
+    clock: Callable[[], float] = time.time
+    context: Callable[[], QsoContext] = lambda: QsoContext()
+    on_qso: Callable[[QSORecord], None] | None = None
+    _qso_logged: bool = field(default=False, repr=False)
+    _qso_started_epoch: float | None = field(default=None, repr=False)
 
     # ---- external triggers ------------------------------------------
 
@@ -119,6 +137,7 @@ class Sequencer:
         if not msg.from_call:
             return
         self._reset_partner()
+        self._qso_started_epoch = self.clock()
         self.tx_phase = tx_phase
         self.dx_call = msg.from_call
         self.dx_grid = msg.grid
@@ -170,6 +189,7 @@ class Sequencer:
                 if msg.from_call:
                     self.dx_call = msg.from_call
                     self.report_sent = snr_db
+                    self._qso_started_epoch = self.clock()
                     self.state = QSOState.REPORT
             case QSOState.REPLYING:
                 # Partner answered our grid call with a report.
@@ -238,32 +258,6 @@ class Sequencer:
             case _:
                 return None
 
-    def pop_log_record(
-        self,
-        *,
-        started_utc: str = "",
-        mode: str = "FT8",
-        freq_hz: int = 0,
-        band: str = "",
-    ) -> QSORecord | None:
-        """Take the completed QSO record exactly once, with log metadata."""
-
-        record, self._log_ready = self._log_ready, None
-        if record is not None:
-            record = QSORecord(
-                my_call=record.my_call,
-                my_grid=record.my_grid,
-                dx_call=record.dx_call,
-                dx_grid=record.dx_grid,
-                report_sent=record.report_sent,
-                report_rcvd=record.report_rcvd,
-                started_utc=started_utc,
-                mode=mode,
-                freq_hz=freq_hz,
-                band=band,
-            )
-        return record
-
     # ---- internals -----------------------------------------------------
 
     def _enter_signoff(self) -> None:
@@ -279,15 +273,30 @@ class Sequencer:
         self.disarm_reason = DisarmReason.COMPLETE
 
     def _ensure_log(self) -> None:
-        if self._log_ready is None:
-            self._log_ready = QSORecord(
-                my_call=self.my_call,
-                my_grid=self.my_grid,
-                dx_call=self.dx_call,
-                dx_grid=self.dx_grid,
-                report_sent=self.report_sent,
-                report_rcvd=self.report_rcvd,
-            )
+        # UC-005: fire the completed record exactly once, immediately out of
+        # sequencer state so partner resets cannot lose it.
+        if self._qso_logged:
+            return
+        self._qso_logged = True
+        ctx = self.context()
+        started = self._qso_started_epoch
+        record = QSORecord(
+            my_call=self.my_call,
+            my_grid=self.my_grid,
+            dx_call=self.dx_call,
+            dx_grid=self.dx_grid,
+            report_sent=self.report_sent,
+            report_rcvd=self.report_rcvd,
+            started_utc=(
+                time.strftime("%H%M%S", time.gmtime(started))
+                if started is not None
+                else ""
+            ),
+            freq_hz=ctx.freq_hz,
+            band=ctx.band,
+        )
+        if self.on_qso is not None:
+            self.on_qso(record)
 
     def _reset_partner(self) -> None:
         self.dx_call = ""
@@ -298,4 +307,5 @@ class Sequencer:
         self.tx_phase = 0  # CQ and unknown-slot replies default to even
         self._tx_count = 0
         self._signoff_sent = False
-        self._log_ready = None
+        self._qso_logged = False
+        self._qso_started_epoch = None
