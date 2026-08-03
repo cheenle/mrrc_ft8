@@ -32,6 +32,15 @@ export function saveSettings(partial) {
   return next;
 }
 
+// Rig mutations need the control lease; take it implicitly like candidate
+// taps do (UC-002).  A lease held by another session stays rejected.
+async function ensureLease() {
+  if (getState().lease.mine) return true;
+  if (getState().lease.held) return false;
+  const acquired = await api.acquireLease();
+  return Boolean(acquired.ok);
+}
+
 export function createSettingsDrawer() {
   const backdrop = document.getElementById("drawer-backdrop");
   const drawer = document.getElementById("settings-drawer");
@@ -74,13 +83,13 @@ export function createSettingsDrawer() {
     if (modeRes.ok) mode = modeRes;
     else rigUp = modeRes.status === 503 ? false : rigUp;
 
+    // FT-710's hamlib model does not answer the ``L <name>`` query, so level
+    // reads come back None — fall back to typical defaults; writes still work.
+    const fallback = (key, def) => (levels[key] == null ? def : levels[key]);
     const agcMap = [
       [0, "OFF"], [2, "FAST"], [5, "MED"], [3, "SLOW"], [6, "AUTO"],
     ];
-    const agcValue = levels.AGC;
-    const agcLabel = (agcValue == null)
-      ? "—"
-      : (agcMap.find(([v]) => v === agcValue)?.[1] ?? `${agcValue}`);
+    const agcValue = fallback("AGC", 6);
 
     // FT-710 USB/LSB filter bandwidths (Hamlib rig model 1049).
     const passbands = [1800, 2400, 3000];
@@ -108,7 +117,7 @@ export function createSettingsDrawer() {
     </label>`);
 
     // ATT: FT-710 attenuator is 6/12/18 dB (not a plain on/off).
-    const attValue = levels.ATT ?? 0;
+    const attValue = fallback("ATT", 0);
     html.push(`<label class="setting-row">
       <span>Attenuator</span>
       <select data-level="ATT" ${rigUp ? "" : "disabled"}>
@@ -119,7 +128,7 @@ export function createSettingsDrawer() {
     </label>`);
 
     // PREAMP: 10/20 dB (0 = off).
-    const preampValue = levels.PREAMP ?? 0;
+    const preampValue = fallback("PREAMP", 0);
     html.push(`<label class="setting-row">
       <span>Preamp</span>
       <select data-level="PREAMP" ${rigUp ? "" : "disabled"}>
@@ -140,7 +149,7 @@ export function createSettingsDrawer() {
     </label>`);
 
     // RF Gain: 0..1.0.
-    const rfValue = levels.RF ?? 1.0;
+    const rfValue = fallback("RF", 1.0);
     html.push(`<label class="setting-row">
       <span>RF Gain <b class="val">${rfValue == null ? "—" : Math.round(rfValue * 100)}%</b></span>
       <input type="range" data-level="RF" min="0" max="1" step="0.01"
@@ -154,6 +163,11 @@ export function createSettingsDrawer() {
     const passbandSelect = content.querySelector("[data-mode-passband]");
     if (passbandSelect) {
       passbandSelect.addEventListener("change", async () => {
+        const ok = await ensureLease();
+        if (!ok) {
+          showToast("Control is held by another session");
+          return;
+        }
         const result = await api.rigModeSet(currentMode, Number(passbandSelect.value));
         if (!result.ok) showToast(`Bandwidth: ${result.reason || result.status}`);
         else showToast(`Filter → ${(result.passband_hz / 1000).toFixed(1)} kHz`);
@@ -162,6 +176,11 @@ export function createSettingsDrawer() {
     for (const input of content.querySelectorAll("select[data-level], input[data-level]")) {
       const level = input.dataset.level;
       input.addEventListener("change", async () => {
+        const ok = await ensureLease();
+        if (!ok) {
+          showToast("Control is held by another session");
+          return;
+        }
         const value = input.type === "checkbox" ? (input.checked ? 1 : 0) : Number(input.value);
         const result = await api.rigLevel(level, value);
         if (!result.ok) showToast(`Rig ${level}: ${result.reason || result.status}`);

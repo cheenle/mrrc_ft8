@@ -1,5 +1,9 @@
 # 14. Version History
 
+## Unreleased — 2026-08-03 — Radio Drawer Takes the Control Lease Implicitly
+
+- Field report #2: filter-bandwidth switches kept returning 409 Conflict even with no TX active. Root cause: `/radio/mode` and `/radio/rig/level` require the control lease (`require_lease`), but the settings drawer never acquired it — every toggle before a lease was held returned `lease_required` (36 consecutive 409s in the log). Candidate taps had implicit lease acquisition (UC-002); the drawer now reuses the same pattern: `ensureLease()` takes a free lease before any rig mutation, shows "Control is held by another session" when another session owns it.
+
 ## Unreleased — 2026-08-03 — Rig Level-Query Isolation (no more filter-switch corruption)
 
 - Field report: switching the filter bandwidth right after opening the Radio drawer failed intermittently (GET /radio/mode 502, rig_poll "invalid frequency"). Root cause: FT-710 never answers the `L <level>` query — every attempt timed out and dropped the rigctld session, and the reconnects corrupted concurrent rig_poll / mode traffic for minutes.
