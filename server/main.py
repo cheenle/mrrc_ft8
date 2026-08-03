@@ -502,7 +502,7 @@ def create_server(
             while True:
                 await asyncio.sleep(RIG_POLL_S)
                 try:
-                    freq_hz, _ = await state.rig.get_frequency()
+                    freq_hz = await state.rig.get_frequency()
                     if freq_hz != state.radio_freq_hz:
                         state.radio_freq_hz = freq_hz
                         state.state_broadcast.publish(_snapshot(state, None))
