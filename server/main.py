@@ -198,6 +198,8 @@ def create_server(
         safety=safety,
         sequencer=sequencer,
         repository=repository,
+        my_call=config.my_call,
+        my_grid=config.my_grid,
         rig=rig_client,
         allowed_hosts=config.allowed_hosts,
         state_broadcast=StateBroadcaster(),

@@ -14,6 +14,7 @@ class FakeRigctld:
         self.frequency = 14_074_000
         self.ptt = 0
         self.mode = ("USB", 2_400)
+        self.levels: dict[str, float] = {"ATT": 0.0, "PREAMP": 0.0, "RF": 50.0, "AGC": 30.0}
         self.rprt_error = 0          # when nonzero, every set command fails
         self.silent = False          # never reply (timeout injection)
         self.garbage = False         # reply with non-protocol bytes
@@ -80,6 +81,19 @@ class FakeRigctld:
             _, mode, passband = command.split()
             self.mode = (mode, int(passband))
             return "RPRT 0"
+        if command.startswith("L "):
+            name = command.split()[1]
+            if name not in self.levels:
+                return "RPRT -11"
+            return str(self.levels[name])
+        if command.startswith("l "):
+            if self.rprt_error:
+                return f"RPRT {self.rprt_error}"
+            _, name, value = command.split()
+            if name not in self.levels:
+                return "RPRT -11"
+            self.levels[name] = float(value)
+            return "RPRT 0"
         return "RPRT -1"
 
 
@@ -128,6 +142,29 @@ def test_ptt_and_mode(rig: FakeRigctld) -> None:
             await rig.stop()
 
     run(main())
+
+
+def test_level_round_trip_and_unsupported(rig: FakeRigctld) -> None:
+    """ATT/AGC/PREAMP/RF level read/write; unsupported level -> rig_unsupported."""
+
+    async def main() -> None:
+        port = await rig.start()
+        client = RigClient(port=port, timeout=1.0)
+        try:
+            assert await client.get_level("ATT") == 0.0
+            await client.set_level("ATT", 1.0)
+            assert await client.get_level("ATT") == 1.0
+            assert rig.levels["ATT"] == 1.0
+            # Unknown level: hamlib replies RPRT -11 (not supported on this rig).
+            with pytest.raises(RigError) as exc:
+                await client.get_level("SQL")
+            assert exc.value.code == "rig_unsupported"
+        finally:
+            await client.close()
+            await rig.stop()
+
+    run(main())
+    assert rig.commands[:3] == ["L ATT", "l ATT 1.0", "L ATT"]
 
 
 def test_rprt_error_raises_with_code(rig: FakeRigctld) -> None:

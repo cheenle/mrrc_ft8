@@ -25,13 +25,28 @@ export function createCandidates(listElement) {
       : `── ${utc} UTC ──`;
   }
 
+  // FT8 display filters (settings drawer): hide non-CQ rows, hide calls
+  // already in the log (new-DXCC focus), hide own echoes.
+  function visible(candidate, settings, workedCalls) {
+    if (settings.showOnlyCQ && !candidate.is_cq) return false;
+    if (settings.hideMine && candidate.mine) return false;
+    if (settings.hideWorked && candidate.from_call) {
+      const base = String(candidate.from_call).split("/")[0].toUpperCase();
+      if (workedCalls.includes(base)) return false;
+    }
+    return true;
+  }
+
   function render() {
-    const { candidates, selected, radio } = getState();
+    const { candidates, selected, radio, settings, station } = getState();
     const now = Date.now();
     const freqHz = radio && radio.freq_hz;
+    const workedCalls = (station && station.worked_calls) || [];
     const items = [];
     let previousSlot = null;
+    const hidden = settings ? settings : {};
     for (const candidate of candidates) {
+      if (!visible(candidate, hidden, workedCalls)) continue;
       if (candidate.slot_id !== previousSlot) {
         previousSlot = candidate.slot_id;
         const separator = document.createElement("li");
@@ -47,6 +62,8 @@ export function createCandidates(listElement) {
       if (candidate.late) item.classList.add("late");
       if (now - (candidate._t || 0) > STALE_AFTER_MS) item.classList.add("stale");
       if (selected && selected.call === candidate.call) item.classList.add("selected");
+      if (hidden.colorScheme === "contrast") item.classList.add("scheme-contrast");
+      else if (hidden.colorScheme === "minimal") item.classList.add("scheme-minimal");
       item.textContent = rowText(candidate);
       item.addEventListener("click", () => select(candidate));
       item.addEventListener("dblclick", () => reply(candidate));

@@ -62,6 +62,14 @@ export const api = {
       idempotencyKey: key(),
       body: { freq_hz: freqHz },
     }),
+  rigLevels: () => request("/radio/rig/levels"),
+  rigLevel: (level, value) =>
+    request("/radio/rig/level", {
+      method: "POST",
+      idempotencyKey: key(),
+      body: { level, value },
+    }),
+  qsos: () => request("/logs/qsos"),
   txOff: () => request("/operation/enable_tx_off", { method: "POST", idempotencyKey: key() }),
   stop: () => request("/operation/stop", { method: "POST", idempotencyKey: key() }),
   clearFault: (interlock) =>

@@ -176,6 +176,21 @@ def test_close_is_idempotent(repo: Repository) -> None:
     repo.close()
 
 
+def test_worked_calls_groups_base_and_excludes_void(tmp_path: Path) -> None:
+    """worked_calls() feeds the new-DXCC filter: base calls only, void excluded."""
+
+    path = str(tmp_path / "worked.db")
+    repo = Repository(path)
+    repo.record_qso(QSORecord(my_call="M0XX", my_grid="IO91", dx_call="K1ABC"))
+    repo.record_qso(QSORecord(my_call="M0XX", my_grid="IO91", dx_call="K1ABC/P"))
+    repo.record_qso(QSORecord(my_call="M0XX", my_grid="IO91", dx_call="JA1YAD"))
+    qso_id = repo.record_qso(QSORecord(my_call="M0XX", my_grid="IO91", dx_call="F4XYZ"))
+    repo.void_qso(qso_id, actor="t", reason="dup")
+    worked = repo.worked_calls()
+    assert worked == {"K1ABC", "JA1YAD"}  # suffix stripped, void excluded
+    repo.close()
+
+
 def test_external_db_replace_does_not_wedge_writes(tmp_path: Path) -> None:
     """AD-014: an external process replacing the db file mid-run must not
     permanently wedge the repository.

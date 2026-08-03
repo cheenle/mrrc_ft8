@@ -269,6 +269,21 @@ class Repository:
             ).fetchone()
         return self._to_stored(row) if row is not None else None
 
+    def worked_calls(self) -> set[str]:
+        """Base calls of every non-void logged QSO (new-DXCC filtering)."""
+
+        with self._lock:
+            rows = self._db.execute(
+                "SELECT dx_call FROM qso WHERE status != ?", (QsoStatus.VOID.value,)
+            ).fetchall()
+        return {self._base_call(r["dx_call"]) for r in rows if r["dx_call"]}
+
+    @staticmethod
+    def _base_call(call: str) -> str:
+        """Strip any /suffix (e.g. K1ABC/P -> K1ABC); bare-call DXCC grouping."""
+
+        return call.split("/", 1)[0]
+
     def void_qso(self, qso_id: int, *, actor: str, reason: str) -> None:
         """Audited undo within 30 s of completion (NFR-073, §6).
 

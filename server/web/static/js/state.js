@@ -7,6 +7,8 @@ const state = {
   sequencer: { state: "idle", tx_enabled: false, dx_call: "" },
   selected: null,
   radio: { freq_hz: null },
+  station: { my_call: "", my_grid: "", worked_calls: [] },
+  settings: null,
   candidates: [],
   connected: { state: false, decodes: false, waterfall: false },
 };
@@ -35,6 +37,8 @@ export function applySnapshot(snapshot) {
     sequencer: snapshot.sequencer ?? state.sequencer,
     selected: snapshot.selected ?? state.selected,
     radio: snapshot.radio ?? state.radio,
+    station: snapshot.station ?? state.station,
+    settings: snapshot.settings ?? state.settings,
   });
 }
 

@@ -27,9 +27,22 @@ class ApiRig(FakeRig):
     def __init__(self) -> None:
         super().__init__()
         self.frequencies: list[int] = []
+        self.levels: dict[str, float] = {"ATT": 0.0, "PREAMP": 0.0, "RF": 50.0, "AGC": 30.0}
 
     async def set_frequency(self, frequency_hz: int) -> None:
         self.frequencies.append(frequency_hz)
+
+    async def get_level(self, level: str) -> float:
+        if level not in self.levels:
+            from server.engine.rig import RigError
+            raise RigError("rig_unsupported", f"no level {level}", rprt=-11)
+        return self.levels[level]
+
+    async def set_level(self, level: str, value: float) -> None:
+        if level not in self.levels:
+            from server.engine.rig import RigError
+            raise RigError("rig_unsupported", f"no level {level}", rprt=-11)
+        self.levels[level] = value
 
 
 @pytest.fixture()
@@ -58,6 +71,8 @@ def state(rig: ApiRig) -> AppState:
         safety=safety,
         sequencer=sequencer,
         repository=Repository(":memory:"),
+        my_call="M0XX",
+        my_grid="IO91",
         rig=rig,
         allowed_hosts=frozenset({"testserver"}),
         cq_loop=cq_loop,
@@ -364,6 +379,37 @@ def test_radio_band_rules(client: TestClient, state: AppState, rig: ApiRig) -> N
         headers=auth_headers(session_id),
     )
     assert gone.status_code == 503
+
+
+def test_radio_rig_levels_and_station_snapshot(
+    client: TestClient, state: AppState
+) -> None:
+    """Rig level read/write endpoints and the snapshot's station block."""
+
+    session_id = login(client)
+    headers = auth_headers(session_id)
+    client.post("/api/v1/lease/acquire", headers=headers)
+
+    levels = client.get("/api/v1/radio/rig/levels", headers=headers)
+    assert levels.status_code == 200
+    assert levels.json()["levels"] == {"ATT": 0.0, "PREAMP": 0.0, "RF": 50.0, "AGC": 30.0}
+
+    set_att = client.post(
+        "/api/v1/radio/rig/level", json={"level": "ATT", "value": 1}, headers=headers
+    )
+    assert set_att.status_code == 200
+    assert set_att.json()["value"] == 1
+
+    bad = client.post(
+        "/api/v1/radio/rig/level", json={"level": "att; DROP", "value": 1}, headers=headers
+    )
+    assert bad.status_code == 422
+
+    snap = client.get("/api/v1/state", headers=headers)
+    assert snap.status_code == 200
+    station = snap.json()["station"]
+    assert station["my_call"] == state.my_call
+    assert isinstance(station["worked_calls"], list)
 
 
 def test_qso_listing_and_audited_void(client: TestClient, state: AppState) -> None:

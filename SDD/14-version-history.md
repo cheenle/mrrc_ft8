@@ -1,5 +1,14 @@
 # 14. Version History
 
+## Unreleased — 2026-08-03 — Settings Drawer (Radio / FT8 / Station / Log)
+
+- Left-side drawer menu in the cockpit (hamburger ☰ in the top bar) with four tabs:
+  - **Radio**: rig levels via new rigctld level endpoints — ATT, PREAMP (toggles) and RF Gain / AGC (sliders), read/write through `L`/`l` short commands; unsupported levels surface as greyed-out (hamlib `RPRT -11` → `rig_unsupported`); TX must be off to change. New `GET /radio/rig/levels` + `POST /radio/rig/level`; `RigClient.get_level/set_level`.
+  - **FT8**: decode depth (Fast/Deep), colour scheme (Classic/High-contrast/Minimal), and display filters — show only CQ, hide already-worked calls (new-DXCC focus), hide own echoes. Persisted in `localStorage` (`mrrc-ft8.settings`) and applied live to the Band Activity list.
+  - **Station**: my call / grid / worked-call count from the snapshot's new `station` block; `Repository.worked_calls()` groups base calls (suffix-stripped) and excludes voided QSOs.
+  - **Log**: QSO history list (`GET /logs/qsos`, existing) plus an ADIF export link.
+- Snapshot gained `station: {my_call, my_grid, worked_calls}`; `AppState` now carries `my_call`/`my_grid` from `ServerConfig`.
+
 ## Unreleased — 2026-08-03 — Sequencer State Shows Target Call
 
 - The bottom safety bar rendered only the bare sequencer state (`replying`, `report`…). It now shows `state → dx_call` (e.g. `replying → K1ABC`) with the call highlighted in the accent colour, so the operator sees at a glance whom a manual Reply / QSO phase is aimed at. `sequencer.dx_call` was already in the snapshot; only the client rendering changed (plus an `escapeHtml` guard for the injected span).

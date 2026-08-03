@@ -18,6 +18,7 @@ DEFAULT_PORT = 4532
 DEFAULT_TIMEOUT_SECONDS = 2.0
 _MAX_REPLY_LINE = 256
 _MODE_RE = re.compile(r"^[A-Z0-9]{1,16}$")
+_LEVEL_RE = re.compile(r"^[A-Z][A-Z0-9_]{0,15}$")
 MIN_FREQUENCY_HZ = 1_000
 MAX_FREQUENCY_HZ = 9_999_999_999
 MAX_PASSBAND_HZ = 100_000
@@ -122,6 +123,43 @@ class RigClient:
         if type(passband_hz) is not int or not 0 <= passband_hz <= MAX_PASSBAND_HZ:
             raise ValueError("passband is outside the supported Hz range")
         await self._set(f"M {mode} {passband_hz}")
+
+    # ---- rigctld level/function access (best effort per rig) -----------
+
+    async def get_level(self, level: str) -> float:
+        """Read one rig level (e.g. ``ATT``, ``RF``, ``PREAMP``, ``AGC``).
+
+        ``RPRT -11`` (unsupported on this rig) surfaces as :class:`RigError`
+        with ``code == "rig_unsupported"``; callers may degrade gracefully.
+        """
+
+        if not _LEVEL_RE.match(level):
+            raise ValueError("level must be an uppercase Hamlib token")
+        try:
+            lines = await self._query(f"L {level}", 1)
+        except RigError as exc:
+            if exc.rprt == -11:
+                raise RigError(
+                    "rig_unsupported", f"rig does not expose level {level}", rprt=-11
+                ) from None
+            raise
+        return float(lines[0])
+
+    async def set_level(self, level: str, value: float) -> None:
+        """Write one rig level; unsupported levels raise ``rig_unsupported``."""
+
+        if not _LEVEL_RE.match(level):
+            raise ValueError("level must be an uppercase Hamlib token")
+        if type(value) not in (int, float):
+            raise ValueError("level value must be numeric")
+        try:
+            await self._set(f"l {level} {value}")
+        except RigError as exc:
+            if exc.rprt == -11:
+                raise RigError(
+                    "rig_unsupported", f"rig does not expose level {level}", rprt=-11
+                ) from None
+            raise
 
     # ---- internals ------------------------------------------------------
 

@@ -15,6 +15,7 @@ from __future__ import annotations
 import asyncio
 import io
 import json
+import re
 import tarfile
 import time
 from collections.abc import Callable
@@ -43,6 +44,9 @@ REASON_REAUTH_REQUIRED = "reauth_required"
 REASON_RATE_LIMITED = "rate_limited"
 REASON_UNAUTHENTICATED = "unauthenticated"
 REASON_FORBIDDEN = "forbidden"
+
+# Rig level tokens (rigctld ``l``/``L`` commands) are uppercase Hamlib names.
+_LEVEL_NAME_RE = re.compile(r"^[A-Z][A-Z0-9_]{0,15}$")
 
 # §10.5 schema-validated settings; safety-impacting ones are TX-locked.
 SETTING_SCHEMA: dict[str, Callable[[Any], bool]] = {
@@ -91,6 +95,8 @@ class AppState:
     sequencer: Sequencer
     repository: Repository
     allowed_hosts: frozenset[str]
+    my_call: str = ""
+    my_grid: str = ""
     rig: Any = None          # RigClient when wired
     orchestrator: Any = None  # running orchestrator when wired
     latency: Any = None      # LatencyHistogram when the DSP path is wired
@@ -459,6 +465,42 @@ def create_router(state: AppState) -> APIRouter:
             return _reject(502, "rig_error", detail=str(exc))
         return await mutate(request, request.headers.get("idempotency-key"), 200, {"freq_hz": freq})
 
+    # rigctld level access (ATT / AGC / PREAMP / RF gain …).  Levels are
+    # per-rig: unsupported ones answer ``rig_unsupported`` so the settings
+    # drawer can show them greyed out instead of failing the whole request.
+    @router.get("/radio/rig/levels")
+    async def radio_rig_levels(session: Session = Depends(require_session)) -> JSONResponse:
+        if state.rig is None:
+            return _reject(503, "rig_unavailable")
+        wanted = ("ATT", "PREAMP", "RF", "AGC")
+        levels: dict[str, float | None] = {}
+        for name in wanted:
+            try:
+                levels[name] = await state.rig.get_level(name)
+            except Exception:
+                levels[name] = None
+        return _ok({"levels": levels})
+
+    @router.post("/radio/rig/level")
+    async def radio_rig_level(request: Request, session: Session = Depends(require_lease)) -> JSONResponse:
+        await validate_mutation(request)
+        body = await request.json()
+        name = body.get("level") if isinstance(body, dict) else None
+        value = body.get("value") if isinstance(body, dict) else None
+        if not isinstance(name, str) or not _LEVEL_NAME_RE.match(name):
+            return _reject(422, "invalid_request")
+        if not isinstance(value, (int, float)) or isinstance(value, bool):
+            return _reject(422, "invalid_request")
+        if state.safety.armed or state.safety.ptt_on:
+            return _reject(409, REASON_TX_ACTIVE)
+        if state.rig is None:
+            return _reject(503, "rig_unavailable")
+        try:
+            await state.rig.set_level(name, float(value))
+        except Exception as exc:
+            return _reject(502, "rig_error", detail=str(exc))
+        return await mutate(request, request.headers.get("idempotency-key"), 200, {"level": name, "value": value})
+
     # ---- logs ----------------------------------------------------------------
 
     @router.get("/logs/qsos")
@@ -583,6 +625,11 @@ def _snapshot(state: AppState, session: Session | None) -> dict[str, Any]:
             else {"call": state.selected.from_call, "grid": state.selected.grid}
         ),
         "radio": {"freq_hz": state.radio_freq_hz},
+        "station": {
+            "my_call": state.my_call,
+            "my_grid": state.my_grid,
+            "worked_calls": sorted(state.repository.worked_calls()),
+        },
     }
     if state.orchestrator is not None:
         counters = state.orchestrator.counters

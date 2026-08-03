@@ -13,6 +13,7 @@ import { createWaterfall, parseFrame } from "./waterfall.js";
 import { createCandidates } from "./candidates.js";
 import { createSafetyBar } from "./safety.js";
 import { createBandSelect } from "./band.js";
+import { createSettingsDrawer, loadSettings } from "./settings.js";
 
 const loginView = document.getElementById("login-view");
 const cockpit = document.getElementById("cockpit");
@@ -38,6 +39,9 @@ async function boot() {
   createCandidates(document.getElementById("candidate-list"));
   createSafetyBar();
   createBandSelect(document.getElementById("band-select"));
+  createSettingsDrawer();
+  // Seed FT8 display prefs before the first candidate render.
+  applySnapshot({ settings: loadSettings() });
 
   const snapshot = await api.state();
   if (snapshot.ok) applySnapshot(snapshot);

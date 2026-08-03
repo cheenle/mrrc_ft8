@@ -23,7 +23,10 @@
 
   <div id="cockpit" hidden>
     <header id="top-bar">
-      <span id="station-id">—</span>
+      <div id="top-left">
+        <button id="btn-menu" class="icon-btn" title="Settings & Log" aria-label="Open settings">☰</button>
+        <span id="station-id">—</span>
+      </div>
       <span id="slot-clock">--:--:--</span>
       <span id="revision-badge">v2</span>
       <select id="band-select" aria-label="FT8 band" title="FT8 band" hidden></select>
@@ -38,6 +41,22 @@
         <ul id="candidate-list"></ul>
       </section>
     </main>
+
+    <!-- Settings / Log drawer (left side) -->
+    <div id="drawer-backdrop" hidden></div>
+    <aside id="settings-drawer" aria-label="Settings and log" hidden>
+      <header id="drawer-header">
+        <strong>MRRC-FT8</strong>
+        <button id="btn-drawer-close" class="icon-btn" aria-label="Close settings">✕</button>
+      </header>
+      <nav id="drawer-tabs">
+        <button class="tab" data-tab="radio">Radio</button>
+        <button class="tab" data-tab="ft8">FT8</button>
+        <button class="tab" data-tab="station">Station</button>
+        <button class="tab" data-tab="log">Log</button>
+      </nav>
+      <div id="drawer-content"></div>
+    </aside>
 
     <div id="toast" role="status" hidden></div>
 
