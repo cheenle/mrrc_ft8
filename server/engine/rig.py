@@ -60,6 +60,7 @@ class RigClient:
         self._lock = asyncio.Lock()
         self._reader: asyncio.StreamReader | None = None
         self._writer: asyncio.StreamWriter | None = None
+        self._unread: list[bytes] = []
 
     @property
     def connected(self) -> bool:
@@ -107,13 +108,28 @@ class RigClient:
         await self._set(f"T {1 if transmit else 0}")
 
     async def get_mode(self) -> tuple[str, int]:
-        """Return the current (mode, passband Hz) pair."""
+        """Return the current (mode, passband Hz) pair.
 
-        lines = await self._query("m", 2)
-        mode = lines[0]
+        rigctld replies to ``m`` with ``<MODE>.<passband>.`` on one line
+        (FT-710 confirms: ``USB.1800.``); some builds/rigs split it across
+        two lines.  Both shapes are accepted.
+        """
+
+        lines = await self._query("m", 1)
+        first = lines[0].strip()
+        if "." in first:
+            # Single line ``MODE.passband.`` (rigctld dotted format).
+            parts = first.split(".")
+            mode = parts[0]
+            passband_text = parts[1] if len(parts) > 1 else ""
+        else:
+            # Two-line shape: ``MODE`` then ``passband``.
+            mode = first
+            rest = await self._readline_locked()
+            passband_text = rest.strip()
         if not _MODE_RE.match(mode):
             raise RigError("protocol", "rig returned an invalid mode token")
-        return mode, self._parse_int(lines[1], "passband")
+        return mode, self._parse_int(passband_text, "passband")
 
     async def set_mode(self, mode: str, passband_hz: int) -> None:
         """Set mode and passband (e.g. USB/2400 for FT8)."""
@@ -146,22 +162,64 @@ class RigClient:
         return float(lines[0])
 
     async def set_level(self, level: str, value: float) -> None:
-        """Write one rig level; unsupported levels raise ``rig_unsupported``."""
+        """Write one rig level; unsupported levels raise ``rig_unsupported``.
+
+        NB: rigctld replies to ``l <level> <value>`` with the *new value*
+        (e.g. ``6.``) on rigs like the FT-710, not ``RPRT 0`` — so this
+        path tolerates both reply styles (``M``/``F``/``T`` keep using
+        :meth:`_set` which requires RPRT).
+        """
 
         if not _LEVEL_RE.match(level):
             raise ValueError("level must be an uppercase Hamlib token")
         if type(value) not in (int, float):
             raise ValueError("level value must be numeric")
-        try:
-            await self._set(f"l {level} {value}")
-        except RigError as exc:
-            if exc.rprt == -11:
+        async with self._lock:
+            await self._ensure_connected_locked()
+            await self._write_locked(f"l {level} {value}")
+            line = await self._readline_locked()
+            if line.startswith("RPRT"):
+                try:
+                    self._raise_rprt(line)
+                except RigError as exc:
+                    if exc.rprt == -11:
+                        raise RigError(
+                            "rig_unsupported",
+                            f"rig does not expose level {level}",
+                            rprt=-11,
+                        ) from None
+                    raise
+                return
+            # Otherwise the rig echoed the new value back (float like ``6.``);
+            # accept it as success.  Some rigs (FT-710) then dump their full
+            # capability text and close with ``RPRT 0`` — drain until RPRT so
+            # the trailing lines never leak into the next command.
+            try:
+                float(line)
+            except ValueError:
                 raise RigError(
-                    "rig_unsupported", f"rig does not expose level {level}", rprt=-11
+                    "protocol", f"level set did not return a value or RPRT: {line!r}"
                 ) from None
-            raise
+            await self._drain_until_rprt()
 
     # ---- internals ------------------------------------------------------
+
+    async def _drain_until_rprt(self) -> None:
+        """Drain rigctld output until an ``RPRT`` line (or timeout).
+
+        Some rigs (FT-710) follow a level-set value echo with their full
+        capability dump ending in ``RPRT 0``; without draining, those lines
+        leak into the next command's reply and corrupt the protocol stream.
+        """
+
+        while True:
+            try:
+                line = await self._readline_locked()
+            except RigError:
+                return  # connection dropped — next command reconnects
+            if line.startswith("RPRT"):
+                self._raise_rprt(line)
+                return
 
     async def _query(self, payload: str, reply_lines: int) -> list[str]:
         async with self._lock:
@@ -181,6 +239,10 @@ class RigClient:
             if not line.startswith("RPRT"):
                 raise RigError("protocol", "set command did not return RPRT")
             self._raise_rprt(line)
+            # FT-710's rigctld appends a blank line after set replies
+            # (``RPRT 0\n\n``); ``_readline_locked`` skips blanks so the
+            # stream is clean for the next command.
+            return
 
     async def _ensure_connected_locked(self) -> None:
         if self._writer is not None:
@@ -206,27 +268,35 @@ class RigClient:
 
     async def _readline_locked(self) -> str:
         assert self._reader is not None
-        try:
-            raw = await asyncio.wait_for(
-                self._reader.readline(), timeout=self._timeout
-            )
-        except asyncio.TimeoutError:
-            await self._drop_locked()
-            raise RigError("rig_timeout", "rigctld reply timed out") from None
-        except OSError:
-            await self._drop_locked()
-            raise RigError("rig_disconnected", "rigctld read failed") from None
-        if raw == b"":
-            await self._drop_locked()
-            raise RigError("rig_disconnected", "rigctld closed the session")
-        if len(raw) > _MAX_REPLY_LINE:
-            await self._drop_locked()
-            raise RigError("protocol", "rigctld reply line is oversize")
-        try:
-            return raw.decode("ascii", errors="strict").rstrip("\r\n")
-        except UnicodeDecodeError:
-            await self._drop_locked()
-            raise RigError("protocol", "rigctld reply was not ASCII") from None
+        while True:
+            if self._unread:
+                raw = self._unread.pop(0)
+            else:
+                try:
+                    raw = await asyncio.wait_for(
+                        self._reader.readline(), timeout=self._timeout
+                    )
+                except asyncio.TimeoutError:
+                    await self._drop_locked()
+                    raise RigError("rig_timeout", "rigctld reply timed out") from None
+                except OSError:
+                    await self._drop_locked()
+                    raise RigError("rig_disconnected", "rigctld read failed") from None
+                if raw == b"":
+                    await self._drop_locked()
+                    raise RigError("rig_disconnected", "rigctld closed the session")
+                if len(raw) > _MAX_REPLY_LINE:
+                    await self._drop_locked()
+                    raise RigError("protocol", "rigctld reply line is oversize")
+            try:
+                text = raw.decode("ascii", errors="strict").rstrip("\r\n")
+            except UnicodeDecodeError:
+                await self._drop_locked()
+                raise RigError("protocol", "rigctld reply was not ASCII") from None
+            # FT-710's rigctld interleaves blank lines after set replies;
+            # skip them so every reply is a real payload line.
+            if text:
+                return text
 
     async def _drop_locked(self) -> None:
         writer, self._writer = self._writer, None

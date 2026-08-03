@@ -1,5 +1,14 @@
 # 14. Version History
 
+## Unreleased — 2026-08-03 — Rigctld Protocol Hardening (real FT-710)
+
+- Live verification against the station's rigctld (`-m 1049` FT-710) exposed three protocol mismatches the fake rig tests never caught; all fixed and regression-tested:
+  - **`l <level> <value>` replies with the new value** (`6.`), not `RPRT 0` — `set_level` now accepts both reply styles.
+  - **`l PREAMP …` (and some other levels) trigger a full caps dump** (438 lines) ending in `RPRT 0`; `set_level` drains until RPRT so the dump never corrupts the next command.
+  - **`m` replies `MODE.passband.` on one line** (`USB.1800.`), not two lines; `get_mode` accepts both shapes.
+  - **FT-710 rigctld appends a blank line after every set reply** (`RPRT 0\n\n`); `_readline_locked` now skips blank lines and supports an unread buffer.
+- Live confirmations: filter bandwidth USB 1.8/2.4/3.0 kHz round-trips, ATT 0/6, PREAMP 0/10, AGC 0..6 (OFF/FAST/MED/SLOW/AUTO), RF 0..1 — all set and read back consistently.
+
 ## Unreleased — 2026-08-03 — Radio Tab: Filter Bandwidth + Rig-Accurate Levels
 
 - Radio tab now reads the rig's actual capabilities instead of generic sliders: verified against the FT-710 Hamlib model (rig 1049, Hamlib 4.6.2) which exposes USB/LSB bandwidths 1.8/2.4/3.0 kHz, attenuator 6/12/18 dB, preamp 10/20 dB, discrete AGC (OFF/FAST/MED/SLOW/AUTO) and RF gain 0..1.

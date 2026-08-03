@@ -19,6 +19,7 @@ class FakeRigctld:
         self.silent = False          # never reply (timeout injection)
         self.garbage = False         # reply with non-protocol bytes
         self.drop_after: int | None = None  # close session after N commands
+        self.dump_caps_on_level: str | None = None  # level whose set triggers caps dump
         self.commands: list[str] = []
         self.sessions = 0
         self._server: asyncio.AbstractServer | None = None
@@ -51,8 +52,10 @@ class FakeRigctld:
                     writer.write(b"\xff\xfe not a reply\r\n")
                     await writer.drain()
                     continue
-                writer.write(self._reply(command).encode("ascii") + b"\n")
-                await writer.drain()
+                reply = self._reply(command)
+                for line in reply.split("\n"):
+                    writer.write(line.encode("ascii") + b"\n")
+                    await writer.drain()
                 if self.drop_after is not None and handled >= self.drop_after:
                     return
         finally:
@@ -64,23 +67,24 @@ class FakeRigctld:
         if command == "t":
             return str(self.ptt)
         if command == "m":
-            return f"{self.mode[0]}\n{self.mode[1]}"
+            # rigctld dotted format: ``MODE.passband.`` on one line.
+            return f"{self.mode[0]}.{self.mode[1]}."
         if command.startswith("F "):
             if self.rprt_error:
                 return f"RPRT {self.rprt_error}"
             self.frequency = int(command.split()[1])
-            return "RPRT 0"
+            return "RPRT 0\n"  # FT-710 appends a trailing blank after sets
         if command.startswith("T "):
             if self.rprt_error:
                 return f"RPRT {self.rprt_error}"
             self.ptt = int(command.split()[1])
-            return "RPRT 0"
+            return "RPRT 0\n"
         if command.startswith("M "):
             if self.rprt_error:
                 return f"RPRT {self.rprt_error}"
             _, mode, passband = command.split()
             self.mode = (mode, int(passband))
-            return "RPRT 0"
+            return "RPRT 0\n"
         if command.startswith("L "):
             name = command.split()[1]
             if name not in self.levels:
@@ -93,7 +97,11 @@ class FakeRigctld:
             if name not in self.levels:
                 return "RPRT -11"
             self.levels[name] = float(value)
-            return "RPRT 0"
+            if name == self.dump_caps_on_level:
+                # FT-710 behaviour: value echo + full caps dump + closing RPRT.
+                return "0.\nCaps dump for model: 1049\nModel name:\tFT-710\nRPRT 0"
+            # rigctld echoes the new value (FT-710 style), not RPRT.
+            return f"{float(value):g}."
         return "RPRT -1"
 
 
@@ -165,6 +173,29 @@ def test_level_round_trip_and_unsupported(rig: FakeRigctld) -> None:
 
     run(main())
     assert rig.commands[:3] == ["L ATT", "l ATT 1.0", "L ATT"]
+
+
+def test_level_set_drains_caps_dump(rig: FakeRigctld) -> None:
+    """FT-710 echoes a value then dumps full caps + RPRT; trailing lines must
+    not leak into the next command's reply."""
+
+    rig.dump_caps_on_level = "PREAMP"
+
+    async def main() -> None:
+        port = await rig.start()
+        client = RigClient(port=port, timeout=2.0)
+        try:
+            await client.set_level("PREAMP", 10)
+            assert rig.levels["PREAMP"] == 10.0
+            # Next command must see a clean stream (no caps-dump residue).
+            assert await client.get_level("ATT") == 0.0
+            await client.set_level("AGC", 6)
+            assert rig.levels["AGC"] == 6.0
+        finally:
+            await client.close()
+            await rig.stop()
+
+    run(main())
 
 
 def test_rprt_error_raises_with_code(rig: FakeRigctld) -> None:
