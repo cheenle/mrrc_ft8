@@ -154,13 +154,21 @@ class RigClient:
         if not _LEVEL_RE.match(level):
             raise ValueError("level must be an uppercase Hamlib token")
         try:
-            lines = await self._query(f"L {level}", 1)
-        except RigError as exc:
-            if exc.rprt == -11:
+            # FT-710 never answers ``L <name>``; cap the read so the rig
+            # lock is released quickly instead of stalling for 2 s per
+            # level (a drawer open would stall rig_poll / mode switches).
+            lines = await self._query(f"L {level}", 1, timeout=0.5)
+        except (asyncio.TimeoutError, RigError) as exc:
+            if isinstance(exc, RigError) and exc.rprt == -11:
                 raise RigError(
                     "rig_unsupported", f"rig does not expose level {level}", rprt=-11
                 ) from None
-            raise
+            # Timeout or any other rig error: treat as unsupported query
+            # rather than stalling the rig lock.  (The write path
+            # ``l <level> <value>`` still works on FT-710.)
+            raise RigError(
+                "rig_unsupported", f"rig does not expose level {level}", rprt=-11
+            ) from None
         return float(lines[0])
 
     async def set_level(self, level: str, value: float) -> None:
@@ -224,14 +232,19 @@ class RigClient:
                 return
 
     async def _query(
-        self, payload: str, reply_lines: int, *, skip_stale_rprt: bool = False
+        self,
+        payload: str,
+        reply_lines: int,
+        *,
+        skip_stale_rprt: bool = False,
+        timeout: float | None = None,
     ) -> list[str]:
         async with self._lock:
             await self._ensure_connected_locked()
             await self._write_locked(payload)
             lines: list[str] = []
             for _ in range(reply_lines):
-                line = await self._readline_locked()
+                line = await self._readline_locked(timeout=timeout)
                 if skip_stale_rprt:
                     # A stale ``RPRT`` from a previous command (e.g. the
                     # delayed ``RPRT -11`` of an unsupported level query on
@@ -240,7 +253,7 @@ class RigClient:
                     for _ in range(8):
                         if not line.startswith("RPRT"):
                             break
-                        line = await self._readline_locked()
+                        line = await self._readline_locked(timeout=timeout)
                 lines.append(line)
             for line in lines:
                 if line.startswith("RPRT"):
@@ -317,15 +330,16 @@ class RigClient:
             await self._drop_locked()
             raise RigError("rig_disconnected", "rigctld write failed") from None
 
-    async def _readline_locked(self) -> str:
+    async def _readline_locked(self, *, timeout: float | None = None) -> str:
         assert self._reader is not None
+        limit = self._timeout if timeout is None else timeout
         while True:
             if self._unread:
                 raw = self._unread.pop(0)
             else:
                 try:
                     raw = await asyncio.wait_for(
-                        self._reader.readline(), timeout=self._timeout
+                        self._reader.readline(), timeout=limit
                     )
                 except asyncio.TimeoutError:
                     await self._drop_locked()

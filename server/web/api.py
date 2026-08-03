@@ -15,6 +15,7 @@ from __future__ import annotations
 import asyncio
 import io
 import json
+import logging
 import re
 import tarfile
 import time
@@ -29,6 +30,8 @@ from ..engine.adif import generate_adif
 from ..engine.msgparse import ParsedMessage
 from ..engine.repository import Repository, VoidWindowExpired
 from ..engine.safety import Interlock, SafetyController, TxRefused
+
+log = logging.getLogger("mrrc-ft8.api")
 from ..engine.sequencer import DisarmReason, Sequencer
 from .auth import AuthService, Session, host_allowed, origin_allowed
 from .lease import LeaseService
@@ -489,12 +492,21 @@ def create_router(state: AppState) -> APIRouter:
 
         async def _read(name: str) -> tuple[str, float | None]:
             try:
-                return name, await asyncio.wait_for(state.rig.get_level(name), timeout=0.4)
+                return name, await state.rig.get_level(name)
             except Exception:
                 return name, None
 
-        results = await asyncio.gather(*(_read(name) for name in wanted))
-        levels = dict(results)
+        # Serialise and stop at the first failure: on rigs that never answer
+        # ``L`` (FT-710) one probe is enough to mark all levels unsupported —
+        # no point paying 4 × timeout or dropping the session 4 times.
+        levels: dict[str, float | None] = {}
+        for name in wanted:
+            key, value = await _read(name)
+            levels[key] = value
+            if value is None:
+                for rest in wanted[wanted.index(name) + 1:]:
+                    levels[rest] = None
+                break
         state._rig_level_cache = {"at": now, "levels": levels}
         return _ok({"levels": levels})
 
@@ -508,6 +520,7 @@ def create_router(state: AppState) -> APIRouter:
         try:
             mode, passband_hz = await state.rig.get_mode()
         except Exception as exc:
+            log.warning("radio mode read failed: %s", exc, exc_info=True)
             return _reject(502, "rig_error", detail=str(exc))
         return _ok({"mode": mode, "passband_hz": passband_hz})
 

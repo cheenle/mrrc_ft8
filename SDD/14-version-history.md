@@ -1,5 +1,11 @@
 # 14. Version History
 
+## Unreleased — 2026-08-03 — Level-Probe Fast-Fail + Diagnostic Logging
+
+- The real culprit behind "filter switch does nothing": the server had been restarted BEFORE the rig.py/api.py fixes landed, so it kept running the old code (level probes holding the rig lock 8 s, stale RPRT poisoning reads). With the fixes deployed, a drawer open costs one 0.55 s probe (first unsupported level stops the batch), filter switches take ~0.25 s and read back correctly.
+- `RigClient._query/_readline_locked` accept a per-command `timeout`; `get_level` probes with 0.5 s and treats timeout/unsupported identically (write path `l <level> <value>` unaffected). `/radio/rig/levels` probes serially and stops at the first failure, caching the result for 60 s.
+- `radio_mode` and the rig invalid-token errors now log the failure + raw payload (`log.warning` / richer `RigError` detail) so field diagnosis no longer needs to guess.
+
 ## Unreleased — 2026-08-03 — Queries Skip Stale RPRT (final filter-switch fix)
 
 - Field report #3 with diagnostics: `GET /radio/mode` returned 502 with `rig_rprt` — rigctld rejected `m`. Root cause: FT-710 never answers `L <level>` queries; the timed-out command's delayed `RPRT -11` (unsupported) arrives *after* we drop and reconnect, landing on the new session **before** the `m`/`f` reply. `get_mode` read `RPRT -11` as its reply → 502. The write (`POST /radio/mode`) succeeded — the 3 kHz selection actually applied, only the readback failed.
