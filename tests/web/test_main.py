@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import asyncio
+import os
+import shutil
 import time
 from pathlib import Path
 
@@ -138,6 +140,43 @@ def test_interrupted_qso_becomes_aborted_restart(tmp_path: Path) -> None:
         assert check.get_qso(qso_id).status is QsoStatus.ABORTED_RESTART  # type: ignore[union-attr]
         operations = [a["operation"] for a in check.audit_events()]
         assert "aborted_restart" in operations
+        check.close()
+
+
+def test_reply_survives_external_db_replace(tmp_path: Path) -> None:
+    """Regression: replacing the db file under a live server must not turn
+    reply into a 500 (production incident, ``mrrc-ft8.db`` swapped mid-run
+    → SQLITE_READONLY_DBMOVED on every write).  The repository reopens the
+    new file and the mutation still succeeds end to end.
+    """
+
+    db = str(tmp_path / "qso.db")
+    rig = FakeRig()
+    app = create_server(make_config(db), rig=rig, start_dsp=False, start_audio=False)
+    with TestClient(app, base_url="https://testserver") as client:
+        r = client.post("/api/v1/session/login", json={"password": PASSWORD})
+        assert r.status_code == 200, r.text
+        session = r.cookies["mrrc_session"]
+        headers = {"cookie": f"mrrc_session={session}"}
+        assert client.post("/api/v1/lease/acquire", headers=headers).status_code == 200
+        client.post(
+            "/api/v1/operation/select",
+            json={"dx_call": "k1abc", "dx_grid": "fn42", "snr_db": -15, "is_cq": True},
+            headers=headers,
+        )
+
+        # Swap the db file while the server is live (new inode, same content).
+        swapped = str(tmp_path / "qso.db.new")
+        shutil.copy2(db, swapped)
+        os.replace(swapped, db)
+
+        reply = client.post("/api/v1/operation/reply", headers=headers)
+        assert reply.status_code == 200, reply.text
+        assert reply.json()["sequencer"] == "replying"
+
+        check = Repository(db)
+        operations = [a["operation"] for a in check.audit_events()]
+        assert "reply" in operations
         check.close()
 
 

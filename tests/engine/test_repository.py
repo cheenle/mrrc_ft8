@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+import os
+import shutil
+import sqlite3
 from pathlib import Path
 
 import pytest
@@ -171,3 +174,33 @@ def test_count_rows_rejects_unknown_table(repo: Repository) -> None:
 def test_close_is_idempotent(repo: Repository) -> None:
     repo.close()
     repo.close()
+
+
+def test_external_db_replace_does_not_wedge_writes(tmp_path: Path) -> None:
+    """AD-014: an external process replacing the db file mid-run must not
+    permanently wedge the repository.
+
+    Regression for the production incident: ``mrrc-ft8.db`` was swapped out
+    under the live server (inode change), and every subsequent write failed
+    with ``OperationalError: attempt to write a readonly database``
+    (SQLite's DBMOVED guard).  The repository must detect the replaced file
+    and transparently reopen it so QSO/audit writes keep flowing.
+    """
+
+    path = str(tmp_path / "qso.db")
+    repo = Repository(path)
+    repo.record_audit(actor="a", operation="first")
+
+    # Simulate the production incident: an external tool atomically replaces
+    # the db file (new inode) while the repository still holds the old one.
+    # A copy keeps the full schema + data, exactly like the real swap.
+    swapped = str(tmp_path / "qso.db.new")
+    shutil.copy2(path, swapped)
+    os.replace(swapped, path)
+
+    # The old connection now points at an unlinked inode; SQLite refuses to
+    # write (DBMOVED).  The repository must recover transparently.
+    repo.record_audit(actor="b", operation="after_swap")
+    ops = [a["operation"] for a in repo.audit_events()]
+    assert "after_swap" in ops
+    assert ops[0] == "after_swap"  # newest first

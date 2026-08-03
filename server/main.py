@@ -74,6 +74,7 @@ class ServerConfig:
     my_grid: str
     allowed_hosts: frozenset[str]
     db_path: str = "mrrc-ft8.db"
+    pending_path: str = "data/qso-pending.jsonl"
     rigctld_host: str = "127.0.0.1"
     rigctld_port: int = 4532
     audio_device: int | str | None = None
@@ -134,6 +135,9 @@ class ServerConfig:
             my_grid=my_grid,
             allowed_hosts=hosts or frozenset({"localhost"}),
             db_path=os.environ.get("MRRC_FT8_DB_PATH", "mrrc-ft8.db"),
+            pending_path=os.environ.get(
+                "MRRC_FT8_PENDING_PATH", "data/qso-pending.jsonl"
+            ),
             rigctld_host=rig_host,
             rigctld_port=int(rig_port or 4532),
             audio_device=audio_device,
@@ -438,9 +442,10 @@ def create_server(
 
     @asynccontextmanager
     async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
-        from .engine.qso_log import record_qso
+        from .engine.qso_log import QsoLog
 
         main_loop.append(asyncio.get_running_loop())
+        qso_log = QsoLog(repository, pending_path=config.pending_path)
         # §12.3: interrupted QSOs, then monitor-only safety with PTT off.
         aborted = await asyncio.to_thread(repository.abort_active_qsos)
         if aborted:
@@ -451,6 +456,10 @@ def create_server(
                 target=f"{aborted} qso(s)",
                 detail="interrupted by restart",
             )
+        # UC-005: sequencer fires completed records exactly once via on_qso;
+        # the durable queue owns them from there (retry → dead-letter).
+        sequencer.on_qso = qso_log.enqueue
+        await asyncio.to_thread(qso_log.recover)
         await safety.start()
 
         if capture is not None:
@@ -464,11 +473,9 @@ def create_server(
                 await asyncio.sleep(LEASE_POLL_S)
                 try:
                     state.lease.check_expiry()
-                    # The sequencer is lock-free: pop on the loop thread and
-                    # offload only the blocking repository write.
-                    record = sequencer.pop_log_record()
-                    if record is not None:
-                        await record_qso(repository, record)
+                    # UC-005: drain at most one completed QSO per tick; the
+                    # queue retries then spills to a dead-letter journal.
+                    await qso_log.drain_once()
                     if state.cq_loop is not None:
                         state.cq_loop.tick()
                 except Exception:
@@ -522,6 +529,9 @@ def create_server(
                 await asyncio.to_thread(supervisor_decoder.close)
             if supervisor is not None:
                 await asyncio.to_thread(supervisor.stop)
+            # UC-005: best-effort persist of any queued/journaled QSOs before
+            # the canonical store closes.
+            await qso_log.flush()
             repository.close()
 
     app = create_app(state)
