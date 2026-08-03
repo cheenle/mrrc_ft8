@@ -32,6 +32,12 @@ class ApiRig(FakeRig):
     async def set_frequency(self, frequency_hz: int) -> None:
         self.frequencies.append(frequency_hz)
 
+    async def get_mode(self) -> tuple[str, int]:
+        return self.mode if hasattr(self, "mode") else ("USB", 2400)
+
+    async def set_mode(self, mode: str, passband_hz: int) -> None:
+        self.mode = (mode, passband_hz)
+
     async def get_level(self, level: str) -> float:
         if level not in self.levels:
             from server.engine.rig import RigError
@@ -410,6 +416,25 @@ def test_radio_rig_levels_and_station_snapshot(
     station = snap.json()["station"]
     assert station["my_call"] == state.my_call
     assert isinstance(station["worked_calls"], list)
+
+    # Filter bandwidth: read current, then set USB 1.8 kHz.
+    mode = client.get("/api/v1/radio/mode", headers=headers)
+    assert mode.status_code == 200
+    assert mode.json()["passband_hz"] == 2400
+    set_mode = client.post(
+        "/api/v1/radio/mode",
+        json={"mode": "USB", "passband_hz": 1800},
+        headers=headers,
+    )
+    assert set_mode.status_code == 200
+    assert set_mode.json()["passband_hz"] == 1800
+
+    bad_mode = client.post(
+        "/api/v1/radio/mode",
+        json={"mode": "usb; drop", "passband_hz": 2400},
+        headers=headers,
+    )
+    assert bad_mode.status_code == 422
 
 
 def test_qso_listing_and_audited_void(client: TestClient, state: AppState) -> None:

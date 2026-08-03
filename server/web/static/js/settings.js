@@ -65,46 +65,101 @@ export function createSettingsDrawer() {
   // ---- tab renderers ---------------------------------------------------
 
   async function renderRadio() {
-    content.innerHTML = "<p class='drawer-hint'>Loading rig levels…</p>";
+    content.innerHTML = "<p class='drawer-hint'>Loading rig settings…</p>";
     let levels = {};
+    let mode = null;
     let rigUp = true;
-    const res = await api.rigLevels();
-    if (res.ok) levels = res.levels || {};
-    else rigUp = false;
+    const [levelRes, modeRes] = await Promise.all([api.rigLevels(), api.rigMode()]);
+    if (levelRes.ok) levels = levelRes.levels || {};
+    if (modeRes.ok) mode = modeRes;
+    else rigUp = modeRes.status === 503 ? false : rigUp;
 
-    const rows = [
-      { key: "ATT", label: "Attenuator", on: (levels.ATT ?? 0) > 0, toggle: true },
-      { key: "PREAMP", label: "Preamp", on: (levels.PREAMP ?? 0) > 0, toggle: true },
-      { key: "RF", label: "RF Gain", value: levels.RF, min: 0, max: 100, slider: true },
-      { key: "AGC", label: "AGC", value: levels.AGC, min: 0, max: 100, slider: true },
+    const agcMap = [
+      [0, "OFF"], [2, "FAST"], [5, "MED"], [3, "SLOW"], [6, "AUTO"],
     ];
+    const agcValue = levels.AGC;
+    const agcLabel = (agcValue == null)
+      ? "—"
+      : (agcMap.find(([v]) => v === agcValue)?.[1] ?? `${agcValue}`);
+
+    // FT-710 USB/LSB filter bandwidths (Hamlib rig model 1049).
+    const passbands = [1800, 2400, 3000];
+    const currentPassband = mode && mode.passband_hz;
+    const currentMode = (mode && mode.mode) || "USB";
     const html = [];
     html.push("<h3>Radio</h3>");
     if (!rigUp) {
-      html.push("<p class='drawer-hint dim'>rigctld unreachable — levels unavailable</p>");
+      html.push("<p class='drawer-hint dim'>rigctld unreachable — controls unavailable</p>");
     }
-    for (const r of rows) {
-      if (r.toggle) {
-        const on = r.on;
-        html.push(`<label class="setting-row toggle">
-          <span>${r.label}</span>
-          <input type="checkbox" data-level="${r.key}" ${on ? "checked" : ""}
-            ${rigUp ? "" : "disabled"}>
-        </label>`);
-      } else {
-        const shown = r.value == null ? "—" : `${r.value}`;
-        html.push(`<label class="setting-row">
-          <span>${r.label} <b class="val">${shown}</b></span>
-          <input type="range" data-level="${r.key}" min="${r.min}" max="${r.max}"
-            value="${r.value ?? 0}" ${rigUp ? "" : "disabled"}>
-        </label>`);
-      }
-    }
-    html.push(`<div class="drawer-hint dim">Levels apply immediately to the rig.
-      Unsupported items stay greyed out. TX must be off to change them.</div>`);
+
+    // Filter bandwidth selector (rigctld M <mode> <passband>).
+    html.push(`<label class="setting-row">
+      <span>Mode</span>
+      <b>${currentMode}</b>
+    </label>`);
+    html.push(`<label class="setting-row">
+      <span>Filter bandwidth</span>
+      <select data-mode-passband ${rigUp ? "" : "disabled"}>
+        ${passbands.map((hz) =>
+          `<option value="${hz}" ${hz === currentPassband ? "selected" : ""}>
+            ${(hz / 1000).toFixed(1)} kHz</option>`
+        ).join("")}
+      </select>
+    </label>`);
+
+    // ATT: FT-710 attenuator is 6/12/18 dB (not a plain on/off).
+    const attValue = levels.ATT ?? 0;
+    html.push(`<label class="setting-row">
+      <span>Attenuator</span>
+      <select data-level="ATT" ${rigUp ? "" : "disabled"}>
+        ${[0, 6, 12, 18].map((db) =>
+          `<option value="${db}" ${db === attValue ? "selected" : ""}>${db ? `${db} dB` : "Off"}</option>`
+        ).join("")}
+      </select>
+    </label>`);
+
+    // PREAMP: 10/20 dB (0 = off).
+    const preampValue = levels.PREAMP ?? 0;
+    html.push(`<label class="setting-row">
+      <span>Preamp</span>
+      <select data-level="PREAMP" ${rigUp ? "" : "disabled"}>
+        ${[0, 10, 20].map((db) =>
+          `<option value="${db}" ${db === preampValue ? "selected" : ""}>${db ? `${db} dB` : "Off"}</option>`
+        ).join("")}
+      </select>
+    </label>`);
+
+    // AGC: FT-710 discrete modes (0=OFF 2=FAST 5=MED 3=SLOW 6=AUTO).
+    html.push(`<label class="setting-row">
+      <span>AGC</span>
+      <select data-level="AGC" ${rigUp ? "" : "disabled"}>
+        ${agcMap.map(([v, label]) =>
+          `<option value="${v}" ${v === agcValue ? "selected" : ""}>${label}</option>`
+        ).join("")}
+      </select>
+    </label>`);
+
+    // RF Gain: 0..1.0.
+    const rfValue = levels.RF ?? 1.0;
+    html.push(`<label class="setting-row">
+      <span>RF Gain <b class="val">${rfValue == null ? "—" : Math.round(rfValue * 100)}%</b></span>
+      <input type="range" data-level="RF" min="0" max="1" step="0.01"
+        value="${rfValue ?? 1}" ${rigUp ? "" : "disabled"}>
+    </label>`);
+
+    html.push(`<div class="drawer-hint dim">Changes apply immediately.
+      TX must be off. Unsupported items stay greyed out.</div>`);
     content.innerHTML = html.join("");
 
-    for (const input of content.querySelectorAll("input[data-level]")) {
+    const passbandSelect = content.querySelector("[data-mode-passband]");
+    if (passbandSelect) {
+      passbandSelect.addEventListener("change", async () => {
+        const result = await api.rigModeSet(currentMode, Number(passbandSelect.value));
+        if (!result.ok) showToast(`Bandwidth: ${result.reason || result.status}`);
+        else showToast(`Filter → ${(result.passband_hz / 1000).toFixed(1)} kHz`);
+      });
+    }
+    for (const input of content.querySelectorAll("select[data-level], input[data-level]")) {
       const level = input.dataset.level;
       input.addEventListener("change", async () => {
         const value = input.type === "checkbox" ? (input.checked ? 1 : 0) : Number(input.value);

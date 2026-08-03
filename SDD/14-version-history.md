@@ -1,5 +1,11 @@
 # 14. Version History
 
+## Unreleased — 2026-08-03 — Radio Tab: Filter Bandwidth + Rig-Accurate Levels
+
+- Radio tab now reads the rig's actual capabilities instead of generic sliders: verified against the FT-710 Hamlib model (rig 1049, Hamlib 4.6.2) which exposes USB/LSB bandwidths 1.8/2.4/3.0 kHz, attenuator 6/12/18 dB, preamp 10/20 dB, discrete AGC (OFF/FAST/MED/SLOW/AUTO) and RF gain 0..1.
+  - New `GET /radio/mode` + `POST /radio/mode` (rigctld `M <mode> <passband>`, the existing `RigClient.get_mode/set_mode`); the drawer shows the rig's current passband and switches bandwidth in place.
+  - ATT/PREAMP are discrete selects (dB values), AGC is the five-mode select, RF Gain a 0..1 slider — matching the rig caps instead of the earlier generic 0-100 toggle/slider.
+
 ## Unreleased — 2026-08-03 — Settings Drawer (Radio / FT8 / Station / Log)
 
 - Left-side drawer menu in the cockpit (hamburger ☰ in the top bar) with four tabs:

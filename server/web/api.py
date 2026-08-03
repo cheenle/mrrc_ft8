@@ -47,6 +47,8 @@ REASON_FORBIDDEN = "forbidden"
 
 # Rig level tokens (rigctld ``l``/``L`` commands) are uppercase Hamlib names.
 _LEVEL_NAME_RE = re.compile(r"^[A-Z][A-Z0-9_]{0,15}$")
+# Mode tokens in rigctld ``M <mode> <passband>`` are uppercase Hamlib names.
+_MODE_NAME_RE = re.compile(r"^[A-Z0-9]{1,16}$")
 
 # §10.5 schema-validated settings; safety-impacting ones are TX-locked.
 SETTING_SCHEMA: dict[str, Callable[[Any], bool]] = {
@@ -480,6 +482,40 @@ def create_router(state: AppState) -> APIRouter:
             except Exception:
                 levels[name] = None
         return _ok({"levels": levels})
+
+    # Filter bandwidth (rigctld ``M <mode> <passband>`` — FT-710 supports
+    # 1.8/2.4/3.0 kHz on USB/LSB).  Returns the current pair so the drawer
+    # can show the rig's actual passband, not a stale local guess.
+    @router.get("/radio/mode")
+    async def radio_mode(session: Session = Depends(require_session)) -> JSONResponse:
+        if state.rig is None:
+            return _reject(503, "rig_unavailable")
+        try:
+            mode, passband_hz = await state.rig.get_mode()
+        except Exception as exc:
+            return _reject(502, "rig_error", detail=str(exc))
+        return _ok({"mode": mode, "passband_hz": passband_hz})
+
+    @router.post("/radio/mode")
+    async def radio_mode_set(request: Request, session: Session = Depends(require_lease)) -> JSONResponse:
+        await validate_mutation(request)
+        body = await request.json()
+        mode = body.get("mode") if isinstance(body, dict) else None
+        passband_hz = body.get("passband_hz") if isinstance(body, dict) else None
+        if not isinstance(mode, str) or not _MODE_NAME_RE.match(mode):
+            return _reject(422, "invalid_request")
+        if not isinstance(passband_hz, int) or isinstance(passband_hz, bool) \
+                or not 0 <= passband_hz <= 100_000:
+            return _reject(422, "invalid_request")
+        if state.safety.armed or state.safety.ptt_on:
+            return _reject(409, REASON_TX_ACTIVE)
+        if state.rig is None:
+            return _reject(503, "rig_unavailable")
+        try:
+            await state.rig.set_mode(mode, passband_hz)
+        except Exception as exc:
+            return _reject(502, "rig_error", detail=str(exc))
+        return await mutate(request, request.headers.get("idempotency-key"), 200, {"mode": mode, "passband_hz": passband_hz})
 
     @router.post("/radio/rig/level")
     async def radio_rig_level(request: Request, session: Session = Depends(require_lease)) -> JSONResponse:
