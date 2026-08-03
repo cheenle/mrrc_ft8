@@ -75,11 +75,13 @@ export function createSettingsDrawer() {
 
   async function renderRadio() {
     content.innerHTML = "<p class='drawer-hint'>Loading rig settings…</p>";
-    let levels = {};
     let mode = null;
     let rigUp = true;
-    const [levelRes, modeRes] = await Promise.all([api.rigLevels(), api.rigMode()]);
-    if (levelRes.ok) levels = levelRes.levels || {};
+    const levelRes = await api.rigLevels();
+    // Sequential: both hit the same RigClient; concurrent requests interleave
+    // with the level-query timeout/drop and corrupt the mode read (502).
+    const modeRes = await api.rigMode();
+    const levels = levelRes.ok ? levelRes.levels || {} : {};
     if (modeRes.ok) mode = modeRes;
     else rigUp = modeRes.status === 503 ? false : rigUp;
 
