@@ -18,6 +18,12 @@ function formatMmSs(seconds) {
   return `${mm}:${ss}`;
 }
 
+function escapeHtml(value) {
+  return String(value).replace(/[&<>"']/g, (c) => ({
+    "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;",
+  }[c]));
+}
+
 export function createSafetyBar() {
   const lamps = {
     cat: document.getElementById("lamp-cat"),
@@ -77,7 +83,11 @@ export function createSafetyBar() {
     } else {
       lastSequencer = null;
       stopCountdown();
-      sequencerState.textContent = sequencer.state;
+      if (sequencer.dx_call) {
+        sequencerState.innerHTML = `${sequencer.state} <span class="seq-target">→ ${escapeHtml(sequencer.dx_call)}</span>`;
+      } else {
+        sequencerState.textContent = sequencer.state;
+      }
     }
     buttons.cq.disabled = !lease.mine || safety.armed;
     buttons.reply.disabled = !lease.mine || !selected;

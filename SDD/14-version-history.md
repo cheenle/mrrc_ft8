@@ -1,5 +1,9 @@
 # 14. Version History
 
+## Unreleased — 2026-08-03 — Sequencer State Shows Target Call
+
+- The bottom safety bar rendered only the bare sequencer state (`replying`, `report`…). It now shows `state → dx_call` (e.g. `replying → K1ABC`) with the call highlighted in the accent colour, so the operator sees at a glance whom a manual Reply / QSO phase is aimed at. `sequencer.dx_call` was already in the snapshot; only the client rendering changed (plus an `escapeHtml` guard for the injected span).
+
 ## Unreleased — 2026-08-03 — Repository DBMOVED Self-Heal + main.py QsoLog Integration
 
 - Production incident fix: an external process replaced `mrrc-ft8.db` mid-run; SQLite's DBMOVED guard then refused every write with `OperationalError: attempt to write a readonly database`, turning reply/stop (which audit-write) into 500s while select (no write) stayed 200 — the "reply rejected 500" symptom. `Repository` now detects the readonly-DBMOVED error, reopens the (new) file at the same path, re-runs migration and retries the write once; a second failure propagates as a real disk problem. Regression: `test_external_db_replace_does_not_wedge_writes` swaps the file under a live repository and asserts the write lands.
