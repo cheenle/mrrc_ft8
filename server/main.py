@@ -49,6 +49,7 @@ from .web.ws import DecodeBroadcaster, StateBroadcaster
 
 LEASE_POLL_S = 1.0
 MAINTENANCE_S = 3_600.0
+JTDX_SYNC_S = 3_600.0
 
 log = logging.getLogger("mrrc-ft8")
 log.setLevel(os.environ.get("MRRC_FT8_LOG_LEVEL", "INFO").upper())
@@ -76,6 +77,7 @@ class ServerConfig:
     allowed_hosts: frozenset[str]
     db_path: str = "mrrc-ft8.db"
     pending_path: str = "data/qso-pending.jsonl"
+    jtdx_log_path: str | None = None
     rigctld_host: str = "127.0.0.1"
     rigctld_port: int = 4532
     audio_device: int | str | None = None
@@ -108,6 +110,7 @@ class ServerConfig:
         rig_host, _, rig_port = os.environ.get(
             "MRRC_FT8_RIGCTLD", "127.0.0.1:4532"
         ).partition(":")
+        jtdx_log_path = os.environ.get("MRRC_FT8_JTDX_LOG_PATH", "").strip() or None
         audio_raw = os.environ.get("MRRC_FT8_AUDIO_DEVICE", "")
         audio_device: int | str | None = None
         if audio_raw:
@@ -139,6 +142,7 @@ class ServerConfig:
             pending_path=os.environ.get(
                 "MRRC_FT8_PENDING_PATH", "data/qso-pending.jsonl"
             ),
+            jtdx_log_path=jtdx_log_path,
             rigctld_host=rig_host,
             rigctld_port=int(rig_port or 4532),
             audio_device=audio_device,
@@ -504,6 +508,39 @@ def create_server(
         tasks.append(asyncio.create_task(maintenance()))
 
         RIG_POLL_S = 5.0
+
+        async def jtdx_sync() -> None:
+            """Startup + hourly incremental import of the JTDX ADIF log.
+
+            Never faults the safety controller: a missing file or parse hiccup
+            only logs; the hourly loop retries.  Runs on a worker thread so the
+            event loop never blocks on the file read/insert.
+            """
+
+            if not config.jtdx_log_path:
+                return
+            from .engine.adif_import import sync_jtdx_log
+
+            try:
+                report = await asyncio.to_thread(
+                    sync_jtdx_log,
+                    repository,
+                    config.jtdx_log_path,
+                    my_call=config.my_call,
+                    my_grid=config.my_grid,
+                )
+                if report.error:
+                    log.warning("jtdx sync skipped: %s", report.error)
+            except Exception:
+                log.exception("jtdx sync failed")
+
+        async def jtdx_loop() -> None:
+            while True:
+                await asyncio.sleep(JTDX_SYNC_S)
+                await jtdx_sync()
+
+        await jtdx_sync()  # one import at startup (before the hourly loop)
+        tasks.append(asyncio.create_task(jtdx_loop()))
 
         async def rig_poll() -> None:
             # Slow dial-frequency poll feeding the snapshot's radio view;

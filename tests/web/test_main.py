@@ -22,13 +22,16 @@ from server.web.auth import hash_password
 PASSWORD = "correct horse battery staple"
 
 
-def make_config(db_path: str = ":memory:") -> ServerConfig:
+def make_config(
+    db_path: str = ":memory:", jtdx_log_path: str | None = None
+) -> ServerConfig:
     return ServerConfig(
         password_hash=hash_password(PASSWORD),
         my_call="M0XX",
         my_grid="IO91",
         allowed_hosts=frozenset({"testserver"}),
         db_path=db_path,
+        jtdx_log_path=jtdx_log_path,
     )
 
 
@@ -345,3 +348,44 @@ def test_maintenance_survives_retention_errors(monkeypatch: pytest.MonkeyPatch) 
         while sweeps < 2 and time.monotonic() < deadline:
             time.sleep(0.05)
         assert sweeps >= 2  # the loop kept ticking after the failure
+
+
+def test_jtdx_log_path_config_from_env(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("MRRC_FT8_PASSWORD_HASH", "hash")
+    monkeypatch.setenv("MRRC_FT8_MY_CALL", "M0XX")
+    monkeypatch.setenv("MRRC_FT8_MY_GRID", "IO91")
+    monkeypatch.delenv("MRRC_FT8_JTDX_LOG_PATH", raising=False)
+    assert ServerConfig.from_env().jtdx_log_path is None
+    monkeypatch.setenv("MRRC_FT8_JTDX_LOG_PATH", "~/FB/JTDX/wsjtx_log.adi")
+    assert ServerConfig.from_env().jtdx_log_path == "~/FB/JTDX/wsjtx_log.adi"
+    monkeypatch.setenv("MRRC_FT8_JTDX_LOG_PATH", "  ")
+    assert ServerConfig.from_env().jtdx_log_path is None
+
+
+def test_startup_imports_jtdx_log_once(tmp_path: Path) -> None:
+    log_path = str(tmp_path / "wsjtx_log.adi")
+    with open(log_path, "w") as f:
+        f.write(
+            "<call:6>K1ABC <mode:3>FT8 <qso_date:8>20230227 <time_on:6>005730 "
+            "<qso_date_off:8>20230227 <time_off:6>005900 <band:3>20m "
+            "<freq:9>14.075500 <my_gridsquare:5>ON80DA <eor>"
+        )
+    app = create_server(
+        make_config(jtdx_log_path=log_path),
+        rig=FakeRig(), start_dsp=False, start_audio=False,
+    )
+    with TestClient(app):
+        state = app.state.app_state
+        qsos = state.repository.list_qsos()
+        assert len(qsos) == 1
+        assert qsos[0].source == "jtdx"
+        assert qsos[0].dx_call == "K1ABC"
+
+
+def test_disabled_jtdx_sync_does_not_crash() -> None:
+    app = create_server(
+        make_config(),  # jtdx_log_path defaults to None
+        rig=FakeRig(), start_dsp=False, start_audio=False,
+    )
+    with TestClient(app):  # lifespan runs; sync must be a no-op
+        assert app.state.app_state.repository.count_rows("qso") == 0
