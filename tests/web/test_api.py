@@ -867,6 +867,62 @@ def test_auto_band_hunt_setting_rejects_non_bool(client: TestClient) -> None:
     assert put.status_code == 422
 
 
+def test_band_hunt_proxy_not_configured(client: TestClient, state: AppState) -> None:
+    """NFR-088: without MRRC_FT8_BAND_HUNT_URL the bridge is disabled."""
+    state.band_hunt_url = None
+    session_id = login(client)
+    res = client.get("/api/v1/band-hunt", headers=auth_headers(session_id))
+    assert res.status_code == 503
+    assert res.json()["reason"] == "not_configured"
+
+
+def test_band_hunt_proxy_forwards_params_and_body(
+    monkeypatch: pytest.MonkeyPatch, client: TestClient, state: AppState
+) -> None:
+    """The proxy forwards window/detail params and returns the upstream body."""
+    state.band_hunt_url = "http://psk.test/api/band_hunt"
+    captured: dict[str, object] = {}
+
+    class _FakeResponse:
+        def __init__(self, payload: dict) -> None:
+            self._payload = payload
+
+        def raise_for_status(self) -> None:
+            return None
+
+        def json(self) -> dict:
+            return self._payload
+
+    class _FakeClient:
+        def __init__(self, *args: object, **kwargs: object) -> None:
+            pass
+
+        async def __aenter__(self) -> "_FakeClient":
+            return self
+
+        async def __aexit__(self, *args: object) -> None:
+            return None
+
+        async def get(self, url: str, params: object = None) -> _FakeResponse:
+            captured["url"] = url
+            captured["params"] = params
+            return _FakeResponse({"ok": True, "bands": [{"band": "20m"}]})
+
+    monkeypatch.setattr("httpx.AsyncClient", _FakeClient)
+    session_id = login(client)
+    res = client.get(
+        "/api/v1/band-hunt?window_min=10&detail=1", headers=auth_headers(session_id)
+    )
+    assert res.status_code == 200
+    assert res.json()["bands"][0]["band"] == "20m"
+    assert captured["url"] == "http://psk.test/api/band_hunt"
+    params = captured["params"]
+    assert isinstance(params, dict)
+    assert params["window_min"] == "10"
+    assert params["detail"] == "1"
+    assert params["home_grid"] == state.my_grid.upper()
+
+
 def test_auto_call_setting_rejects_non_bool(client: TestClient) -> None:
     session_id = login(client)
     put = client.put(

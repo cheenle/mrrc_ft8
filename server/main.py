@@ -294,6 +294,7 @@ def create_server(
         my_grid=config.my_grid,
         rig=rig_client,
         allowed_hosts=config.allowed_hosts,
+        band_hunt_url=config.band_hunt_url,
         state_broadcast=StateBroadcaster(),
         decode_broadcast=DecodeBroadcaster(),
         waterfall_fanout=SpectrumFanout(),

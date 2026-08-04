@@ -84,6 +84,7 @@ export const api = {
     }),
   qsos: () => request("/logs/qsos"),
   dxcc: () => request("/dxcc"),
+  bandHunt: (params) => request(`/band-hunt?${new URLSearchParams(params)}`),
   settings: () => request("/settings"),
   putSetting: (key, value) =>
     request("/settings", { method: "PUT", idempotencyKey: key(), body: { [key]: value } }),

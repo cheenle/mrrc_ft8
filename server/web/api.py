@@ -119,6 +119,7 @@ class AppState:
     selected_slot_id: int | None = None  # slot the selected message was heard in
     radio_freq_hz: int | None = None  # last polled dial frequency, if rig is up
     dxcc_cache: Any = None  # cached DxccSummary; rebuilt when repository.dxcc_dirty
+    band_hunt_url: str | None = None  # pskreporter /api/band_hunt (NFR-088); None = off
 
     def bump(self) -> int:
         self.revision += 1
@@ -686,6 +687,39 @@ def create_router(state: AppState) -> APIRouter:
             state.dxcc_cache = cache
             state.repository.dxcc_dirty = False
         return _ok(cache.to_dict())
+
+    @router.get("/band-hunt")
+    async def band_hunt_proxy(
+        request: Request, session: Session = Depends(require_session)
+    ) -> JSONResponse:
+        """Same-origin proxy for the pskreporter /api/band_hunt endpoint.
+
+        The cockpit's New-DXCC dashboard fetches spot windows through this
+        bridge so the browser never leaves the https origin; the cross-repo
+        boundary stays HTTP-only (NFR-088).  ``detail=1`` adds per-spot lists.
+        """
+        if not state.band_hunt_url:
+            return _reject(503, "not_configured")
+        params: dict[str, str] = {
+            "home_grid": (
+                request.query_params.get("home_grid") or state.my_grid or ""
+            ).upper(),
+            "radius_km": request.query_params.get("radius_km", "1000"),
+            "window_min": request.query_params.get("window_min", "30"),
+            "min_spots": request.query_params.get("min_spots", "5"),
+        }
+        if request.query_params.get("detail") == "1":
+            params["detail"] = "1"
+        try:
+            import httpx
+
+            async with httpx.AsyncClient(timeout=5.0) as client:
+                resp = await client.get(state.band_hunt_url, params=params)
+                resp.raise_for_status()
+                body = resp.json()
+        except Exception as exc:
+            return _reject(502, "band_hunt_unreachable", detail=str(exc))
+        return JSONResponse(body)
 
     # ---- diagnostics ---------------------------------------------------------
 

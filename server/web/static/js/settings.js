@@ -265,8 +265,15 @@ export function createSettingsDrawer() {
         <span>Auto band hunt (DXCC)</span>
         <input type="checkbox" data-setting="auto_band_hunt" ${s.auto_band_hunt ? "checked" : ""}>
       </label>
+      <a href="#" class="setting-row" data-bandhunt-link>
+        <span>New-DXCC spots dashboard</span><span class="qso-meta">→</span>
+      </a>
       <div class="drawer-hint dim">These display preferences are stored in this
         browser and apply immediately to the Band Activity list.</div>`;
+    content.querySelector("[data-bandhunt-link]")?.addEventListener("click", (event) => {
+      event.preventDefault();
+      openBandHuntView();
+    });
     for (const input of content.querySelectorAll("[data-setting]")) {
       input.addEventListener("change", () => {
         const value = input.type === "checkbox" ? input.checked : input.value;
@@ -380,6 +387,68 @@ export function createSettingsDrawer() {
     document.body.classList.remove("log-open");
   }
 
+  // ---- full-screen New-DXCC band-hunt dashboard --------------------------
+
+  const bandHuntOverlay = document.getElementById("bandhunt-overlay");
+  const bandHuntContent = document.getElementById("bandhunt-content");
+  const BAND_HUNT_WINDOWS = [
+    [10, "10 min"], [30, "30 min"], [60, "1 hour"], [240, "4 hours"],
+  ];
+
+  function escapeHtml(value) {
+    return String(value ?? "").replace(/[&<>"']/g, (c) =>
+      ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+  }
+
+  async function openBandHuntView() {
+    bandHuntOverlay.hidden = false;
+    document.body.classList.add("log-open");
+    bandHuntContent.innerHTML = "<p class='drawer-hint'>Loading nearby spots…</p>";
+
+    // Worked entities come from the authoritative DXCC view; only spots whose
+    // entity is unworked (or unknown) are "new DXCC" for the dashboard.
+    const [dxccRes, ...windowRes] = await Promise.all([
+      api.dxcc(),
+      ...BAND_HUNT_WINDOWS.map(([windowMin]) =>
+        api.bandHunt({ window_min: windowMin, detail: 1, min_spots: 1 })),
+    ]);
+    const worked = new Set((dxccRes.entities || []).map((e) => e.name));
+
+    const html = [];
+    BAND_HUNT_WINDOWS.forEach(([windowMin, label], i) => {
+      const res = windowRes[i];
+      html.push(`<h3>${label}</h3>`);
+      if (!res.ok) {
+        html.push(`<p class='drawer-hint dim'>${escapeHtml(res.reason || res.status)}</p>`);
+        return;
+      }
+      const spots = (res.bands || []).flatMap((b) => b.spots || []);
+      const fresh = spots.filter((s) => !s.entity || !worked.has(s.entity));
+      if (!fresh.length) {
+        html.push("<p class='drawer-hint dim'>No new-DXCC spots nearby in this window.</p>");
+        return;
+      }
+      html.push(`<div class="qso-row"><span class="qso-call"></span>` +
+        `<span class="qso-meta">${fresh.length} spot(s)</span></div>`);
+      for (const s of fresh) {
+        const name = s.entity || s.callsign || "?";
+        const band = s.band || "?";
+        const snr = s.snr == null ? "" : ` ${s.snr}dB`;
+        const t = s.qso_time ? s.qso_time.replace("T", " ").slice(5, 16) : "";
+        html.push(
+          `<div class="qso-row"><span class="qso-call">${escapeHtml(name)}</span>` +
+          `<span class="qso-meta">${escapeHtml(s.callsign)} · ${escapeHtml(band)}` +
+          `${snr} · ${escapeHtml(t)}</span></div>`);
+      }
+    });
+    bandHuntContent.innerHTML = html.join("");
+  }
+
+  function closeBandHuntView() {
+    bandHuntOverlay.hidden = true;
+    document.body.classList.remove("log-open");
+  }
+
   function renderTab(tab) {
     if (tab === "radio") renderRadio();
     else if (tab === "ft8") renderFt8();
@@ -401,6 +470,12 @@ export function createSettingsDrawer() {
   dxccOverlay.addEventListener("click", (event) => {
     // Clicking the dimmed backdrop (outside the panel) closes the overlay.
     if (event.target === dxccOverlay) closeDxccView();
+  });
+
+  document.getElementById("btn-bandhunt-close").addEventListener("click", closeBandHuntView);
+  bandHuntOverlay.addEventListener("click", (event) => {
+    // Clicking the dimmed backdrop (outside the panel) closes the overlay.
+    if (event.target === bandHuntOverlay) closeBandHuntView();
   });
 
   // Reflect station info from fresh snapshots.
