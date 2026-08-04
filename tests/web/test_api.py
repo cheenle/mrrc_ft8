@@ -671,6 +671,9 @@ def test_settings_validation_and_tx_lock(client: TestClient, state: AppState) ->
 def test_state_snapshot_shape(client: TestClient, state: AppState) -> None:
     session_id = login(client)
     snapshot = client.get("/api/v1/state", headers=auth_headers(session_id)).json()
+    # boot() gates on ``snapshot.ok``; without the envelope the client never
+    # applies the initial snapshot (worked_calls drives hide-already-worked).
+    assert snapshot.get("ok") is True
     assert snapshot["revision"] == state.revision
     assert snapshot["lease"]["held"] is False
     assert snapshot["safety"]["armed"] is False

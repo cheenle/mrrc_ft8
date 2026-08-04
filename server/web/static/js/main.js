@@ -52,10 +52,10 @@ async function boot() {
     },
   });
 
-  subscribe(({ revision, safety }) => {
+  subscribe(({ revision, safety, station }) => {
     document.getElementById("revision-badge").textContent = `r${revision}`;
     document.getElementById("station-id").textContent =
-      `${snapshot.station || "MRRC-FT8"}${safety.armed ? " — TX ARMED" : ""}`;
+      `${(station && station.my_call) || "MRRC-FT8"}${safety.armed ? " — TX ARMED" : ""}`;
   });
 
   setInterval(() => {

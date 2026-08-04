@@ -333,8 +333,12 @@ def create_router(state: AppState) -> APIRouter:
     # ---- state / health -------------------------------------------------------
 
     @router.get("/state")
-    async def state_snapshot(session: Session = Depends(require_session)) -> dict[str, Any]:
-        return _snapshot(state, session)
+    async def state_snapshot(session: Session = Depends(require_session)) -> JSONResponse:
+        # _ok envelope: boot() gates on ``snapshot.ok`` before applying the
+        # initial snapshot (worked_calls drives hide-already-worked); a bare
+        # dict made the gate always falsy and the client relied on the WS
+        # hello alone.
+        return _ok(_snapshot(state, session))
 
     @router.get("/health")
     async def health(session: Session = Depends(require_session)) -> dict[str, Any]:
