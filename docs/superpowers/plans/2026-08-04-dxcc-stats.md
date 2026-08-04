@@ -436,7 +436,7 @@ print("top bands:", sorted(s.by_band.items(), key=lambda kv: -kv[1])[:6])
 print("top entities:", [(e.name, e.band_count) for e in s.entities[:8]])
 EOF
 ```
-预期：`total: 187`、`unmatched: 5`（数据变动以实际为准，total ≥ 180）、band 分布 20m 领先。
+预期：`total: 186`、`unmatched: 2`（数据变动以实际为准，total ≥ 180）、band 分布 20m 领先。
 
 - [ ] **步骤 6：Commit**
 

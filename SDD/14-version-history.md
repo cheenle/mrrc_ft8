@@ -4,6 +4,14 @@
 
 - Promoted the live station build to **v1.0.0**. The 2026-08-03 field session closed the RX/TX root causes (UtcRing eviction misalignment, Replay opposite-TX-slot phase, manual-Reply decision window); on 2026-08-04 the FT-710 rig controls were completed (filter width + ATT/PREAMP/AGC/RF gain via raw CAT, verified live on hamlib 4.7.2). Real FT8 QSOs are worked through the mobile cockpit. Tagged `v1.0.0`; the GitHub release notes enumerate the 2026-08-01 design baseline through the 2026-08-04 rig-control completion.
 
+## Unreleased — 2026-08-04 — DXCC Stats + Menu Live View
+
+- 新模块 `server/engine/dxcc.py`：自写 `cty.dat` 解析器（country-files 旧版 ADIF 格式，实体行 + 跨行续行前缀列表，`=`精确匹配 / `(23)`数字替换 / 最长前缀匹配）。pyhamtools 0.13.0 可行性验证被否决（其 LookupLib 只支持 cty.plist / clublogxml，需联网且引入 5 个依赖），零新依赖。真实数据冒烟：6,740 个去重呼号 → **186 实体**，2 个特殊呼号未匹配（D1 活动台）；数字替换语义修正后 B0/B9 省际前缀正确归 China。
+- `dxcc_summary` 全量扫描非 void QSO：实体总数、每实体首通/最近通联（UTC ISO）、波段集合（同实体×同波段计 1，DXCC Challenge 语义）、`by_band` 每波段实体数。波段分布：15m 146 / 20m 141 / 40m 136。
+- `GET /api/v1/dxcc`（认证，`_ok` 信封）实时计算返回；`cty.dat` 懒加载单例（`parents[2]` 定位仓库根）；打开即最新，无 WS 推送/轮询（NFR-086）。
+- 前端：设置菜单加 DXCC tab → 全屏 overlay（镜像 LOG）：大数字总数 + 波段矩阵（降序）+ 实体列表（名称/洲/首通/波段数）；`api.js` 加 `dxcc()`。
+- Regressions: `tests/engine/test_dxcc.py`（解析/查找/统计 + 真实数据冒烟）、`tests/web/test_api.py`（认证 + 信封 + 结构）。全量套件绿。
+
 ## Unreleased — 2026-08-04 — JTDX ADIF Auto-Sync + LOG Recent-Week Window
 
 - Operator has ~10,263 historical QSOs (2023-02-27 → 2026-08-02, all BG1SB, FT8 + 6 FT4/MFSK, 2m–80m) in `~/FB/JTDX/wsjtx_log.adi`; the canonical store only held 23 live QSOs. New `server/engine/adif_import.py` parses the JTDX export tolerantly (skips the header and any half-written trailing line while JTDX is mid-write, normalizes `my_gridsquare` casing, maps MHz strings to Hz) and `sync_jtdx_log` imports it **additively and idempotently**: dedupe key `(dx_call, utc date, started_utc, band)` collapses JTDX's 31 same-second duplicate attempts (verified on the real file: 10,263 parsed → 10,232 inserted, 31 skipped) and is cross-source, so a live-completed QSO never gets re-imported when JTDX later records the same QSO.

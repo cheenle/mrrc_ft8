@@ -137,6 +137,7 @@ signal and is never part of the production surface.
 | `repository.py` | SQLite transactions, retention and schema migrations |
 | `adif.py` | ADIF generation/export from canonical QSO data |
 | `adif_import.py` | JTDX ADIF export parser + idempotent incremental import (`sync_jtdx_log`); dedupe key `(dx_call, utc date, started_utc, band)`; `source='jtdx'` rows |
+| `dxcc.py` | cty.dat parser + callsign→DXCC lookup + full-scan summary (total / entities / by_band) |
 
 ## 11.3 Web Layer
 

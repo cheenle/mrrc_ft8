@@ -38,6 +38,8 @@ Configuration covers domain/proxy trust, password-hash bootstrap, radio/rigctld,
 
 `MRRC_FT8_JTDX_LOG_PATH` (empty = disabled) points at the JTDX ADIF export (`~/FB/JTDX/wsjtx_log.adi`); the server imports it once at startup and then every hour, additive and idempotent — a missing file only logs a warning and the hourly tick retries. LOG surfaces (`/logs/qsos`, `/logs/adif`) are windowed to the last 7 days (NFR-085).
 
+`cty.dat` (repo root, country-files ADIF format) is the DXCC entity source for `GET /api/v1/dxcc`; parsed lazily on first request (NFR-086).
+
 ## 12.7 Backup and Retention
 
 - QSO database and configuration are backup-critical.
