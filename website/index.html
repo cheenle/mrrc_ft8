@@ -72,7 +72,7 @@
       <div class="hero-content">
         <div class="hero-badge">
           <i class="fas fa-check-circle"></i>
-          <span>v1.0.0 · Live on the FT-710 station</span>
+          <span>v1.1.0 · Live on the FT-710 station</span>
         </div>
         <h1 class="hero-title">
           Headless FT8 Server<br />
@@ -219,6 +219,39 @@
           </div>
 
           <div class="feature-card animate">
+            <div class="icon"><i class="fas fa-globe-asia"></i></div>
+            <h3>DXCC Live View</h3>
+            <p>
+              Track worked entities straight from the cockpit: a full-screen
+              stats overlay parses the bundled <code>cty.dat</code> (exact,
+              digit-replacement and longest-prefix lookup) and summarises
+              total / per-entity / per-band — recomputed only after a QSO
+              write, never on every open.
+            </p>
+            <ul>
+              <li>186 entities from the real 10k-row log</li>
+              <li>Cache-until-QSO-write, no push/poll</li>
+              <li>New-DXCC CQs highlighted in purple</li>
+            </ul>
+          </div>
+
+          <div class="feature-card animate">
+            <div class="icon"><i class="fas fa-robot"></i></div>
+            <h3>New-DXCC Auto-Call</h3>
+            <p>
+              With the Auto-call toggle on, the server safety-arms and
+              auto-QSOs the first new-DXCC CQ when idle — no control lease
+              needed, never interrupts an in-flight QSO, and completed
+              entities naturally stop re-triggering.
+            </p>
+            <ul>
+              <li>Pure-function candidate filter + audit trail</li>
+              <li>Interlock rejections skip, never crash</li>
+              <li>Setting persisted server-side</li>
+            </ul>
+          </div>
+
+          <div class="feature-card animate">
             <div class="icon"><i class="fas fa-chart-area"></i></div>
             <h3>3 kHz Waterfall</h3>
             <p>
@@ -258,7 +291,7 @@
           <span class="section-label">Live Station</span>
           <h2 class="section-title">FT-710 Field Sessions</h2>
           <p class="section-subtitle">
-            v1.0.0 is running the real FT-710 station. The 2026-08-03 field
+            v1.1.0 is running the real FT-710 station. The 2026-08-03 field
             session closed the RX/TX root causes — UTC-ring eviction
             misalignment, Replay opposite-slot phase and the manual-Reply
             decision window — and real FT8 QSOs are being worked through the
@@ -266,7 +299,10 @@
             completed: filter bandwidth and ATT / PREAMP / AGC / RF gain now
             switch through raw CAT frames (hamlib's FT-710 level path is
             unreliable, and the AGC AUTO code was wrong), verified live on the
-            station radio.
+            station radio. v1.1.0 adds the DXCC live view (cty.dat entity
+            stats, cached until a QSO write), the new-DXCC auto-call toggle
+            (first new-entity CQ auto-worked when idle), and JTDX ADIF
+            auto-sync with a 7-day LOG window.
           </p>
         </div>
         <img

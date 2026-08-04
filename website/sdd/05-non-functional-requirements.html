@@ -496,6 +496,21 @@
 <td>SDD governance</td>
 <td>Behavior change updates affected SDD and chapter 14; guardian check clean</td>
 </tr>
+<tr>
+<td>NFR-085</td>
+<td>LOG window &amp; import provenance</td>
+<td><code>GET /logs/qsos</code> and <code>/logs/adif</code> return only the last 7 days (10k-row history must never overload the cockpit); imported QSOs carry <code>source='jtdx'</code> while live completions carry <code>source='live'</code></td>
+</tr>
+<tr>
+<td>NFR-086</td>
+<td>DXCC stats</td>
+<td><code>GET /api/v1/dxcc</code> returns ok envelope with total / entities / by_band, computed on first open and cached; any QSO write (record / import / void) marks the cache dirty so the next open recomputes (no per-open full scan, no push)</td>
+</tr>
+<tr>
+<td>NFR-087</td>
+<td>New-DXCC auto-call</td>
+<td>Decode messages carry <code>is_new_dxcc</code>; with setting <code>auto_call_new_dxcc</code> enabled the server auto-QSOs the first new-DXCC CQ when idle (safety-armed, no lease, never interrupts a QSO)</td>
+</tr>
 </tbody>
 </table>
     </main>

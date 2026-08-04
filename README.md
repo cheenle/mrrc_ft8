@@ -2,7 +2,7 @@
 
 Headless FT8/FT4 server — WSJT-X 3.0.2 Improved DSP core, Python FastAPI control plane, rigctld radio control, landscape mobile Web cockpit.
 
-**Live** on the FT-710 station (`https://radio.vlsc.net:9988`). The 2026-08-03 field session closed the RX/TX root causes; on 2026-08-04 the FT-710 rig controls were completed (filter + ATT/PREAMP/AGC/RF via raw CAT, verified live on hamlib 4.7.2).
+**Live** on the FT-710 station (`https://radio.vlsc.net:9988`). The 2026-08-03 field session closed the RX/TX root causes; on 2026-08-04 the FT-710 rig controls were completed (filter + ATT/PREAMP/AGC/RF via raw CAT, verified live on hamlib 4.7.2); v1.1.0 adds the DXCC live view, the new-DXCC auto-call toggle and JTDX ADIF auto-sync with a 7-day LOG window (NFR-085/086/087).
 
 ## Quick install
 

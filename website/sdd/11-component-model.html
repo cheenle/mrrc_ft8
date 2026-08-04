@@ -276,6 +276,18 @@
 <td><code>adif.py</code></td>
 <td>ADIF generation/export from canonical QSO data</td>
 </tr>
+<tr>
+<td><code>adif_import.py</code></td>
+<td>JTDX ADIF export parser + idempotent incremental import (<code>sync_jtdx_log</code>); dedupe key <code>(dx_call, utc date, started_utc, band)</code>; <code>source='jtdx'</code> rows</td>
+</tr>
+<tr>
+<td><code>dxcc.py</code></td>
+<td>cty.dat parser + callsign→DXCC lookup + full-scan summary (total / entities / by_band)</td>
+</tr>
+<tr>
+<td><code>main.py</code> auto-call</td>
+<td><code>is_new_dxcc</code> decode marking + <code>auto_call_candidate</code> decision + <code>_auto_call</code> (safety-armed sequencer reply, audit)</td>
+</tr>
 </tbody>
 </table>
 <h2 id="web-layer">11.3 Web Layer</h2>
@@ -293,7 +305,7 @@
 <tbody>
 <tr>
 <td><code>main.py</code></td>
-<td>Lifespan composition root — wires the TX driver, CQ loop controller and watchdog-polled QSO logging — and Uvicorn entry point</td>
+<td>Lifespan composition root — wires the TX driver, CQ loop controller, watchdog-polled QSO logging, startup + hourly JTDX ADIF sync — and Uvicorn entry point</td>
 </tr>
 <tr>
 <td><code>web/auth.py</code></td>

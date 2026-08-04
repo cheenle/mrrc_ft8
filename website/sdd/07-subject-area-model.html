@@ -210,6 +210,7 @@ active -&gt; RETRY_EXHAUSTED | STOPPED | FAULT | ABORTED_RESTART -&gt; MONITOR</
 </ul>
 <h2 id="persistence-model">7.5 Persistence Model</h2>
 <p>SQLite is canonical. Minimum tables are <code>qso</code>, <code>qso_event</code>, <code>audit_event</code>, <code>decode_event</code>, <code>setting_meta</code> and schema migration metadata. Session secrets remain in a dedicated security store/runtime and are never included in diagnostics. ADIF is a generated interoperability artifact, not the sole database.</p>
+<p>The <code>qso</code> row carries a <code>source</code> attribute: <code>'live'</code> (completed through the sequencer) or <code>'jtdx'</code> (imported from the JTDX ADIF export). The JTDX import path (<code>server/engine/adif_import.py</code>) is additive and idempotent — a record is skipped when its dedupe key <code>(dx_call, utc date, started_utc, band)</code> already exists in any source, so a live QSO is never re-imported and re-syncs only add new rows.</p>
     </main>
 </div>
 

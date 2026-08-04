@@ -72,7 +72,7 @@
       <div class="hero-content">
         <div class="hero-badge">
           <i class="fas fa-check-circle"></i>
-          <span>v1.0.0 · FT-710 电台在线运行</span>
+          <span>v1.1.0 · FT-710 电台在线运行</span>
         </div>
         <h1 class="hero-title">
           Headless FT8 服务器<br />
@@ -210,6 +210,36 @@
           </div>
 
           <div class="feature-card animate">
+            <div class="icon"><i class="fas fa-globe-asia"></i></div>
+            <h3>DXCC 实时视图</h3>
+            <p>
+              在驾驶舱直接追踪已通联实体：全屏统计弹层解析内置
+              <code>cty.dat</code>（精确 / 数字替换 / 最长前缀匹配），汇总
+              总数 / 每实体 / 每波段——仅在 QSO 写入后重算，打开即用缓存。
+            </p>
+            <ul>
+              <li>真实 1 万行日志 → 186 个实体</li>
+              <li>写入前缓存，无需推送/轮询</li>
+              <li>新 DXCC 的 CQ 紫色高亮</li>
+            </ul>
+          </div>
+
+          <div class="feature-card animate">
+            <div class="icon"><i class="fas fa-robot"></i></div>
+            <h3>新 DXCC 自动呼叫</h3>
+            <p>
+              打开 Auto-call 开关后，服务器在空闲时自动 safety-arm 并通联第一个
+              新 DXCC 的 CQ——无需控制租约、绝不打断进行中的 QSO，已通联实体
+              自然不再触发。
+            </p>
+            <ul>
+              <li>纯函数候选过滤 + 审计记录</li>
+              <li>interlock 拒绝时跳过而不崩溃</li>
+              <li>设置服务端持久化</li>
+            </ul>
+          </div>
+
+          <div class="feature-card animate">
             <div class="icon"><i class="fas fa-chart-area"></i></div>
             <h3>3 kHz 瀑布图</h3>
             <p>
@@ -247,12 +277,14 @@
           <span class="section-label">在线电台</span>
           <h2 class="section-title">FT-710 电台实战</h2>
           <p class="section-subtitle">
-            v1.0.0 正在真实 FT-710 电台上运行。2026-08-03 实战闭环了 RX/TX 根因——
+            v1.1.0 正在真实 FT-710 电台上运行。2026-08-03 实战闭环了 RX/TX 根因——
             UTC-ring 驱逐错位、Replay 对侧时隙相位、手动回复决策窗口——
             真实 FT8 QSO 已通过移动驾驶舱持续完成。2026-08-04 补齐了 FT-710
             电台控制：滤波器带宽与 ATT / PREAMP / AGC / RF 增益现改走原始 CAT 帧
             （hamlib 的 FT-710 电平路径不可靠，且 AGC AUTO 编码有误），
-            已在站内电台实机验证。
+            已在站内电台实机验证。v1.1.0 新增 DXCC 实时视图（cty.dat 实体统计，
+            QSO 写入前走缓存）、新 DXCC 自动呼叫开关（空闲时自动通联首个新实体
+            CQ）、以及 JTDX ADIF 自动同步 + 7 天 LOG 窗口。
           </p>
         </div>
         <img

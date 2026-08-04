@@ -154,6 +154,9 @@
 <p>Priority STOP runs before audio/rig/worker teardown. An in-progress QSO becomes <code>ABORTED_RESTART</code>. Restart restores settings and history but not lease, PTT or armed TX.</p>
 <h2 id="configuration">12.6 Configuration</h2>
 <p>Configuration covers domain/proxy trust, password-hash bootstrap, radio/rigctld, audio devices, station identity, band table, decoder profile/threads, safety deadlines, storage/retention and logging. Secrets are never committed. Safety-impacting invalid values fail startup. V1.0 decoder defaults (I9): profile 3, threads Auto = <code>clamp(cpu_count - 1, 1, 12)</code>, decode-lateness cutoff slot end + 2.5 s. The reply TX decision window is <code>TX_DECISION_CUTOFF_SECONDS</code> (5.0) with a fit guard at ~2.4 s into the slot.</p>
+<p><code>MRRC_FT8_JTDX_LOG_PATH</code> (empty = disabled) points at the JTDX ADIF export (<code>~/FB/JTDX/wsjtx_log.adi</code>); the server imports it once at startup and then every hour, additive and idempotent — a missing file only logs a warning and the hourly tick retries. LOG surfaces (<code>/logs/qsos</code>, <code>/logs/adif</code>) are windowed to the last 7 days (NFR-085).</p>
+<p><code>cty.dat</code> (repo root, country-files ADIF format) is the DXCC entity source for <code>GET /api/v1/dxcc</code>; parsed lazily on first request (NFR-086).</p>
+<p>Setting <code>auto_call_new_dxcc</code> (bool, persisted in setting_meta via <code>/settings</code>) arms unattended auto-QSO on the first new-DXCC CQ when idle; the safety interlock always gates TX (NFR-087).</p>
 <h2 id="backup-and-retention">12.7 Backup and Retention</h2>
 <ul>
 <li>QSO database and configuration are backup-critical.</li>

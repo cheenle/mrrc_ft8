@@ -1,22 +1,26 @@
 # 14. Version History
 
+## v1.1.0 — 2026-08-05 — DXCC Live View + New-DXCC Auto-Call
+
+- Promoted the NFR-085/086/087 slice to **v1.1.0** (pyproject 1.1.0, tagged `v1.1.0`): JTDX ADIF auto-sync + LOG 7-day window (NFR-085), the in-cockpit DXCC live view with cache-until-QSO-write stats (NFR-086), and the new-DXCC highlight + safety-armed auto-call toggle (NFR-087). Also shipped: the full-screen QSO Log overlay and operator-callsign de-identification across README/SDD/website. GitHub release notes enumerate the v1.0.0 → v1.1.0 diff.
+
 ## v1.0.0 — 2026-08-04 — First Public Release
 
 - Promoted the live station build to **v1.0.0**. The 2026-08-03 field session closed the RX/TX root causes (UtcRing eviction misalignment, Replay opposite-TX-slot phase, manual-Reply decision window); on 2026-08-04 the FT-710 rig controls were completed (filter width + ATT/PREAMP/AGC/RF gain via raw CAT, verified live on hamlib 4.7.2). Real FT8 QSOs are worked through the mobile cockpit. Tagged `v1.0.0`; the GitHub release notes enumerate the 2026-08-01 design baseline through the 2026-08-04 rig-control completion.
 
-## Unreleased — 2026-08-04 — New-DXCC Highlight + Auto-Call
+## v1.1.0 — 2026-08-04 — New-DXCC Highlight + Auto-Call
 
 - `decode_message_view` 增加 `is_new_dxcc`（cty lookup + worked 实体集合，复用 dxcc_cache，lifespan 预填充）；Band Activity 新实体行紫色高亮（`.candidate.new-dxcc`）。
 - `auto_call_candidate` 纯函数 + `on_decode` 触发：开关开 + 空闲 + 无人工选择 + 第一个新 DXCC CQ → `safety.arm()` → `sequencer.reply_to`（create_task 异步，audit `auto_call`）；QSO 完成实体进 worked 自然不再触发；interlock 拒绝跳过不崩溃；无需控制租约（系统级，NFR-087）。
 - 设置 `auto_call_new_dxcc`（bool）入 SETTING_SCHEMA，走 `/settings` PUT/GET 持久化；FT8 tab toggle（localStorage 回显 + 后端 PUT，boot 时后端值覆盖默认）；`get_cty_database()` 懒加载单例供 API/自动呼叫共用。
 - Regressions: `test_main.py`（is_new_dxcc 判定、auto_call_candidate 矩阵：触发/禁用/忙/非CQ/mine）、`test_api.py`（设置 round-trip + 422）、`test_dxcc.py`（单例）。全量套件绿。
 
-## Unreleased — 2026-08-04 — DXCC Stats: Cache-until-QSO-Write
+## v1.1.0 — 2026-08-04 — DXCC Stats: Cache-until-QSO-Write
 
 - 决策 A 落地：DXCC 是低频数据，`/api/v1/dxcc` 不再每次打开全量扫描。`Repository` 增加 `dxcc_dirty` 标记（初始 True；`record_qso`/`import_qsos`/`void_qso` 置 True，读操作不置）；`AppState.dxcc_cache` 持有结果；接口在 `cache is None or dirty` 时经 `to_thread` 重建并复位，否则直接返回缓存。QSO 写入（新通联/每小时 JTDX 导入/撤销）后下次打开自动重算（1 万条 ~10ms），重启后首次打开重算一次。
 - Regressions: `test_repository.py::test_dxcc_dirty_flag_tracks_qso_writes`（初始/写入/读不置）、`test_api.py::test_dxcc_cached_until_qso_write`（首次计算→缓存命中→新实体触发重算 total+1）。全量套件绿。
 
-## Unreleased — 2026-08-04 — DXCC Stats + Menu Live View
+## v1.1.0 — 2026-08-04 — DXCC Stats + Menu Live View
 
 - 新模块 `server/engine/dxcc.py`：自写 `cty.dat` 解析器（country-files 旧版 ADIF 格式，实体行 + 跨行续行前缀列表，`=`精确匹配 / `(23)`数字替换 / 最长前缀匹配）。pyhamtools 0.13.0 可行性验证被否决（其 LookupLib 只支持 cty.plist / clublogxml，需联网且引入 5 个依赖），零新依赖。真实数据冒烟：6,740 个去重呼号 → **186 实体**，2 个特殊呼号未匹配（D1 活动台）；数字替换语义修正后 B0/B9 省际前缀正确归 China。
 - `dxcc_summary` 全量扫描非 void QSO：实体总数、每实体首通/最近通联（UTC ISO）、波段集合（同实体×同波段计 1，DXCC Challenge 语义）、`by_band` 每波段实体数。波段分布：15m 146 / 20m 141 / 40m 136。
@@ -24,7 +28,7 @@
 - 前端：设置菜单加 DXCC tab → 全屏 overlay（镜像 LOG）：大数字总数 + 波段矩阵（降序）+ 实体列表（名称/洲/首通/波段数）；`api.js` 加 `dxcc()`。
 - Regressions: `tests/engine/test_dxcc.py`（解析/查找/统计 + 真实数据冒烟）、`tests/web/test_api.py`（认证 + 信封 + 结构）。全量套件绿。
 
-## Unreleased — 2026-08-04 — JTDX ADIF Auto-Sync + LOG Recent-Week Window
+## v1.1.0 — 2026-08-04 — JTDX ADIF Auto-Sync + LOG Recent-Week Window
 
 - Operator has ~10,263 historical QSOs (2023-02-27 → 2026-08-02, all BG1SB, FT8 + 6 FT4/MFSK, 2m–80m) in `~/FB/JTDX/wsjtx_log.adi`; the canonical store only held 23 live QSOs. New `server/engine/adif_import.py` parses the JTDX export tolerantly (skips the header and any half-written trailing line while JTDX is mid-write, normalizes `my_gridsquare` casing, maps MHz strings to Hz) and `sync_jtdx_log` imports it **additively and idempotently**: dedupe key `(dx_call, utc date, started_utc, band)` collapses JTDX's 31 same-second duplicate attempts (verified on the real file: 10,263 parsed → 10,232 inserted, 31 skipped) and is cross-source, so a live-completed QSO never gets re-imported when JTDX later records the same QSO.
 - `main.py` gained `MRRC_FT8_JTDX_LOG_PATH` (empty = disabled): one import at startup, then an hourly background task; a missing file only warns and the next tick retries; never faults the safety controller. Every sync writes an audit row (`jtdx_import`, detail `inserted=.. skipped=..`).
@@ -32,11 +36,15 @@
 - LOG surfaces are windowed to the last 7 days on the backend (NFR-085): `GET /logs/qsos` and `GET /logs/adif` both filter `completed_epoch >= now-7d`, so the 10k-row history never reaches the browser; the ADIF export is windowed too (operator decision). `worked_calls` (hide already-worked) still reads the full history (6,693 base calls after import).
 - Regressions: `tests/engine/test_adif_import.py` (parser tolerance, mapping, dedupe collapse, idempotent/incremental sync, live-QSO protection, missing-file report); `tests/engine/test_repository.py` (v1→v2 migration preserves rows, import source/epoch, cross-source keys, `since_days` window); `tests/web/test_api.py` (both LOG endpoints windowed); `tests/web/test_main.py` (env parsing, startup import, disabled no-op). Full suite green.
 
-## Unreleased — 2026-08-04 — QSO Log Overlay Renders (missing `ok` envelope fixed)
+## v1.1.0 — 2026-08-04 — QSO Log Overlay Renders (missing `ok` envelope fixed)
 
 - Field report: the drawer's **Log** tab always showed an empty/error view even though the canonical store held completed QSOs. Root cause: `GET /logs/qsos` returned a bare `{qsos, revision}` body while every other endpoint (mutations, `/radio/rig/levels`, `/session/current`) returns the `_ok` envelope `{ok: true, …}`; the drawer's `api.qsos()` gate is `res.ok`, so a 200 without the key took the error branch every time ("Could not load log: 200").
 - Fix: `logs_qsos` now returns `_ok({qsos, revision})`, matching the codebase envelope convention. The database-path question was also re-verified: `mrrc-ft8.db` is cwd-relative and the restart wrapper starts from the project root, so the running server uses `~/HAM/ft8/mrrc-ft8.db` (23 completed QSOs, newest with freq/band after the sequencer-context fix). The DBMOVED self-heal (bb6f752) already covers the external-replace incident.
 - Regression: `test_qso_listing_and_audited_void` asserts `listing["ok"] is True` alongside the existing payload check; full `tests/web/` suite passes.
+
+## v1.1.0 — 2026-08-04 — Full-Screen QSO Log Overlay
+
+- The drawer's Log tab now opens a full-screen QSO log overlay: recent QSO list plus an ADIF export link, styled into the static shell with no build step (design + plan: `docs/superpowers/specs/2026-08-04-log-page-design.md`). Sequencer QSO context wires the completion-time rig frequency / ADIF band so rows carry band info; the overlay renders because `GET /logs/qsos` returns the `_ok` envelope (entry below).
 
 ## Unreleased — 2026-08-04 — FT-710 Rig Levels (ATT/PREAMP/AGC/RF): Raw-CAT Read/Write Through rigctld
 
