@@ -114,3 +114,91 @@ def load_cty(path: str) -> CtyDatabase:
         else:
             i += 1
     return CtyDatabase(entities)
+
+
+# ---- summary statistics ----------------------------------------------------
+
+from datetime import datetime, timezone
+
+
+@dataclass
+class DxccEntityStat:
+    name: str
+    continent: str
+    first_utc: str
+    last_utc: str
+    band_count: int
+    bands: list[str]
+
+    def to_dict(self) -> dict[str, object]:
+        return {
+            "name": self.name,
+            "continent": self.continent,
+            "first_utc": self.first_utc,
+            "last_utc": self.last_utc,
+            "band_count": self.band_count,
+            "bands": self.bands,
+        }
+
+
+@dataclass
+class DxccSummary:
+    total: int
+    unmatched: int
+    entities: list[DxccEntityStat]
+    by_band: dict[str, int]
+
+    def to_dict(self) -> dict[str, object]:
+        return {
+            "total": self.total,
+            "unmatched": self.unmatched,
+            "entities": [e.to_dict() for e in self.entities],
+            "by_band": self.by_band,
+        }
+
+
+def _utc_iso(epoch: float) -> str:
+    return datetime.fromtimestamp(epoch, tz=timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+
+def dxcc_summary(repository, cty: CtyDatabase) -> DxccSummary:
+    """Full-scan DXCC statistics over non-void QSOs (spec §3.2).
+
+    Same entity × same band counts once (DXCC Challenge semantics);
+    unmatched calls count into ``unmatched`` without failing.
+    """
+
+    stats: dict[str, DxccEntityStat] = {}
+    by_band: dict[str, set[str]] = {}
+    lookup_cache: dict[str, tuple[str, str] | None] = {}
+    unmatched = 0
+    for qso in repository.list_qsos(include_void=False):
+        if qso.dx_call not in lookup_cache:
+            lookup_cache[qso.dx_call] = cty.lookup(qso.dx_call)
+        result = lookup_cache[qso.dx_call]
+        if result is None:
+            unmatched += 1
+            continue
+        name, continent = result
+        stat = stats.get(name)
+        iso = _utc_iso(qso.completed_epoch)
+        if stat is None:
+            stat = stats[name] = DxccEntityStat(
+                name=name, continent=continent,
+                first_utc=iso, last_utc=iso, band_count=0, bands=[],
+            )
+        else:
+            stat.first_utc = min(stat.first_utc, iso)
+            stat.last_utc = max(stat.last_utc, iso)
+        if qso.band and qso.band not in stat.bands:
+            stat.bands.append(qso.band)
+            stat.bands.sort()
+            stat.band_count = len(stat.bands)
+        by_band.setdefault(qso.band, set()).add(name)
+    ordered = sorted(stats.values(), key=lambda s: s.name)
+    return DxccSummary(
+        total=len(ordered),
+        unmatched=unmatched,
+        entities=ordered,
+        by_band={band: len(ents) for band, ents in by_band.items()},
+    )

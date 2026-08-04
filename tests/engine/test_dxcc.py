@@ -66,3 +66,69 @@ def test_lookup_unknown_returns_none(tmp_path) -> None:
     path.write_text(FIXTURE)
     db = load_cty(str(path))
     assert db.lookup("ZZ9ZZZ") is None
+
+
+# ---- dxcc_summary ---------------------------------------------------------
+
+from server.engine.dxcc import dxcc_summary
+from server.engine.repository import Repository
+from server.engine.sequencer import QSORecord
+
+FIXTURE2 = """\
+China:                    24:  44:  AS:   36.00:  -102.00:    -8.0:  BY:
+    BI,BY;
+Japan:                    25:  45:  AS:   36.00:    138.00:    -9.0:  JA:
+    JA;
+Mauritius:                39:  53:  AF:  -20.35:   -57.50:    -4.0:  3B8:
+    3B8;
+"""
+
+
+def _repo_with_qsos() -> Repository:
+    repo = Repository(":memory:")
+    repo.record_qso(
+        QSORecord(my_call="M0XX", my_grid="IO91", dx_call="BI1TX", band="20m"),
+        completed_epoch=1700000000.0,
+    )
+    repo.record_qso(
+        QSORecord(my_call="M0XX", my_grid="IO91", dx_call="BY1OK", band="20m"),
+        completed_epoch=1700000100.0,
+    )
+    repo.record_qso(
+        QSORecord(my_call="M0XX", my_grid="IO91", dx_call="JA1YAD", band="40m"),
+        completed_epoch=1700000200.0,
+    )
+    repo.record_qso(
+        QSORecord(my_call="M0XX", my_grid="IO91", dx_call="JA1YAD", band="20m"),
+        completed_epoch=1700000300.0,
+    )
+    repo.record_qso(
+        QSORecord(my_call="M0XX", my_grid="IO91", dx_call="3B8CW", band="20m"),
+        completed_epoch=1700000400.0,
+    )
+    repo.record_qso(
+        QSORecord(my_call="M0XX", my_grid="IO91", dx_call="ZZ9ZZZ", band="15m"),
+        completed_epoch=1700000500.0,
+    )
+    return repo
+
+
+def test_dxcc_summary_counts_entities_bands_and_unmatched(tmp_path) -> None:
+    path = tmp_path / "cty.dat"
+    path.write_text(FIXTURE2)
+    cty = load_cty(str(path))
+    summary = dxcc_summary(_repo_with_qsos(), cty)
+    assert summary.total == 3                      # China / Japan / Mauritius
+    assert summary.unmatched == 1                  # ZZ9ZZZ
+    names = [e.name for e in summary.entities]
+    assert names == ["China", "Japan", "Mauritius"]  # sorted
+    # China: BI1TX + BY1OK 都算一个实体；同实体同波段 20m 只计 1
+    china = summary.entities[0]
+    assert china.continent == "AS"
+    assert china.band_count == 1                   # 只有 20m
+    assert china.first_utc == "2023-11-14T22:13:20Z"  # 1700000000
+    japan = summary.entities[1]
+    assert japan.band_count == 2                   # 40m + 20m
+    assert japan.bands == ["20m", "40m"]           # sorted
+    # by_band：20m → China+Japan+Mauritius = 3；40m → Japan = 1；15m → 0（unmatched 不计）
+    assert summary.by_band == {"20m": 3, "40m": 1}
