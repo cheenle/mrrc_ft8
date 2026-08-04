@@ -66,6 +66,11 @@ export function createSettingsDrawer() {
   }
 
   function switchTab(tab) {
+    if (tab === "log") {
+      close();          // leave the settings drawer
+      openLogView();    // full-screen QSO log overlay
+      return;
+    }
     activeTab = tab;
     for (const t of tabs) t.classList.toggle("active", t.dataset.tab === tab);
     renderTab(tab);
@@ -263,14 +268,24 @@ export function createSettingsDrawer() {
         log and drive the “hide already-worked” filter.</div>`;
   }
 
-  async function renderLog() {
-    content.innerHTML = "<p class='drawer-hint'>Loading QSO log…</p>";
+  // ---- full-screen QSO log -------------------------------------------
+
+  const logOverlay = document.getElementById("log-overlay");
+  const logList = document.getElementById("log-list");
+  const logCount = document.getElementById("log-count");
+
+  async function openLogView() {
+    logOverlay.hidden = false;
+    document.body.classList.add("log-open");
+    logList.innerHTML = "<p class='drawer-hint'>Loading QSO log…</p>";
     const res = await api.qsos();
-    const qsos = res.ok ? res.qsos || [] : [];
     if (!res.ok) {
-      content.innerHTML = `<p class='drawer-hint dim'>Could not load log: ${res.reason || res.status}</p>`;
+      logList.innerHTML =
+        `<p class='drawer-hint dim'>Could not load log: ${res.reason || res.status}</p>`;
       return;
     }
+    const qsos = res.qsos || [];
+    if (logCount) logCount.textContent = String(qsos.length);
     const rows = qsos.map((q) => {
       const done = q.completed_epoch
         ? new Date(q.completed_epoch * 1000).toISOString().slice(0, 16).replace("T", " ")
@@ -280,17 +295,18 @@ export function createSettingsDrawer() {
         <span class="qso-meta">${q.mode || ""} ${q.band || ""} ${done}</span>
       </div>`;
     }).join("");
-    content.innerHTML = `
-      <h3>Log <span class="count">${qsos.length}</span></h3>
-      <a class="btn adif" href="/api/v1/logs/adif" download>Export ADIF</a>
-      <div class="qso-list">${rows || "<p class='drawer-hint dim'>No QSOs yet.</p>"}</div>`;
+    logList.innerHTML = rows || "<p class='drawer-hint dim'>No QSOs yet.</p>";
+  }
+
+  function closeLogView() {
+    logOverlay.hidden = true;
+    document.body.classList.remove("log-open");
   }
 
   function renderTab(tab) {
     if (tab === "radio") renderRadio();
     else if (tab === "ft8") renderFt8();
     else if (tab === "station") renderStation();
-    else if (tab === "log") renderLog();
   }
 
   btnMenu.addEventListener("click", open);
@@ -298,9 +314,14 @@ export function createSettingsDrawer() {
   backdrop.addEventListener("click", close);
   for (const t of tabs) t.addEventListener("click", () => switchTab(t.dataset.tab));
 
+  document.getElementById("btn-log-close").addEventListener("click", closeLogView);
+  logOverlay.addEventListener("click", (event) => {
+    // Clicking the dimmed backdrop (outside the panel) closes the overlay.
+    if (event.target === logOverlay) closeLogView();
+  });
+
   // Reflect station info from fresh snapshots.
   subscribe(() => {
     if (activeTab === "station") renderStation();
-    if (activeTab === "log") renderLog();
   });
 }
