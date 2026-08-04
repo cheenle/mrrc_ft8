@@ -58,6 +58,18 @@
       <div id="drawer-content"></div>
     </aside>
 
+    <!-- Full-screen QSO log -->
+    <div id="log-overlay" class="log-overlay" hidden>
+      <div class="log-panel">
+        <header class="log-header">
+          <strong>QSO Log <span class="count" id="log-count"></span></strong>
+          <a class="btn adif" href="/api/v1/logs/adif" download>Export ADIF</a>
+          <button id="btn-log-close" class="icon-btn" aria-label="Close log">✕</button>
+        </header>
+        <div id="log-list" class="log-list"></div>
+      </div>
+    </div>
+
     <div id="toast" role="status" hidden></div>
 
     <footer id="state-bar">
