@@ -61,6 +61,7 @@ SETTING_SCHEMA: dict[str, Callable[[Any], bool]] = {
     and not isinstance(v, bool)
     and 1.0 <= float(v) <= 10.0,
     "cq_loop_idle_timeout_s": lambda v: isinstance(v, int) and not isinstance(v, bool) and 60 <= v <= 3600,
+    "auto_call_new_dxcc": lambda v: isinstance(v, bool),
 }
 SAFETY_IMPACTING_SETTINGS = frozenset({"decoder_profile", "decoder_threads"})
 

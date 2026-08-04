@@ -829,3 +829,26 @@ def test_dxcc_endpoint_still_works_after_singleton_refactor(
     body = client.get("/api/v1/dxcc", headers=auth_headers(session_id)).json()
     assert body.get("ok") is True
     assert body["total"] >= 1
+
+
+def test_auto_call_setting_round_trip(client: TestClient, state: AppState) -> None:
+    session_id = login(client)
+    put = client.put(
+        "/api/v1/settings",
+        json={"auto_call_new_dxcc": True},
+        headers=auth_headers(session_id),
+    )
+    assert put.status_code == 200
+    got = client.get("/api/v1/settings", headers=auth_headers(session_id)).json()
+    assert got["settings"]["auto_call_new_dxcc"] is True
+    assert state.repository.get_setting("auto_call_new_dxcc") is True
+
+
+def test_auto_call_setting_rejects_non_bool(client: TestClient) -> None:
+    session_id = login(client)
+    put = client.put(
+        "/api/v1/settings",
+        json={"auto_call_new_dxcc": "yes"},
+        headers=auth_headers(session_id),
+    )
+    assert put.status_code == 422
