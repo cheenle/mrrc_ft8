@@ -8,13 +8,16 @@ import { showToast } from "./toast.js";
 // Dial frequencies for the FT8 sub-band on each HF band.
 export const FT8_BANDS = [
   { label: "7M", freq_hz: 7_074_000 },
+  { label: "10M", freq_hz: 10_136_000 },
   { label: "14M", freq_hz: 14_074_000 },
+  { label: "18M", freq_hz: 18_104_000 },
   { label: "21M", freq_hz: 21_074_000 },
+  { label: "24M", freq_hz: 24_915_000 },
   { label: "28M", freq_hz: 28_074_000 },
 ];
 
 const MATCH_HZ = 50_000; // within ±50 kHz counts as the same band
-const DEFAULT_INDEX = 1; // 14M
+const DEFAULT_INDEX = 2; // 14M
 
 export function createBandSelect(select) {
   for (const { label, freq_hz } of FT8_BANDS) {

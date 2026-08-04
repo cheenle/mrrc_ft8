@@ -83,6 +83,11 @@ class ServerConfig:
     audio_device: int | str | None = None
     decoder_profile: int = 3
     decoder_threads: int = 0  # 0 = Auto: clamp(cpu_count - 1, 1, 12) (I9, §12.6)
+    band_hunt_url: str | None = None  # pskreporter /api/band_hunt; None = feature off
+    band_hunt_radius_km: int = 1_000
+    band_hunt_window_min: int = 30
+    band_hunt_interval_s: float = 60.0
+    band_hunt_cooldown_s: float = 1_200.0
 
     @classmethod
     def from_env(cls) -> ServerConfig:
@@ -133,6 +138,16 @@ class ServerConfig:
                 )
             if not 1 <= threads <= 12:
                 raise ValueError("MRRC_FT8_DECODER_THREADS must be 1..12")
+        # Optional band-hunt tuning; bad values fall back to defaults (the
+        # feature is off entirely when the URL is unset, so no fail-startup).
+        def band_int(name: str, default: int, lo: int, hi: int) -> int:
+            try:
+                value = int(os.environ.get(name, default))
+            except (TypeError, ValueError):
+                return default
+            return value if lo <= value <= hi else default
+
+        band_hunt_url = os.environ.get("MRRC_FT8_BAND_HUNT_URL", "").strip() or None
         return cls(
             password_hash=password_hash,
             my_call=my_call,
@@ -148,6 +163,11 @@ class ServerConfig:
             audio_device=audio_device,
             decoder_profile=profile,
             decoder_threads=threads,
+            band_hunt_url=band_hunt_url,
+            band_hunt_radius_km=band_int("MRRC_FT8_BAND_HUNT_RADIUS_KM", 1000, 100, 5000),
+            band_hunt_window_min=band_int("MRRC_FT8_BAND_HUNT_WINDOW_MIN", 30, 5, 1440),
+            band_hunt_interval_s=band_int("MRRC_FT8_BAND_HUNT_INTERVAL", 60, 15, 3600),
+            band_hunt_cooldown_s=band_int("MRRC_FT8_BAND_HUNT_COOLDOWN", 1200, 60, 36000),
         )
 
 
@@ -648,6 +668,91 @@ def create_server(
 
         await jtdx_sync()  # one import at startup (before the hourly loop)
         tasks.append(asyncio.create_task(jtdx_loop()))
+
+        async def band_hunt_loop() -> None:
+            """NFR-088: periodically tune the rig to the FT8 band with new-DXCC
+            propagation evidence, then let auto-call (NFR-087) close the QSO.
+
+            The pskreporter /api/band_hunt endpoint is the propagation gate
+            (nearby grids actively hearing the band); the ``auto_band_hunt``
+            setting arms it, and the same idle gate as auto-call keeps the rig
+            switch from ever interrupting a QSO/CQ.  Never faults.
+            """
+
+            if not config.band_hunt_url:
+                return  # feature off at startup (env unset) — no task work
+            from .engine.band_hunter import (
+                decide_switch,
+                fetch_opportunities,
+                rank_bands,
+            )
+
+            last_switch_mono: float | None = None
+            while True:
+                await asyncio.sleep(config.band_hunt_interval_s)
+                try:
+                    if repository.get_setting("auto_band_hunt") is not True:
+                        continue
+                    # Same idle gate as auto-call: no active QSO, no pending
+                    # manual selection.  A CQ loop holds a non-IDLE sequencer.
+                    if (
+                        state.sequencer.state is not QSOState.IDLE
+                        or state.selected is not None
+                    ):
+                        continue
+                    if state.dxcc_cache is None:
+                        continue  # worked set unknown — never switch blindly
+                    payload = await fetch_opportunities(
+                        config.band_hunt_url,
+                        {
+                            "home_grid": config.my_grid.upper(),
+                            "radius_km": config.band_hunt_radius_km,
+                            "window_min": config.band_hunt_window_min,
+                        },
+                    )
+                    if payload is None:
+                        continue
+                    worked = {e.name for e in state.dxcc_cache.entities}
+                    ranked = rank_bands(payload, worked)
+                    now = time.monotonic()
+                    target = decide_switch(
+                        ranked,
+                        idle=True,
+                        current_freq_hz=state.radio_freq_hz,
+                        seconds_since_last_switch=(
+                            now - last_switch_mono
+                            if last_switch_mono is not None
+                            else None
+                        ),
+                        cooldown_s=config.band_hunt_cooldown_s,
+                    )
+                    if target is None:
+                        continue
+                    if state.rig is None or state.safety.armed or state.safety.ptt_on:
+                        continue
+                    await state.rig.set_frequency(target)
+                    state.radio_freq_hz = target
+                    await asyncio.to_thread(
+                        repository.record_audit,
+                        actor="system",
+                        operation="band_hunt",
+                        target=str(target),
+                        detail=(
+                            f"{ranked[0].get('band', '')}: "
+                            f"{len(ranked[0].get('new_entities', []))} new DXCC"
+                        ),
+                    )
+                    last_switch_mono = now
+                    log.info(
+                        "band_hunt: tuned to %s (%d Hz), new DXCC %s",
+                        ranked[0].get("band"),
+                        target,
+                        ranked[0].get("new_entities"),
+                    )
+                except Exception:
+                    log.exception("band hunt tick failed")
+
+        tasks.append(asyncio.create_task(band_hunt_loop()))
 
         async def rig_poll() -> None:
             # Slow dial-frequency poll feeding the snapshot's radio view;

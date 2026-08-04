@@ -261,16 +261,25 @@ export function createSettingsDrawer() {
         <span>Auto-call new DXCC</span>
         <input type="checkbox" data-setting="auto_call_new_dxcc" ${s.auto_call_new_dxcc ? "checked" : ""}>
       </label>
+      <label class="setting-row toggle">
+        <span>Auto band hunt (DXCC)</span>
+        <input type="checkbox" data-setting="auto_band_hunt" ${s.auto_band_hunt ? "checked" : ""}>
+      </label>
       <div class="drawer-hint dim">These display preferences are stored in this
         browser and apply immediately to the Band Activity list.</div>`;
     for (const input of content.querySelectorAll("[data-setting]")) {
       input.addEventListener("change", () => {
         const value = input.type === "checkbox" ? input.checked : input.value;
         saveSettings({ [input.dataset.setting]: value });
-        // auto_call_new_dxcc 的权威状态在后端（无人值守自动呼叫读它）。
+        // auto_call_new_dxcc / auto_band_hunt 的权威状态在后端
+        // （无人值守自动呼叫/自动切频读它们）。
         if (input.dataset.setting === "auto_call_new_dxcc") {
           api.putSetting("auto_call_new_dxcc", Boolean(value)).then((res) => {
             if (!res.ok) showToast(`Auto-call setting: ${res.reason || res.status}`);
+          });
+        } else if (input.dataset.setting === "auto_band_hunt") {
+          api.putSetting("auto_band_hunt", Boolean(value)).then((res) => {
+            if (!res.ok) showToast(`Band hunt setting: ${res.reason || res.status}`);
           });
         }
       });

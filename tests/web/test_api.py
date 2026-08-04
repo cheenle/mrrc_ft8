@@ -844,6 +844,29 @@ def test_auto_call_setting_round_trip(client: TestClient, state: AppState) -> No
     assert state.repository.get_setting("auto_call_new_dxcc") is True
 
 
+def test_auto_band_hunt_setting_round_trip(client: TestClient, state: AppState) -> None:
+    session_id = login(client)
+    put = client.put(
+        "/api/v1/settings",
+        json={"auto_band_hunt": True},
+        headers=auth_headers(session_id),
+    )
+    assert put.status_code == 200
+    got = client.get("/api/v1/settings", headers=auth_headers(session_id)).json()
+    assert got["settings"]["auto_band_hunt"] is True
+    assert state.repository.get_setting("auto_band_hunt") is True
+
+
+def test_auto_band_hunt_setting_rejects_non_bool(client: TestClient) -> None:
+    session_id = login(client)
+    put = client.put(
+        "/api/v1/settings",
+        json={"auto_band_hunt": "yes"},
+        headers=auth_headers(session_id),
+    )
+    assert put.status_code == 422
+
+
 def test_auto_call_setting_rejects_non_bool(client: TestClient) -> None:
     session_id = login(client)
     put = client.put(

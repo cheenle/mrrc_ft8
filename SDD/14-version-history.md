@@ -1,5 +1,14 @@
 # 14. Version History
 
+## Unreleased — 2026-08-05 — Propagation-Driven New-DXCC Band Hunt (NFR-088)
+
+- 新功能：`band_hunter` 让服务器自主换波段去守新 DXCC。通过 pskreporter 仓库的 `GET /api/band_hunt`（**HTTP 是两库间唯一耦合**，严格隔离：不 import、不共享 DB 凭据）拿到"附近网格（距本网格 ≤ radius_km）此刻在听的 FT8 波段"；本地用 worked 实体集过滤出仍有新 DXCC 的波段排序；空闲且开关 `auto_band_hunt` 开启时把 rig 切到榜首波段，再由 auto-call（NFR-087）闭环通联。
+- 护栏：仅空闲切频（同 auto-call 门禁：sequencer IDLE 且无人工选择）、min-dwell 冷却（默认 1200 s）防抖、`safety.armed/ptt_on` 时绝不调谐、端点失败本轮跳过不崩溃、无 worked 集不盲目切换、每次切换 audit（`band_hunt`）。
+- 配置：`MRRC_FT8_BAND_HUNT_URL`（默认空 = 功能整体不加载）+ `RADIUS_KM`/`WINDOW_MIN`/`INTERVAL`/`COOLDOWN`（越界值回退默认，不 fail-startup）；设置菜单栏加 `auto_band_hunt` 开关（后端持久化，`/settings`）。
+- 波段扩展：FT8 波段选择从 7/14/21/28 MHz 扩到 **7/10/14/18/21/24/28 MHz**（FT8 呼号频点）；pskreporter `band_utils` 新增 `FT8_DIAL_FREQ` 单源表。
+- 依赖：`httpx` 从 dev 移到运行时依赖（生产轮询用，默认 5 s 超时）。
+- Regressions: mrrc-ft8 `tests/engine/test_band_hunter.py`（rank/decide/fetch 矩阵）、`test_main.py::test_from_env_band_hunt_optional`、`test_api.py`（auto_band_hunt round-trip + 422）；pskreporter `test_band_hunt.py`（距离门/阈值/DB 异常）。全量套件绿（mrrc-ft8 719 passed）。
+
 ## v1.1.0 — 2026-08-05 — DXCC Live View + New-DXCC Auto-Call
 
 - Promoted the NFR-085/086/087 slice to **v1.1.0** (pyproject 1.1.0, tagged `v1.1.0`): JTDX ADIF auto-sync + LOG 7-day window (NFR-085), the in-cockpit DXCC live view with cache-until-QSO-write stats (NFR-086), and the new-DXCC highlight + safety-armed auto-call toggle (NFR-087). Also shipped: the full-screen QSO Log overlay and operator-callsign de-identification across README/SDD/website. GitHub release notes enumerate the v1.0.0 → v1.1.0 diff.

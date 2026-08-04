@@ -88,6 +88,44 @@ def test_from_env_optional_devices_and_decoder(monkeypatch: pytest.MonkeyPatch) 
         ServerConfig.from_env()
 
 
+def test_from_env_band_hunt_optional(monkeypatch: pytest.MonkeyPatch) -> None:
+    """NFR-088: band hunt is off by default; loads only when a URL is set."""
+
+    monkeypatch.setenv("MRRC_FT8_PASSWORD_HASH", "hash")
+    monkeypatch.setenv("MRRC_FT8_MY_CALL", "M0XX")
+    monkeypatch.setenv("MRRC_FT8_MY_GRID", "IO91")
+    for name in (
+        "MRRC_FT8_BAND_HUNT_URL",
+        "MRRC_FT8_BAND_HUNT_RADIUS_KM",
+        "MRRC_FT8_BAND_HUNT_WINDOW_MIN",
+        "MRRC_FT8_BAND_HUNT_INTERVAL",
+        "MRRC_FT8_BAND_HUNT_COOLDOWN",
+    ):
+        monkeypatch.delenv(name, raising=False)
+    config = ServerConfig.from_env()
+    assert config.band_hunt_url is None
+    assert config.band_hunt_radius_km == 1000
+    assert config.band_hunt_window_min == 30
+    assert config.band_hunt_interval_s == 60
+    assert config.band_hunt_cooldown_s == 1200
+
+    monkeypatch.setenv("MRRC_FT8_BAND_HUNT_URL", "http://127.0.0.1:5000/api/band_hunt")
+    monkeypatch.setenv("MRRC_FT8_BAND_HUNT_RADIUS_KM", "1500")
+    monkeypatch.setenv("MRRC_FT8_BAND_HUNT_WINDOW_MIN", "45")
+    monkeypatch.setenv("MRRC_FT8_BAND_HUNT_INTERVAL", "90")
+    monkeypatch.setenv("MRRC_FT8_BAND_HUNT_COOLDOWN", "1800")
+    config = ServerConfig.from_env()
+    assert config.band_hunt_url == "http://127.0.0.1:5000/api/band_hunt"
+    assert (config.band_hunt_radius_km, config.band_hunt_window_min) == (1500, 45)
+    assert (config.band_hunt_interval_s, config.band_hunt_cooldown_s) == (90, 1800)
+
+    # Out-of-range / malformed values fall back to defaults (never fail startup).
+    monkeypatch.setenv("MRRC_FT8_BAND_HUNT_RADIUS_KM", "999999")
+    monkeypatch.setenv("MRRC_FT8_BAND_HUNT_WINDOW_MIN", "abc")
+    config = ServerConfig.from_env()
+    assert (config.band_hunt_radius_km, config.band_hunt_window_min) == (1000, 30)
+
+
 class FakeSlotMessage:
     class result:
         text = "M0XX K1ABC FN42"
