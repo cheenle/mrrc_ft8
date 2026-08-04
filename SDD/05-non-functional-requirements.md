@@ -87,3 +87,4 @@
 | NFR-084 | SDD governance | Behavior change updates affected SDD and chapter 14; guardian check clean |
 | NFR-085 | LOG window & import provenance | `GET /logs/qsos` and `/logs/adif` return only the last 7 days (10k-row history must never overload the cockpit); imported QSOs carry `source='jtdx'` while live completions carry `source='live'` |
 | NFR-086 | DXCC stats | `GET /api/v1/dxcc` returns ok envelope with total / entities / by_band, computed on first open and cached; any QSO write (record / import / void) marks the cache dirty so the next open recomputes (no per-open full scan, no push) |
+| NFR-087 | New-DXCC auto-call | Decode messages carry `is_new_dxcc`; with setting `auto_call_new_dxcc` enabled the server auto-QSOs the first new-DXCC CQ when idle (safety-armed, no lease, never interrupts a QSO) |

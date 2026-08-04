@@ -4,6 +4,13 @@
 
 - Promoted the live station build to **v1.0.0**. The 2026-08-03 field session closed the RX/TX root causes (UtcRing eviction misalignment, Replay opposite-TX-slot phase, manual-Reply decision window); on 2026-08-04 the FT-710 rig controls were completed (filter width + ATT/PREAMP/AGC/RF gain via raw CAT, verified live on hamlib 4.7.2). Real FT8 QSOs are worked through the mobile cockpit. Tagged `v1.0.0`; the GitHub release notes enumerate the 2026-08-01 design baseline through the 2026-08-04 rig-control completion.
 
+## Unreleased — 2026-08-04 — New-DXCC Highlight + Auto-Call
+
+- `decode_message_view` 增加 `is_new_dxcc`（cty lookup + worked 实体集合，复用 dxcc_cache，lifespan 预填充）；Band Activity 新实体行紫色高亮（`.candidate.new-dxcc`）。
+- `auto_call_candidate` 纯函数 + `on_decode` 触发：开关开 + 空闲 + 无人工选择 + 第一个新 DXCC CQ → `safety.arm()` → `sequencer.reply_to`（create_task 异步，audit `auto_call`）；QSO 完成实体进 worked 自然不再触发；interlock 拒绝跳过不崩溃；无需控制租约（系统级，NFR-087）。
+- 设置 `auto_call_new_dxcc`（bool）入 SETTING_SCHEMA，走 `/settings` PUT/GET 持久化；FT8 tab toggle（localStorage 回显 + 后端 PUT，boot 时后端值覆盖默认）；`get_cty_database()` 懒加载单例供 API/自动呼叫共用。
+- Regressions: `test_main.py`（is_new_dxcc 判定、auto_call_candidate 矩阵：触发/禁用/忙/非CQ/mine）、`test_api.py`（设置 round-trip + 422）、`test_dxcc.py`（单例）。全量套件绿。
+
 ## Unreleased — 2026-08-04 — DXCC Stats: Cache-until-QSO-Write
 
 - 决策 A 落地：DXCC 是低频数据，`/api/v1/dxcc` 不再每次打开全量扫描。`Repository` 增加 `dxcc_dirty` 标记（初始 True；`record_qso`/`import_qsos`/`void_qso` 置 True，读操作不置）；`AppState.dxcc_cache` 持有结果；接口在 `cache is None or dirty` 时经 `to_thread` 重建并复位，否则直接返回缓存。QSO 写入（新通联/每小时 JTDX 导入/撤销）后下次打开自动重算（1 万条 ~10ms），重启后首次打开重算一次。

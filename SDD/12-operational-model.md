@@ -40,6 +40,8 @@ Configuration covers domain/proxy trust, password-hash bootstrap, radio/rigctld,
 
 `cty.dat` (repo root, country-files ADIF format) is the DXCC entity source for `GET /api/v1/dxcc`; parsed lazily on first request (NFR-086).
 
+Setting `auto_call_new_dxcc` (bool, persisted in setting_meta via `/settings`) arms unattended auto-QSO on the first new-DXCC CQ when idle; the safety interlock always gates TX (NFR-087).
+
 ## 12.7 Backup and Retention
 
 - QSO database and configuration are backup-critical.
