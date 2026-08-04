@@ -393,7 +393,9 @@ export function createSettingsDrawer() {
   const bandHuntContent = document.getElementById("bandhunt-content");
   const BAND_HUNT_WINDOWS = [
     [10, "10 min"], [30, "30 min"], [60, "1 hour"], [240, "4 hours"],
+    [1440, "1 day"], [4320, "3 days"], [10080, "7 days"],
   ];
+  const BAND_HUNT_SPOT_CAP = 200; // rows per window; newest first
 
   function escapeHtml(value) {
     return String(value ?? "").replace(/[&<>"']/g, (c) =>
@@ -423,13 +425,15 @@ export function createSettingsDrawer() {
         return;
       }
       const spots = (res.bands || []).flatMap((b) => b.spots || []);
-      const fresh = spots.filter((s) => !s.entity || !worked.has(s.entity));
+      const allNew = spots.filter((s) => !s.entity || !worked.has(s.entity));
+      const fresh = allNew.slice(0, BAND_HUNT_SPOT_CAP);
       if (!fresh.length) {
         html.push("<p class='drawer-hint dim'>No new-DXCC spots nearby in this window.</p>");
         return;
       }
       html.push(`<div class="qso-row"><span class="qso-call"></span>` +
-        `<span class="qso-meta">${fresh.length} spot(s)</span></div>`);
+        `<span class="qso-meta">${allNew.length} spot(s)` +
+        `${allNew.length > fresh.length ? ` (showing ${fresh.length})` : ""}</span></div>`);
       for (const s of fresh) {
         const name = s.entity || s.callsign || "?";
         const band = s.band || "?";
