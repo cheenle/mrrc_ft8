@@ -38,7 +38,8 @@ from .engine.orchestrator import Orchestrator
 from .engine.repository import Repository
 from .engine.rig import RigClient
 from .engine.safety import Interlock, SafetyController
-from .engine.sequencer import DisarmReason, Sequencer
+from .engine.sequencer import DisarmReason, QsoContext, Sequencer
+from .engine.bands import band_from_freq_hz
 from .engine.audio_tx import TxPlayer
 from .engine.waterfall import SpectrumComputer, SpectrumFanout
 from .web.api import AppState, create_app, _snapshot
@@ -461,6 +462,13 @@ def create_server(
         # UC-005: sequencer fires completed records exactly once via on_qso;
         # the durable queue owns them from there (retry → dead-letter).
         sequencer.on_qso = qso_log.enqueue
+        # §7.5: completed QSO records carry the dial frequency + ADIF band
+        # from the last rig poll.  Previously left at the default context
+        # (freq 0 / no band), which broke ADIF FREQ/BAND on every QSO.
+        sequencer.context = lambda: QsoContext(
+            freq_hz=state.radio_freq_hz or 0,
+            band=band_from_freq_hz(state.radio_freq_hz or 0),
+        )
         await asyncio.to_thread(qso_log.recover)
         await safety.start()
 
