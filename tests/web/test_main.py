@@ -389,3 +389,18 @@ def test_disabled_jtdx_sync_does_not_crash() -> None:
     )
     with TestClient(app):  # lifespan runs; sync must be a no-op
         assert app.state.app_state.repository.count_rows("qso") == 0
+
+
+def test_decode_message_view_marks_new_dxcc() -> None:
+    from server.main import decode_message_view
+
+    item = decode_message_view(FakeSlotMessage(), "M0XX", is_new_dxcc=True)
+    assert item["call"] == "K1ABC"
+    assert item["is_new_dxcc"] is True
+
+
+def test_decode_message_view_not_new_when_entity_worked() -> None:
+    from server.main import decode_message_view
+
+    item = decode_message_view(FakeSlotMessage(), "M0XX", is_new_dxcc=False)
+    assert item["is_new_dxcc"] is False

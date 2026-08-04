@@ -151,7 +151,9 @@ class ServerConfig:
         )
 
 
-def decode_message_view(message: Any, my_call: str = "") -> dict[str, Any]:
+def decode_message_view(
+    message: Any, my_call: str = "", *, is_new_dxcc: bool = False
+) -> dict[str, Any]:
     """One decode message → wire payload (Band Activity columns)."""
 
     from .engine.msgparse import addressed_to, base_call
@@ -170,6 +172,7 @@ def decode_message_view(message: Any, my_call: str = "") -> dict[str, Any]:
         "mine": bool(parsed.from_call)
         and bool(my_call)
         and base_call(parsed.from_call) == base_call(my_call),
+        "is_new_dxcc": is_new_dxcc,
     }
 
 
@@ -391,13 +394,26 @@ def create_server(
                     capture_bounces = 0  # healthy session: reset self-heal budget
                 if capture_health.observe(rms, len(slot_decode.messages)):
                     asyncio.get_running_loop().create_task(recover_capture(rms))
+            from .engine.dxcc import get_cty_database
+
+            # is_new_dxcc: entity worked-entity check against the DXCC cache
+            # (pre-filled at startup; conservative False while unbuilt).
+            worked_dxcc = (
+                {e.name for e in state.dxcc_cache.entities}
+                if state.dxcc_cache is not None
+                else None
+            )
+            views = []
+            for message in slot_decode.messages:
+                view = decode_message_view(message, config.my_call)
+                if view["call"] and not view["mine"] and worked_dxcc is not None:
+                    entity = get_cty_database().lookup(view["call"])
+                    view["is_new_dxcc"] = bool(entity) and entity[0] not in worked_dxcc
+                views.append(view)
             batch = {
                 "slot_id": slot_decode.slot_id,
                 "late": slot_decode.late,
-                "messages": [
-                    decode_message_view(message, config.my_call)
-                    for message in slot_decode.messages
-                ],
+                "messages": views,
             }
             log.info("slot %d: %d msgs, %d subs, %d started, %d skipped",
                      slot_decode.slot_id, len(slot_decode.messages),
@@ -479,6 +495,15 @@ def create_server(
         if capture is not None:
             await asyncio.to_thread(capture.start)
         if orchestrator is not None:
+            # Pre-fill the DXCC cache so on_decode can mark is_new_dxcc
+            # without a full scan per slot (NFR-086/087).
+            if state.dxcc_cache is None or repository.dxcc_dirty:
+                from .engine.dxcc import dxcc_summary, get_cty_database
+
+                state.dxcc_cache = await asyncio.to_thread(
+                    dxcc_summary, repository, get_cty_database()
+                )
+                repository.dxcc_dirty = False
             await asyncio.to_thread(supervisor.start)
             tasks.append(asyncio.create_task(orchestrator.run()))
 
