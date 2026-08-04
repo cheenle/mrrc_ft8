@@ -133,6 +133,7 @@ class Repository:
         self._path = path
         self._clock = clock
         self._lock = threading.Lock()
+        self.dxcc_dirty = True  # DXCC 统计在首次读取/任何 QSO 写入后重建
         self._open()
         self._migrate()
 
@@ -231,6 +232,7 @@ class Repository:
         source: str = "live",
     ) -> int:
         """Insert one QSO (from the sequencer's log record); returns its id."""
+        self.dxcc_dirty = True
 
         epoch = self._clock() if completed_epoch is None else completed_epoch
 
@@ -269,6 +271,7 @@ class Repository:
 
         One transaction, audit-trailed per row; the caller owns dedupe.
         """
+        self.dxcc_dirty = True
 
         def _insert() -> int:
             with self._db:
@@ -374,6 +377,8 @@ class Repository:
         Never deletes; marks void and records actor/time/reason in both the
         QSO trail and the audit log.
         """
+        self.dxcc_dirty = True
+
 
         now = self._clock()
 

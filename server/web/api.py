@@ -116,6 +116,7 @@ class AppState:
     selected_snr_db: int | None = None
     selected_slot_id: int | None = None  # slot the selected message was heard in
     radio_freq_hz: int | None = None  # last polled dial frequency, if rig is up
+    dxcc_cache: Any = None  # cached DxccSummary; rebuilt when repository.dxcc_dirty
 
     def bump(self) -> int:
         self.revision += 1
@@ -684,10 +685,15 @@ def create_router(state: AppState) -> APIRouter:
     async def dxcc(session: Session = Depends(require_session)) -> JSONResponse:
         from ..engine.dxcc import dxcc_summary
 
-        summary = await asyncio.to_thread(
-            dxcc_summary, state.repository, _cty_database()
-        )
-        return _ok(summary.to_dict())
+        # 低频数据：缓存到首次打开/任何 QSO 写入（dirty）后才重建（决策 A）。
+        cache = state.dxcc_cache
+        if cache is None or state.repository.dxcc_dirty:
+            cache = await asyncio.to_thread(
+                dxcc_summary, state.repository, _cty_database()
+            )
+            state.dxcc_cache = cache
+            state.repository.dxcc_dirty = False
+        return _ok(cache.to_dict())
 
     # ---- diagnostics ---------------------------------------------------------
 

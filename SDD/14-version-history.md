@@ -4,6 +4,11 @@
 
 - Promoted the live station build to **v1.0.0**. The 2026-08-03 field session closed the RX/TX root causes (UtcRing eviction misalignment, Replay opposite-TX-slot phase, manual-Reply decision window); on 2026-08-04 the FT-710 rig controls were completed (filter width + ATT/PREAMP/AGC/RF gain via raw CAT, verified live on hamlib 4.7.2). Real FT8 QSOs are worked through the mobile cockpit. Tagged `v1.0.0`; the GitHub release notes enumerate the 2026-08-01 design baseline through the 2026-08-04 rig-control completion.
 
+## Unreleased — 2026-08-04 — DXCC Stats: Cache-until-QSO-Write
+
+- 决策 A 落地：DXCC 是低频数据，`/api/v1/dxcc` 不再每次打开全量扫描。`Repository` 增加 `dxcc_dirty` 标记（初始 True；`record_qso`/`import_qsos`/`void_qso` 置 True，读操作不置）；`AppState.dxcc_cache` 持有结果；接口在 `cache is None or dirty` 时经 `to_thread` 重建并复位，否则直接返回缓存。QSO 写入（新通联/每小时 JTDX 导入/撤销）后下次打开自动重算（1 万条 ~10ms），重启后首次打开重算一次。
+- Regressions: `test_repository.py::test_dxcc_dirty_flag_tracks_qso_writes`（初始/写入/读不置）、`test_api.py::test_dxcc_cached_until_qso_write`（首次计算→缓存命中→新实体触发重算 total+1）。全量套件绿。
+
 ## Unreleased — 2026-08-04 — DXCC Stats + Menu Live View
 
 - 新模块 `server/engine/dxcc.py`：自写 `cty.dat` 解析器（country-files 旧版 ADIF 格式，实体行 + 跨行续行前缀列表，`=`精确匹配 / `(23)`数字替换 / 最长前缀匹配）。pyhamtools 0.13.0 可行性验证被否决（其 LookupLib 只支持 cty.plist / clublogxml，需联网且引入 5 个依赖），零新依赖。真实数据冒烟：6,740 个去重呼号 → **186 实体**，2 个特殊呼号未匹配（D1 活动台）；数字替换语义修正后 B0/B9 省际前缀正确归 China。

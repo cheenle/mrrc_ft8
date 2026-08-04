@@ -86,4 +86,4 @@
 | NFR-083 | Dual platform | Shared app config/code; LaunchAgent and systemd descriptors separate |
 | NFR-084 | SDD governance | Behavior change updates affected SDD and chapter 14; guardian check clean |
 | NFR-085 | LOG window & import provenance | `GET /logs/qsos` and `/logs/adif` return only the last 7 days (10k-row history must never overload the cockpit); imported QSOs carry `source='jtdx'` while live completions carry `source='live'` |
-| NFR-086 | DXCC stats | `GET /api/v1/dxcc` returns ok envelope with total / entities / by_band, computed live from the canonical store on open (no push, no cache) |
+| NFR-086 | DXCC stats | `GET /api/v1/dxcc` returns ok envelope with total / entities / by_band, computed on first open and cached; any QSO write (record / import / void) marks the cache dirty so the next open recomputes (no per-open full scan, no push) |

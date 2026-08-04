@@ -293,3 +293,17 @@ def test_external_db_replace_does_not_wedge_writes(tmp_path: Path) -> None:
     ops = [a["operation"] for a in repo.audit_events()]
     assert "after_swap" in ops
     assert ops[0] == "after_swap"  # newest first
+
+
+def test_dxcc_dirty_flag_tracks_qso_writes(repo: Repository, clock: FakeClock) -> None:
+    assert repo.dxcc_dirty is True  # 初始需要计算
+    repo.record_qso(sample_record())
+    assert repo.dxcc_dirty is True
+    repo.dxcc_dirty = False
+    repo.list_qsos()  # 读不置
+    assert repo.dxcc_dirty is False
+    repo.import_qsos([(sample_record("W6AER"), 1700000000.0)])
+    assert repo.dxcc_dirty is True
+    repo.dxcc_dirty = False
+    repo.void_qso(1, actor="a", reason="dup")
+    assert repo.dxcc_dirty is True

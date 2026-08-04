@@ -795,3 +795,25 @@ def test_dxcc_returns_ok_envelope_with_summary(client: TestClient, state: AppSta
     assert body["total"] >= 1
     assert "entities" in body and "by_band" in body
     assert isinstance(body["entities"], list)
+
+
+def test_dxcc_cached_until_qso_write(client: TestClient, state: AppState) -> None:
+    """DXCC 缓存：首次打开计算，QSO 写入置 dirty 后才重算（决策 A）。"""
+    state.repository.record_qso(
+        QSORecord(my_call="M0XX", my_grid="IO91", dx_call="BI1TX", band="20m")
+    )
+    session_id = login(client)
+    body1 = client.get("/api/v1/dxcc", headers=auth_headers(session_id)).json()
+    assert body1["total"] >= 1
+    assert state.repository.dxcc_dirty is False  # 已缓存
+
+    body2 = client.get("/api/v1/dxcc", headers=auth_headers(session_id)).json()
+    assert body2["total"] == body1["total"]  # 命中缓存（无写入不重算）
+
+    state.repository.record_qso(
+        QSORecord(my_call="M0XX", my_grid="IO91", dx_call="W6AER", band="20m")
+    )
+    assert state.repository.dxcc_dirty is True
+    body3 = client.get("/api/v1/dxcc", headers=auth_headers(session_id)).json()
+    assert body3["total"] == body1["total"] + 1  # 新实体触发重算
+    assert state.repository.dxcc_dirty is False
