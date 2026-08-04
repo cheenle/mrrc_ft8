@@ -71,6 +71,11 @@ export function createSettingsDrawer() {
       openLogView();    // full-screen QSO log overlay
       return;
     }
+    if (tab === "dxcc") {
+      close();          // leave the settings drawer
+      openDxccView();   // full-screen DXCC stats overlay
+      return;
+    }
     activeTab = tab;
     for (const t of tabs) t.classList.toggle("active", t.dataset.tab === tab);
     renderTab(tab);
@@ -303,6 +308,50 @@ export function createSettingsDrawer() {
     document.body.classList.remove("log-open");
   }
 
+  // ---- full-screen DXCC stats ------------------------------------------
+
+  const dxccOverlay = document.getElementById("dxcc-overlay");
+  const dxccContent = document.getElementById("dxcc-content");
+  const dxccCount = document.getElementById("dxcc-count");
+
+  async function openDxccView() {
+    dxccOverlay.hidden = false;
+    document.body.classList.add("log-open");
+    dxccContent.innerHTML = "<p class='drawer-hint'>Loading DXCC stats…</p>";
+    const res = await api.dxcc();
+    if (!res.ok) {
+      dxccContent.innerHTML =
+        `<p class='drawer-hint dim'>Could not load DXCC: ${res.reason || res.status}</p>`;
+      return;
+    }
+    if (dxccCount) dxccCount.textContent = String(res.total);
+    const html = [];
+    html.push(`<div class="drawer-hint">已通联 <b>${res.total}</b> 个 DXCC 实体` +
+      (res.unmatched ? `（${res.unmatched} 条未识别呼号）` : "") + "</div>");
+    // 波段矩阵（by_band 降序）
+    const bands = Object.entries(res.by_band || {})
+      .sort((a, b) => b[1] - a[1]);
+    if (bands.length) {
+      html.push("<h3>By band</h3>");
+      html.push(bands.map(([band, n]) =>
+        `<div class="qso-row"><span class="qso-call">${band}</span>` +
+        `<span class="qso-meta">${n} DXCC</span></div>`).join(""));
+    }
+    // 实体列表
+    html.push("<h3>Entities</h3>");
+    const rows = (res.entities || []).map((e) =>
+      `<div class="qso-row"><span class="qso-call">${e.name}</span>` +
+      `<span class="qso-meta">${e.continent} · ${e.first_utc} · ${e.band_count} band(s)</span></div>`
+    ).join("");
+    html.push(rows || "<p class='drawer-hint dim'>No DXCC yet.</p>");
+    dxccContent.innerHTML = html.join("");
+  }
+
+  function closeDxccView() {
+    dxccOverlay.hidden = true;
+    document.body.classList.remove("log-open");
+  }
+
   function renderTab(tab) {
     if (tab === "radio") renderRadio();
     else if (tab === "ft8") renderFt8();
@@ -318,6 +367,12 @@ export function createSettingsDrawer() {
   logOverlay.addEventListener("click", (event) => {
     // Clicking the dimmed backdrop (outside the panel) closes the overlay.
     if (event.target === logOverlay) closeLogView();
+  });
+
+  document.getElementById("btn-dxcc-close").addEventListener("click", closeDxccView);
+  dxccOverlay.addEventListener("click", (event) => {
+    // Clicking the dimmed backdrop (outside the panel) closes the overlay.
+    if (event.target === dxccOverlay) closeDxccView();
   });
 
   // Reflect station info from fresh snapshots.

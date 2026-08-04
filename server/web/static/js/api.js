@@ -83,6 +83,7 @@ export const api = {
       body: { hz },
     }),
   qsos: () => request("/logs/qsos"),
+  dxcc: () => request("/dxcc"),
   txOff: () => request("/operation/enable_tx_off", { method: "POST", idempotencyKey: key() }),
   stop: () => request("/operation/stop", { method: "POST", idempotencyKey: key() }),
   clearFault: (interlock) =>

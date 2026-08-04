@@ -54,6 +54,7 @@
         <button class="tab" data-tab="ft8">FT8</button>
         <button class="tab" data-tab="station">Station</button>
         <button class="tab" data-tab="log">Log</button>
+        <button class="tab" data-tab="dxcc">DXCC</button>
       </nav>
       <div id="drawer-content"></div>
     </aside>
@@ -67,6 +68,17 @@
           <button id="btn-log-close" class="icon-btn" aria-label="Close log">✕</button>
         </header>
         <div id="log-list" class="log-list"></div>
+      </div>
+    </div>
+
+    <!-- Full-screen DXCC stats -->
+    <div id="dxcc-overlay" class="log-overlay" hidden>
+      <div class="log-panel">
+        <header class="log-header">
+          <strong>DXCC <span class="count" id="dxcc-count"></span></strong>
+          <button id="btn-dxcc-close" class="icon-btn" aria-label="Close DXCC">✕</button>
+        </header>
+        <div id="dxcc-content" class="log-list"></div>
       </div>
     </div>
 
