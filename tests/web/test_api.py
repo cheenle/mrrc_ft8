@@ -740,3 +740,38 @@ def test_cq_loop_timeout_setting_bounds(client: TestClient) -> None:
     assert client.put(
         "/api/v1/settings", json={"cq_loop_idle_timeout_s": 300}
     ).status_code == 200
+
+
+def test_logs_qsos_windows_to_recent_week(client: TestClient, state: AppState) -> None:
+    now = time.time()
+    state.repository.record_qso(
+        QSORecord(my_call="M0XX", my_grid="IO91", dx_call="OLD1"),
+        completed_epoch=now - 8 * 86_400,
+    )
+    state.repository.record_qso(
+        QSORecord(my_call="M0XX", my_grid="IO91", dx_call="FRESH1"),
+        completed_epoch=now,
+    )
+    session_id = login(client)
+    body = client.get(
+        "/api/v1/logs/qsos", headers=auth_headers(session_id)
+    ).json()
+    assert [q["dx_call"] for q in body["qsos"]] == ["FRESH1"]
+
+
+def test_adif_export_windows_to_recent_week(client: TestClient, state: AppState) -> None:
+    now = time.time()
+    state.repository.record_qso(
+        QSORecord(my_call="M0XX", my_grid="IO91", dx_call="OLD1"),
+        completed_epoch=now - 8 * 86_400,
+    )
+    state.repository.record_qso(
+        QSORecord(my_call="M0XX", my_grid="IO91", dx_call="FRESH1"),
+        completed_epoch=now,
+    )
+    session_id = login(client)
+    text = client.get(
+        "/api/v1/logs/adif", headers=auth_headers(session_id)
+    ).text
+    assert "FRESH1" in text
+    assert "OLD1" not in text

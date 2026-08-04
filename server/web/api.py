@@ -616,7 +616,7 @@ def create_router(state: AppState) -> APIRouter:
 
     @router.get("/logs/qsos")
     async def logs_qsos(session: Session = Depends(require_session)) -> JSONResponse:
-        qsos = await asyncio.to_thread(state.repository.list_qsos)
+        qsos = await asyncio.to_thread(state.repository.list_qsos, since_days=7)
         # _ok envelope: the drawer's api.qsos() gate is ``res.ok`` (same as
         # every mutation); a bare dict made the log overlay always take the
         # error branch even on 200 ("Could not load log: 200").
@@ -646,7 +646,9 @@ def create_router(state: AppState) -> APIRouter:
 
     @router.get("/logs/adif")
     async def logs_adif(session: Session = Depends(require_session)) -> PlainTextResponse:
-        qsos = await asyncio.to_thread(state.repository.list_qsos, include_void=False)
+        qsos = await asyncio.to_thread(
+            state.repository.list_qsos, include_void=False, since_days=7
+        )
         document = await asyncio.to_thread(generate_adif, qsos)
         return PlainTextResponse(
             document,
