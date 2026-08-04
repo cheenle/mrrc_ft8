@@ -132,3 +132,13 @@ def test_dxcc_summary_counts_entities_bands_and_unmatched(tmp_path) -> None:
     assert japan.bands == ["20m", "40m"]           # sorted
     # by_band：20m → China+Japan+Mauritius = 3；40m → Japan = 1；15m → 0（unmatched 不计）
     assert summary.by_band == {"20m": 3, "40m": 1}
+
+
+def test_get_cty_database_loads_repo_cty_singleton() -> None:
+    from server.engine.dxcc import get_cty_database
+
+    db1 = get_cty_database()
+    db2 = get_cty_database()
+    assert db1 is db2                      # 单例
+    assert len(db1.entities) > 300         # 仓库内 cty.dat（346 实体）
+    assert db1.lookup("BI1TX") == ("China", "AS")

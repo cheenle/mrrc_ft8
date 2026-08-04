@@ -202,3 +202,18 @@ def dxcc_summary(repository, cty: CtyDatabase) -> DxccSummary:
         entities=ordered,
         by_band={band: len(ents) for band, ents in by_band.items()},
     )
+
+
+_cty_db: CtyDatabase | None = None
+
+
+def get_cty_database() -> CtyDatabase:
+    """Repository-root cty.dat, loaded once per process (shared by the REST
+    layer and the auto-call path).  Missing/broken file → empty db."""
+
+    global _cty_db
+    if _cty_db is None:
+        from pathlib import Path
+
+        _cty_db = load_cty(str(Path(__file__).resolve().parents[2] / "cty.dat"))
+    return _cty_db

@@ -136,22 +136,12 @@ def _reject(status: int, reason: str, **extra: Any) -> JSONResponse:
     return JSONResponse({"ok": False, "reason": reason, **extra}, status_code=status)
 
 
-_cty_cache: Any = None
-
-
 def _cty_database() -> Any:
-    """Repository-root cty.dat loaded once; empty db on any failure."""
+    """Shared lazy cty.dat singleton (engine layer; API + auto-call use it)."""
 
-    global _cty_cache
-    if _cty_cache is not None:
-        return _cty_cache
-    from pathlib import Path
+    from ..engine.dxcc import get_cty_database
 
-    from ..engine.dxcc import load_cty
-
-    path = Path(__file__).resolve().parents[2] / "cty.dat"
-    _cty_cache = load_cty(str(path))
-    return _cty_cache
+    return get_cty_database()
 
 
 def get_state(request: Request) -> AppState:

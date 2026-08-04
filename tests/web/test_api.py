@@ -817,3 +817,15 @@ def test_dxcc_cached_until_qso_write(client: TestClient, state: AppState) -> Non
     body3 = client.get("/api/v1/dxcc", headers=auth_headers(session_id)).json()
     assert body3["total"] == body1["total"] + 1  # 新实体触发重算
     assert state.repository.dxcc_dirty is False
+
+
+def test_dxcc_endpoint_still_works_after_singleton_refactor(
+    client: TestClient, state: AppState
+) -> None:
+    state.repository.record_qso(
+        QSORecord(my_call="M0XX", my_grid="IO91", dx_call="BI1TX", band="20m")
+    )
+    session_id = login(client)
+    body = client.get("/api/v1/dxcc", headers=auth_headers(session_id)).json()
+    assert body.get("ok") is True
+    assert body["total"] >= 1
