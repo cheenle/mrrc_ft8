@@ -262,19 +262,88 @@ class Repository:
 
         return int(self._write(_insert))  # type: ignore[return-value]
 
-    def list_qsos(self, *, include_void: bool = True) -> list[StoredQSO]:
-        """All QSOs newest-first; ADIF export passes ``include_void=False``."""
+    def import_qsos(
+        self, records: list[tuple[QSORecord, float]], *, source: str = "jtdx"
+    ) -> int:
+        """Bulk insert imported QSOs as ``(record, completed_epoch)`` pairs.
 
-        query = f"SELECT {_QSO_COLUMNS} FROM qso"
+        One transaction, audit-trailed per row; the caller owns dedupe.
+        """
+
+        def _insert() -> int:
+            with self._db:
+                for record, epoch in records:
+                    cursor = self._db.execute(
+                        "INSERT INTO qso (my_call, my_grid, dx_call, dx_grid,"
+                        " report_sent, report_rcvd, started_utc, mode, freq_hz,"
+                        " band, status, completed_epoch, source)"
+                        " VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                        (
+                            record.my_call,
+                            record.my_grid,
+                            record.dx_call,
+                            record.dx_grid,
+                            record.report_sent,
+                            record.report_rcvd,
+                            record.started_utc,
+                            record.mode,
+                            record.freq_hz,
+                            record.band,
+                            QsoStatus.COMPLETED.value,
+                            epoch,
+                            source,
+                        ),
+                    )
+                    self._qso_event(int(cursor.lastrowid), epoch, "imported", source)
+            return len(records)
+
+        return int(self._write(_insert))  # type: ignore[return-value]
+
+    def dedupe_keys(self, *, source: str | None = None) -> set[tuple[str, str, str, str]]:
+        """``(dx_call, utc_date YYYYMMDD, started_utc, band)`` of stored QSOs.
+
+        Cross-source by default so a JTDX re-sync never duplicates a live
+        QSO; pass ``source="jtdx"`` to restrict.  UTC date derives from
+        ``completed_epoch`` (the ADIF side uses ``qso_date``; midnight
+        crossers are the only divergence, tolerated).
+        """
+
+        where, params = "", []
+        if source is not None:
+            where, params = " WHERE source = ?", [source]
+        with self._lock:
+            rows = self._db.execute(
+                f"SELECT dx_call, started_utc, band, completed_epoch FROM qso{where}",
+                params,
+            ).fetchall()
+        keys: set[tuple[str, str, str, str]] = set()
+        for row in rows:
+            date = datetime.fromtimestamp(
+                row["completed_epoch"], tz=timezone.utc
+            ).strftime("%Y%m%d")
+            keys.add((row["dx_call"], date, row["started_utc"], row["band"]))
+        return keys
+
+    def list_qsos(
+        self, *, include_void: bool = True, since_days: float | None = None
+    ) -> list[StoredQSO]:
+        """QSOs newest-first; ADIF export passes ``include_void=False``,
+        the LOG page passes ``since_days=7``."""
+
+        conds: list[str] = []
+        params: list[object] = []
         if not include_void:
-            query += " WHERE status != ?"
+            conds.append("status != ?")
+            params.append(QsoStatus.VOID.value)
+        if since_days is not None:
+            conds.append("completed_epoch >= ?")
+            params.append(self._clock() - since_days * 86_400)
+        query = f"SELECT {_QSO_COLUMNS} FROM qso"
+        if conds:
+            query += " WHERE " + " AND ".join(conds)
         query += " ORDER BY id DESC"
         with self._lock:
-            rows = (
-                self._db.execute(query, (QsoStatus.VOID.value,)).fetchall()
-                if not include_void
-                else self._db.execute(query).fetchall()
-            )
+            rows = self._db.execute(query, params).fetchall()
         return [self._to_stored(row) for row in rows]
 
     def get_qso(self, qso_id: int) -> StoredQSO | None:

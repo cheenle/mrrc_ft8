@@ -143,6 +143,39 @@ def test_v1_database_migrates_to_v2_preserving_rows(tmp_path: Path) -> None:
     repo.close()
 
 
+def test_import_qsos_bulk_sets_source_and_epoch(repo: Repository) -> None:
+    records = [
+        (sample_record("K1ABC"), 1700000000.0),
+        (sample_record("JA1YAD"), 1700000100.0),
+    ]
+    assert repo.import_qsos(records) == 2
+    first = repo.get_qso(1)
+    assert first is not None
+    assert first.source == "jtdx"
+    assert first.completed_epoch == 1700000000.0
+    assert repo.count_rows("qso") == 2
+
+
+def test_dedupe_keys_cross_source(repo: Repository) -> None:
+    repo.record_qso(sample_record("LIVE1"))  # source=live
+    repo.import_qsos([(sample_record("JTDX1"), 1700000000.0)])  # source=jtdx
+    keys = repo.dedupe_keys()
+    # 1700000000 = 2023-11-14 22:13:20 UTC -> utc date 20231114
+    assert ("LIVE1", "20231114", "120000", "20m") in keys
+    assert ("JTDX1", "20231114", "120000", "20m") in keys
+    assert len(keys) == 2
+
+
+def test_list_qsos_since_days_windows(repo: Repository, clock: FakeClock) -> None:
+    clock.now = 1_800_000_000.0  # fixed reference
+    repo.record_qso(sample_record("FRESH"), completed_epoch=clock.now)
+    repo.record_qso(sample_record("OLD"), completed_epoch=clock.now - 8 * 86_400)
+    recent = repo.list_qsos(since_days=7)
+    assert [q.dx_call for q in recent] == ["FRESH"]
+    assert len(repo.list_qsos()) == 2  # no window = all
+    assert len(repo.list_qsos(include_void=False)) == 2  # existing kwargs intact
+
+
 def test_void_after_window_is_refused(repo: Repository, clock: FakeClock) -> None:
     qso_id = repo.record_qso(sample_record())
     clock.advance(31.0)
