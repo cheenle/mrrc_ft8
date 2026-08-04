@@ -2,7 +2,13 @@
 
 from __future__ import annotations
 
-from server.engine.adif_import import dedupe_key, map_record, parse_adif
+from pathlib import Path
+
+import pytest
+
+from server.engine.adif_import import dedupe_key, map_record, parse_adif, sync_jtdx_log
+from server.engine.repository import Repository
+from server.engine.sequencer import QSORecord
 
 SAMPLE = (
     "<call:6>BG4UCZ <gridsquare:4>PM02 <mode:3>FT8 <rst_sent:3>+00 "
@@ -76,3 +82,120 @@ def test_dedupe_key_uses_adif_date() -> None:
     assert record is not None
     key = dedupe_key(record, epoch, fields["qso_date"])
     assert key == ("BG4UCZ", "20230227", "005730", "20m")
+
+
+# ---- sync_jtdx_log ------------------------------------------------------
+
+
+class _Clock:
+    def __init__(self) -> None:
+        self.now = 1_800_000_000.0
+
+    def __call__(self) -> float:
+        return self.now
+
+
+@pytest.fixture()
+def repository_fake() -> Repository:
+    return Repository(":memory:", clock=_Clock())
+
+
+def _sample(
+    call: str,
+    qso_date: str = "20230227",
+    time_on: str = "005730",
+    band: str = "20m",
+    freq: str = "14.075500",
+) -> str:
+    return (
+        f"<call:{len(call)}>{call} <gridsquare:0> <mode:3>FT8 "
+        f"<qso_date:8>{qso_date} <time_on:6>{time_on} "
+        f"<qso_date_off:8>{qso_date} <time_off:6>005900 "
+        f"<band:{len(band)}>{band} <freq:{len(freq)}>{freq} "
+        f"<station_callsign:5>BG1SB <my_gridsquare:5>ON80DA <eor>"
+    )
+
+
+def test_sync_first_run_inserts_all(tmp_path: Path, repository_fake: Repository) -> None:
+    path = tmp_path / "wsjtx_log.adi"
+    path.write_text(_sample("K1ABC") + "\n" + _sample("JA1YAD"))
+    report = sync_jtdx_log(
+        repository_fake, path, my_call="BG1SB", my_grid="ON80DA"
+    )
+    assert report.parsed == 2
+    assert report.inserted == 2
+    assert report.skipped == 0
+    assert report.error is None
+    assert repository_fake.count_rows("qso") == 2
+
+
+def test_sync_second_run_is_idempotent(tmp_path: Path, repository_fake: Repository) -> None:
+    path = tmp_path / "wsjtx_log.adi"
+    path.write_text(_sample("K1ABC"))
+    sync_jtdx_log(repository_fake, path, my_call="BG1SB", my_grid="ON80DA")
+    report = sync_jtdx_log(repository_fake, path, my_call="BG1SB", my_grid="ON80DA")
+    assert report.inserted == 0
+    assert report.skipped == 1
+    assert repository_fake.count_rows("qso") == 1
+
+
+def test_sync_appended_records_import_only_delta(
+    tmp_path: Path, repository_fake: Repository
+) -> None:
+    path = tmp_path / "wsjtx_log.adi"
+    path.write_text(_sample("K1ABC"))
+    sync_jtdx_log(repository_fake, path, my_call="BG1SB", my_grid="ON80DA")
+    with open(path, "a") as f:
+        f.write("\n" + _sample("W1AW"))
+    report = sync_jtdx_log(repository_fake, path, my_call="BG1SB", my_grid="ON80DA")
+    assert report.inserted == 1
+    assert [r.dx_call for r in repository_fake.list_qsos()] == ["W1AW", "K1ABC"]
+
+
+def test_sync_collapses_same_second_duplicates(
+    tmp_path: Path, repository_fake: Repository
+) -> None:
+    """JTDX same-second duplicate attempts (different freq) count once."""
+
+    path = tmp_path / "wsjtx_log.adi"
+    path.write_text(
+        _sample("ON3SGU", freq="21.075500")
+        + "\n"
+        + _sample("ON3SGU", freq="21.075500").replace("005900", "005859")
+    )
+    report = sync_jtdx_log(repository_fake, path, my_call="BG1SB", my_grid="ON80DA")
+    assert report.inserted == 1
+    assert report.skipped == 1
+
+
+def test_sync_missing_file_reports_error_not_crash(
+    tmp_path: Path, repository_fake: Repository
+) -> None:
+    report = sync_jtdx_log(
+        repository_fake, str(tmp_path / "nope.adi"), my_call="BG1SB", my_grid="ON80DA"
+    )
+    assert report.error is not None
+    assert report.inserted == 0
+
+
+def test_sync_never_reimports_live_qso(
+    tmp_path: Path, repository_fake: Repository
+) -> None:
+    """Cross-source dedupe: a live-completed QSO in the ADIF is skipped."""
+
+    repository_fake.record_qso(
+        QSORecord(
+            my_call="BG1SB",
+            my_grid="ON80DA",
+            dx_call="K1ABC",
+            started_utc="005730",
+            band="20m",
+            freq_hz=14_075_500,
+        ),
+        completed_epoch=1677459540.0,  # 2023-02-27 00:59:00 UTC (same date)
+    )
+    path = tmp_path / "wsjtx_log.adi"
+    path.write_text(_sample("K1ABC"))
+    report = sync_jtdx_log(repository_fake, path, my_call="BG1SB", my_grid="ON80DA")
+    assert report.inserted == 0
+    assert repository_fake.count_rows("qso") == 1

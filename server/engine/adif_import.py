@@ -109,3 +109,60 @@ def dedupe_key(
     else:
         date = ""
     return (record.dx_call, date, record.started_utc, record.band)
+
+
+@dataclass
+class SyncReport:
+    parsed: int
+    inserted: int
+    skipped: int
+    error: str | None = None
+
+
+def sync_jtdx_log(
+    repository: Repository,
+    path: str,
+    *,
+    my_call: str,
+    my_grid: str,
+) -> SyncReport:
+    """Read + dedupe + import; never raises on file/parse issues.
+
+    Runs on a worker thread via ``asyncio.to_thread`` in main.py; keeps one
+    audit row per sync (``jtdx_import``, detail ``inserted=.. skipped=..``).
+    """
+
+    try:
+        with open(path, encoding="utf-8", errors="replace") as stream:
+            text = stream.read()
+    except OSError as exc:
+        return SyncReport(0, 0, 0, error=str(exc))
+
+    records = parse_adif(text)
+    existing = repository.dedupe_keys()
+    seen: set[tuple[str, str, str, str]] = set()
+    to_insert: list[tuple[QSORecord, float]] = []
+    skipped = 0
+    for fields in records:
+        mapped = map_record(fields, my_call=my_call, my_grid=my_grid)
+        if mapped is None:
+            skipped += 1
+            continue
+        record, epoch = mapped
+        key = dedupe_key(record, epoch, fields.get("qso_date", ""))
+        if key in existing or key in seen:
+            skipped += 1
+            continue
+        seen.add(key)
+        to_insert.append((record, epoch))
+
+    inserted = repository.import_qsos(to_insert) if to_insert else 0
+    repository.record_audit(
+        actor="system",
+        operation="jtdx_import",
+        detail=f"inserted={inserted} skipped={skipped}",
+    )
+    log.info(
+        "jtdx sync: parsed=%d inserted=%d skipped=%d", len(records), inserted, skipped
+    )
+    return SyncReport(len(records), inserted, skipped)
