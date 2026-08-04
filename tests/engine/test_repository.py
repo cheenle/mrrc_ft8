@@ -102,6 +102,47 @@ def test_audited_void_within_window(repo: Repository, clock: FakeClock) -> None:
     assert len(repo.list_qsos(include_void=True)) == 1
 
 
+def test_fresh_database_has_source_column(repo: Repository) -> None:
+    qso_id = repo.record_qso(sample_record())
+    assert repo.get_qso(qso_id).source == "live"  # type: ignore[union-attr]
+
+
+def test_v1_database_migrates_to_v2_preserving_rows(tmp_path: Path) -> None:
+    """An existing v1 store (no source column) migrates to v2 in place."""
+
+    path = str(tmp_path / "legacy.db")
+    # Build a v1 schema exactly as v1 shipped (no source column).
+    conn = sqlite3.connect(path)
+    conn.executescript(
+        """
+        CREATE TABLE qso (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            my_call TEXT NOT NULL, my_grid TEXT NOT NULL,
+            dx_call TEXT NOT NULL, dx_grid TEXT NOT NULL DEFAULT '',
+            report_sent INTEGER, report_rcvd INTEGER,
+            started_utc TEXT NOT NULL DEFAULT '', mode TEXT NOT NULL DEFAULT 'FT8',
+            freq_hz INTEGER NOT NULL DEFAULT 0, band TEXT NOT NULL DEFAULT '',
+            status TEXT NOT NULL, completed_epoch REAL NOT NULL,
+            void_actor TEXT, void_reason TEXT
+        );
+        INSERT INTO qso (my_call, my_grid, dx_call, status, completed_epoch)
+        VALUES ('M0XX', 'IO91', 'K1ABC', 'completed', 1700000000.0);
+        PRAGMA user_version = 1;
+        """
+    )
+    conn.close()
+
+    repo = Repository(path, clock=clock)
+    stored = repo.get_qso(1)
+    assert stored is not None
+    assert stored.source == "live"  # default for pre-existing rows
+    assert stored.dx_call == "K1ABC"  # row survived the migration
+    conn = sqlite3.connect(path)
+    assert conn.execute("PRAGMA user_version").fetchone()[0] == 2
+    conn.close()
+    repo.close()
+
+
 def test_void_after_window_is_refused(repo: Repository, clock: FakeClock) -> None:
     qso_id = repo.record_qso(sample_record())
     clock.advance(31.0)

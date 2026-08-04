@@ -21,13 +21,14 @@ import threading
 import time
 from collections.abc import Callable
 from dataclasses import dataclass
+from datetime import datetime, timezone
 from enum import StrEnum
 
 from .sequencer import QSORecord
 
 log = logging.getLogger(__name__)
 
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 2
 UNDO_WINDOW_S = 30.0  # §6: automatic completion can be undone for 30 s
 DECODE_RETENTION_S = 7 * 86_400  # NFR-071
 AUDIT_RETENTION_S = 90 * 86_400  # NFR-071
@@ -59,6 +60,7 @@ class StoredQSO:
     completed_epoch: float
     void_actor: str | None
     void_reason: str | None
+    source: str
 
 
 class VoidWindowExpired(Exception):
@@ -80,6 +82,7 @@ CREATE TABLE IF NOT EXISTS qso (
     band TEXT NOT NULL DEFAULT '',
     status TEXT NOT NULL,
     completed_epoch REAL NOT NULL,
+    source TEXT NOT NULL DEFAULT 'live',
     void_actor TEXT,
     void_reason TEXT
 );
@@ -114,7 +117,7 @@ CREATE TABLE IF NOT EXISTS setting_meta (
 _QSO_COLUMNS = (
     "id, my_call, my_grid, dx_call, dx_grid, report_sent, report_rcvd,"
     " started_utc, mode, freq_hz, band, status, completed_epoch,"
-    " void_actor, void_reason"
+    " void_actor, void_reason, source"
 )
 
 
@@ -188,6 +191,16 @@ class Repository:
         if version < SCHEMA_VERSION:
             with self._db:
                 self._db.executescript(_SCHEMA)
+                # v1 stores lack the source column; a fresh v2 CREATE TABLE
+                # already has it, so the ALTER only fires for pre-existing
+                # stores (in-place migration preserves every row).
+                columns = {
+                    row[1] for row in self._db.execute("PRAGMA table_info(qso)")
+                }
+                if "source" not in columns:
+                    self._db.execute(
+                        "ALTER TABLE qso ADD COLUMN source TEXT NOT NULL DEFAULT 'live'"
+                    )
                 self._db.execute(f"PRAGMA user_version = {SCHEMA_VERSION}")
 
     def _write(self, fn: Callable[[], object]) -> object:
@@ -215,6 +228,7 @@ class Repository:
         *,
         status: QsoStatus = QsoStatus.COMPLETED,
         completed_epoch: float | None = None,
+        source: str = "live",
     ) -> int:
         """Insert one QSO (from the sequencer's log record); returns its id."""
 
@@ -225,7 +239,7 @@ class Repository:
                 cursor = self._db.execute(
                     "INSERT INTO qso (my_call, my_grid, dx_call, dx_grid, report_sent,"
                     " report_rcvd, started_utc, mode, freq_hz, band, status,"
-                    " completed_epoch) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)",
+                    " completed_epoch, source) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)",
                     (
                         record.my_call,
                         record.my_grid,
@@ -239,6 +253,7 @@ class Repository:
                         record.band,
                         status.value,
                         epoch,
+                        source,
                     ),
                 )
                 qso_id = int(cursor.lastrowid)
@@ -469,4 +484,5 @@ class Repository:
             completed_epoch=float(row["completed_epoch"]),
             void_actor=row["void_actor"],
             void_reason=row["void_reason"],
+            source=row["source"],
         )
