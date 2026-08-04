@@ -4,6 +4,12 @@
 
 - Promoted the live station build to **v1.0.0**. The 2026-08-03 field session closed the RX/TX root causes (UtcRing eviction misalignment, Replay opposite-TX-slot phase, manual-Reply decision window); on 2026-08-04 the FT-710 rig controls were completed (filter width + ATT/PREAMP/AGC/RF gain via raw CAT, verified live on hamlib 4.7.2). Real FT8 QSOs are worked through the mobile cockpit. Tagged `v1.0.0`; the GitHub release notes enumerate the 2026-08-01 design baseline through the 2026-08-04 rig-control completion.
 
+## Unreleased — 2026-08-04 — QSO Log Overlay Renders (missing `ok` envelope fixed)
+
+- Field report: the drawer's **Log** tab always showed an empty/error view even though the canonical store held completed QSOs. Root cause: `GET /logs/qsos` returned a bare `{qsos, revision}` body while every other endpoint (mutations, `/radio/rig/levels`, `/session/current`) returns the `_ok` envelope `{ok: true, …}`; the drawer's `api.qsos()` gate is `res.ok`, so a 200 without the key took the error branch every time ("Could not load log: 200").
+- Fix: `logs_qsos` now returns `_ok({qsos, revision})`, matching the codebase envelope convention. The database-path question was also re-verified: `mrrc-ft8.db` is cwd-relative and the restart wrapper starts from the project root, so the running server uses `~/HAM/ft8/mrrc-ft8.db` (23 completed QSOs, newest with freq/band after the sequencer-context fix). The DBMOVED self-heal (bb6f752) already covers the external-replace incident.
+- Regression: `test_qso_listing_and_audited_void` asserts `listing["ok"] is True` alongside the existing payload check; full `tests/web/` suite passes.
+
 ## Unreleased — 2026-08-04 — FT-710 Rig Levels (ATT/PREAMP/AGC/RF): Raw-CAT Read/Write Through rigctld
 
 - Field report: after the filter-width fix and the hamlib **4.7.2** upgrade, the drawer's filter selector works but **ATT/PREAMP/AGC/RF gain** do not — `POST /radio/rig/level` returns success yet the rig never changes. Root cause was **not** the CAT frames (the filter bug was) but hamlib's level abstraction itself: the FT-710 never answers `L <name>` (times out / drops the session) and the `l <name> <value>` write path is equally unreliable, so the level readback reported the rig's stored state while the write silently did nothing or failed.

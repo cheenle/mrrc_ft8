@@ -560,6 +560,8 @@ def test_qso_listing_and_audited_void(client: TestClient, state: AppState) -> No
     session_id = login(client)
 
     listing = client.get("/api/v1/logs/qsos", headers=auth_headers(session_id)).json()
+    # The drawer gates on ``res.ok``; the _ok envelope is part of the contract.
+    assert listing.get("ok") is True
     assert listing["qsos"][0]["dx_call"] == "K1ABC"
 
     voided = client.post(
