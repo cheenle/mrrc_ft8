@@ -713,7 +713,10 @@ def create_router(state: AppState) -> APIRouter:
         try:
             import httpx
 
-            async with httpx.AsyncClient(timeout=5.0) as client:
+            # Deep windows (1/3/7 days) take up to ~5-8 s to fetch + filter on
+            # first (uncached) hit, so the dashboard proxy needs headroom well
+            # past the poller's 5 s timeout.
+            async with httpx.AsyncClient(timeout=20.0) as client:
                 resp = await client.get(state.band_hunt_url, params=params)
                 resp.raise_for_status()
                 body = resp.json()
