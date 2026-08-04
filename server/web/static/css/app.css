@@ -88,6 +88,7 @@ body {
 .candidate:hover { background: var(--edge); }
 .candidate.selected { background: #22405c; }
 .candidate.stale { opacity: 0.4; }
+.candidate.new-dxcc { color: #b06fdf; }
 .separator {
   padding: 4px 12px; text-align: center; color: var(--dim);
   border-bottom: 1px solid var(--edge); font-size: 0.85em;

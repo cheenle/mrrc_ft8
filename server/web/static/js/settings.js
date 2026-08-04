@@ -53,6 +53,15 @@ export function createSettingsDrawer() {
   // Seed the settings into state so the candidate list can filter.
   if (!getState().settings) patch({ settings: loadSettings() });
 
+  // 后端持久化设置覆盖 localStorage 默认（auto_call_new_dxcc 权威在后端）。
+  api.settings().then((res) => {
+    if (res.ok && res.settings) {
+      const merged = { ...loadSettings(), ...res.settings };
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(merged));
+      patch({ settings: merged });
+    }
+  });
+
   function open() {
     backdrop.hidden = false;
     drawer.hidden = false;
@@ -248,12 +257,22 @@ export function createSettingsDrawer() {
         <span>Hide my own echoes</span>
         <input type="checkbox" data-setting="hideMine" ${s.hideMine ? "checked" : ""}>
       </label>
+      <label class="setting-row toggle">
+        <span>Auto-call new DXCC</span>
+        <input type="checkbox" data-setting="auto_call_new_dxcc" ${s.auto_call_new_dxcc ? "checked" : ""}>
+      </label>
       <div class="drawer-hint dim">These display preferences are stored in this
         browser and apply immediately to the Band Activity list.</div>`;
     for (const input of content.querySelectorAll("[data-setting]")) {
       input.addEventListener("change", () => {
         const value = input.type === "checkbox" ? input.checked : input.value;
         saveSettings({ [input.dataset.setting]: value });
+        // auto_call_new_dxcc 的权威状态在后端（无人值守自动呼叫读它）。
+        if (input.dataset.setting === "auto_call_new_dxcc") {
+          api.putSetting("auto_call_new_dxcc", Boolean(value)).then((res) => {
+            if (!res.ok) showToast(`Auto-call setting: ${res.reason || res.status}`);
+          });
+        }
       });
     }
   }

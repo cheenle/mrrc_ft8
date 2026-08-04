@@ -84,6 +84,9 @@ export const api = {
     }),
   qsos: () => request("/logs/qsos"),
   dxcc: () => request("/dxcc"),
+  settings: () => request("/settings"),
+  putSetting: (key, value) =>
+    request("/settings", { method: "PUT", idempotencyKey: key(), body: { [key]: value } }),
   txOff: () => request("/operation/enable_tx_off", { method: "POST", idempotencyKey: key() }),
   stop: () => request("/operation/stop", { method: "POST", idempotencyKey: key() }),
   clearFault: (interlock) =>

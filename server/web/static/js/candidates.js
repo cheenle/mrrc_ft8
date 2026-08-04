@@ -60,6 +60,7 @@ export function createCandidates(listElement) {
       const item = document.createElement("li");
       item.className = "candidate";
       if (candidate.is_cq) item.classList.add("cq");
+      if (candidate.is_new_dxcc) item.classList.add("new-dxcc");
       if (candidate.to_me) item.classList.add("to-me");
       if (candidate.mine) item.classList.add("mine");
       if (candidate.late) item.classList.add("late");
