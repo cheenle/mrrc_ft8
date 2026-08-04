@@ -404,3 +404,53 @@ def test_decode_message_view_not_new_when_entity_worked() -> None:
 
     item = decode_message_view(FakeSlotMessage(), "M0XX", is_new_dxcc=False)
     assert item["is_new_dxcc"] is False
+
+
+# ---- auto_call_candidate 矩阵（决策 A/B）---------------------------------
+
+
+def test_auto_call_candidate_fires_on_new_dxcc_cq_when_idle() -> None:
+    from server.main import auto_call_candidate
+
+    view = {"is_new_dxcc": True, "is_cq": True, "mine": False, "call": "K7TEST"}
+    assert auto_call_candidate(
+        view, sequencer_state="idle", has_selection=False, auto_call_enabled=True
+    ) is True
+
+
+def test_auto_call_candidate_skips_when_disabled_or_busy() -> None:
+    from server.main import auto_call_candidate
+
+    view = {"is_new_dxcc": True, "is_cq": True, "mine": False}
+    # 开关关
+    assert auto_call_candidate(
+        view, sequencer_state="idle", has_selection=False, auto_call_enabled=False
+    ) is False
+    # 忙（非 idle）
+    assert auto_call_candidate(
+        view, sequencer_state="replying", has_selection=False, auto_call_enabled=True
+    ) is False
+    # 有人工选择
+    assert auto_call_candidate(
+        view, sequencer_state="idle", has_selection=True, auto_call_enabled=True
+    ) is False
+
+
+def test_auto_call_candidate_skips_non_new_or_non_cq_or_mine() -> None:
+    from server.main import auto_call_candidate
+
+    # 已通联实体
+    assert auto_call_candidate(
+        {"is_new_dxcc": False, "is_cq": True, "mine": False},
+        sequencer_state="idle", has_selection=False, auto_call_enabled=True,
+    ) is False
+    # 非 CQ（别人的交换消息）
+    assert auto_call_candidate(
+        {"is_new_dxcc": True, "is_cq": False, "mine": False},
+        sequencer_state="idle", has_selection=False, auto_call_enabled=True,
+    ) is False
+    # 自己的回显
+    assert auto_call_candidate(
+        {"is_new_dxcc": True, "is_cq": True, "mine": True},
+        sequencer_state="idle", has_selection=False, auto_call_enabled=True,
+    ) is False

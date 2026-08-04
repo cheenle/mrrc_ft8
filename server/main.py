@@ -38,7 +38,7 @@ from .engine.orchestrator import Orchestrator
 from .engine.repository import Repository
 from .engine.rig import RigClient
 from .engine.safety import Interlock, SafetyController
-from .engine.sequencer import DisarmReason, QsoContext, Sequencer
+from .engine.sequencer import DisarmReason, QsoContext, QSOState, Sequencer
 from .engine.bands import band_from_freq_hz
 from .engine.audio_tx import TxPlayer
 from .engine.waterfall import SpectrumComputer, SpectrumFanout
@@ -174,6 +174,70 @@ def decode_message_view(
         and base_call(parsed.from_call) == base_call(my_call),
         "is_new_dxcc": is_new_dxcc,
     }
+
+
+def auto_call_candidate(
+    view: dict[str, Any],
+    *,
+    sequencer_state: str,
+    has_selection: bool,
+    auto_call_enabled: bool,
+) -> bool:
+    """Decision A/B: auto-QSO the first new-DXCC CQ when idle, no manual
+    selection, and the backend switch is on.  Never interrupts a QSO."""
+
+    return (
+        auto_call_enabled
+        and not has_selection
+        and sequencer_state == QSOState.IDLE.value
+        and bool(view.get("is_new_dxcc"))
+        and bool(view.get("is_cq"))
+        and not view.get("mine")
+    )
+
+
+async def _auto_call(
+    state: Any, repository: Any, view: dict[str, Any], slot_id: int, tx_phase: int
+) -> None:
+    """Arm TX (interlock-gated) then drive the full QSO via the sequencer.
+
+    System-level: no control lease is taken (unattended), but safety.arm is
+    the single TX gate — a refusal (fault) skips this slot and the next one
+    retries.  Audit row ``auto_call`` records the intent.
+    """
+
+    from .engine.msgparse import ParsedMessage
+    from .engine.safety import TxRefused
+
+    call = str(view.get("call") or "")
+    try:
+        await state.safety.arm()
+    except TxRefused:
+        log.info("auto_call skipped: interlock open (%s)", call)
+        return
+    except Exception:
+        log.exception("auto_call arm failed (%s)", call)
+        return
+    try:
+        state.selected = ParsedMessage(
+            text=str(view.get("text") or call),
+            is_cq=True,
+            from_call=call.upper(),
+            grid=str(view.get("grid") or "").upper(),
+        )
+        state.selected_snr_db = view.get("snr")
+        state.selected_slot_id = slot_id
+        state.sequencer.reply_to(state.selected, view.get("snr"), tx_phase=tx_phase)
+        await asyncio.to_thread(
+            repository.record_audit,
+            actor="system",
+            operation="auto_call",
+            target=call,
+            detail=f"snr={view.get('snr')} new_dxcc",
+        )
+        log.info("auto_call: %s snr=%s slot=%d", call, view.get("snr"), slot_id)
+    except Exception:
+        log.exception("auto_call failed for %s", call)
 
 
 def create_server(
@@ -428,6 +492,24 @@ def create_server(
                         message.result.dt, message.result.frequency,
                         message.result.text,
                     )
+            # Auto-call (decision A): first new-DXCC CQ when idle and the
+            # backend switch is on; never interrupts a QSO or a manual pick.
+            auto_enabled = repository.get_setting("auto_call_new_dxcc") is True
+            if auto_enabled and sequencer.state is QSOState.IDLE and state.selected is None:
+                for view in views:
+                    if auto_call_candidate(
+                        view,
+                        sequencer_state=sequencer.state.value,
+                        has_selection=state.selected is not None,
+                        auto_call_enabled=auto_enabled,
+                    ):
+                        slot_id = slot_decode.slot_id
+                        tx_phase = 0 if slot_id is None else 1 - (slot_id % 2)
+                        asyncio.get_running_loop().create_task(
+                            _auto_call(state, repository, view, slot_id, tx_phase)
+                        )
+                        break  # first new DXCC in this slot only
+
             state.decode_broadcast.publish(batch)
             for message in slot_decode.messages:
                 asyncio.get_running_loop().create_task(
