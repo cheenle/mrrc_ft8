@@ -1,6 +1,6 @@
 [project]
 name = "mrrc-ft8"
-version = "0.1.0"
+version = "1.0.0"
 description = "Headless FT8/FT4 server (WSJT-X DSP core) with mobile web remote"
 requires-python = ">=3.11"
 dependencies = [
