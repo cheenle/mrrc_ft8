@@ -345,6 +345,48 @@
       </div>
     </section>
 
+    <!-- Deploy -->
+    <section class="section" id="deploy" style="background: var(--bg-primary)">
+      <div class="container">
+        <div class="section-header">
+          <span class="section-label">Install &amp; Deploy</span>
+          <h2 class="section-title">Production Deployment</h2>
+          <p class="section-subtitle">
+            The app binds loopback-only; Caddy owns the public edge. macOS
+            LaunchAgent and Linux systemd units plus Caddy configs live in
+            <code>deploy/</code>.
+          </p>
+        </div>
+        <div class="steps">
+          <div class="step">
+            <h4>1 · Generate the password hash</h4>
+            <p>Argon2id hash for <code>MRRC_FT8_PASSWORD_HASH</code> — prompts so the password never lands in shell history.</p>
+            <code>venv/bin/python -m server.main --hash-password</code>
+          </div>
+          <div class="step">
+            <h4>2 · Configure secrets</h4>
+            <p>A <code>.env</code> (or the service env file) must define the hash, call sign and grid; optional overrides for allowed hosts and the audio device. The server refuses to start without the first three.</p>
+            <code>MRRC_FT8_PASSWORD_HASH=… MRRC_FT8_MY_CALL=BG1SB MRRC_FT8_MY_GRID=…</code>
+          </div>
+          <div class="step">
+            <h4>3 · Run as a service</h4>
+            <p>macOS: copy <code>deploy/com.mrrc.ft8.plist</code> to <code>~/Library/LaunchAgents/</code> and bootstrap it. Linux: install <code>deploy/mrrc-ft8.service</code>, create <code>/etc/mrrc-ft8.env</code>, and <code>systemctl enable --now mrrc-ft8</code>.</p>
+            <code>launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.mrrc.ft8.plist</code>
+          </div>
+          <div class="step">
+            <h4>4 · Public edge (Caddy)</h4>
+            <p>Copy <code>deploy/Caddyfile</code> to <code>/etc/caddy/</code> and run Caddy as a LaunchDaemon; set <code>MRRC_FT8_ALLOWED_HOSTS</code> to the same domain so the Host/Origin checks pass.</p>
+            <code>reverse_proxy 127.0.0.1:8000</code>
+          </div>
+          <div class="step">
+            <h4>5 · Deploy the website</h4>
+            <p>This site ships from the repo — <code>website/deploy.sh</code> backs up, uploads to www.vlsc.net/mrrc_ft8 and reloads nginx.</p>
+            <code>cd website &amp;&amp; ./deploy.sh</code>
+          </div>
+        </div>
+      </div>
+    </section>
+
     <!-- Requirements -->
     <section
       class="section"
