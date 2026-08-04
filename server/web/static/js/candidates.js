@@ -30,8 +30,11 @@ export function createCandidates(listElement) {
   function visible(candidate, settings, workedCalls) {
     if (settings.showOnlyCQ && !candidate.is_cq) return false;
     if (settings.hideMine && candidate.mine) return false;
-    if (settings.hideWorked && candidate.from_call) {
-      const base = String(candidate.from_call).split("/")[0].toUpperCase();
+    if (settings.hideWorked && candidate.call) {
+      // WS decode messages carry the originator under ``call`` (see
+      // decode_message_view); ``from_call`` was the parser's internal name
+      // and never reached the wire — the filter silently matched nothing.
+      const base = String(candidate.call).split("/")[0].toUpperCase();
       if (workedCalls.includes(base)) return false;
     }
     return true;
