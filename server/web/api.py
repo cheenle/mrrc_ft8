@@ -135,6 +135,24 @@ def _reject(status: int, reason: str, **extra: Any) -> JSONResponse:
     return JSONResponse({"ok": False, "reason": reason, **extra}, status_code=status)
 
 
+_cty_cache: Any = None
+
+
+def _cty_database() -> Any:
+    """Repository-root cty.dat loaded once; empty db on any failure."""
+
+    global _cty_cache
+    if _cty_cache is not None:
+        return _cty_cache
+    from pathlib import Path
+
+    from ..engine.dxcc import load_cty
+
+    path = Path(__file__).resolve().parents[2] / "cty.dat"
+    _cty_cache = load_cty(str(path))
+    return _cty_cache
+
+
 def get_state(request: Request) -> AppState:
     return request.app.state.app_state
 
@@ -659,6 +677,17 @@ def create_router(state: AppState) -> APIRouter:
             media_type="text/plain",
             headers={"content-disposition": 'attachment; filename="mrrc-ft8.adi"'},
         )
+
+    # ---- DXCC -------------------------------------------------------------
+
+    @router.get("/dxcc")
+    async def dxcc(session: Session = Depends(require_session)) -> JSONResponse:
+        from ..engine.dxcc import dxcc_summary
+
+        summary = await asyncio.to_thread(
+            dxcc_summary, state.repository, _cty_database()
+        )
+        return _ok(summary.to_dict())
 
     # ---- diagnostics ---------------------------------------------------------
 

@@ -778,3 +778,20 @@ def test_adif_export_windows_to_recent_week(client: TestClient, state: AppState)
     ).text
     assert "FRESH1" in text
     assert "OLD1" not in text
+
+
+def test_dxcc_requires_authentication(client: TestClient) -> None:
+    assert client.get("/api/v1/dxcc").status_code == 401
+
+
+def test_dxcc_returns_ok_envelope_with_summary(client: TestClient, state: AppState) -> None:
+    state.repository.record_qso(
+        QSORecord(my_call="M0XX", my_grid="IO91", dx_call="BI1TX", band="20m")
+    )
+    session_id = login(client)
+    body = client.get("/api/v1/dxcc", headers=auth_headers(session_id)).json()
+    assert body.get("ok") is True
+    assert isinstance(body["total"], int)
+    assert body["total"] >= 1
+    assert "entities" in body and "by_band" in body
+    assert isinstance(body["entities"], list)
