@@ -197,7 +197,7 @@ def auto_call_candidate(
 
 
 async def _auto_call(
-    state: Any, repository: Any, view: dict[str, Any], slot_id: int, tx_phase: int
+    state: Any, repository: Any, view: dict[str, Any], slot_id: int | None, tx_phase: int
 ) -> None:
     """Arm TX (interlock-gated) then drive the full QSO via the sequencer.
 
