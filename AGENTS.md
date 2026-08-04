@@ -40,6 +40,7 @@ venv/bin/python -m pytest tests/
 | `dsp/wsjt_improved.f90` | Improved profiles 0–4、确定性 A8 owner、严格 OpenMP team 校验和纯 Fortran batch 调度 |
 | `dsp/wsjt_test_hooks.f90` | 仅 `MRRC_FT8_TEST_HOOKS=ON` 时编译的非生产 direct-A8 测试入口 |
 | `server/core/` | DSP Worker/supervisor；ctypes 绑定 wsjt_core；全局 DSP lock |
+| `server/engine/adif_import.py` | JTDX `wsjtx_log.adi` 容错解析（容忍半行写入）+ 去重键 `(dx_call, utc日期, started_utc, band)` + `sync_jtdx_log` 幂等增量导入；启动 + 每小时由 main.py 调度 |
 | `server/engine/` | 编排器（UTC 时隙）、音频 RX/TX、rig（rigctld）、sequencer、TX 链路（dsp_encode 编码、tx_driver 时隙奇偶泵 + I9 决策窗口/fit guard、cq_loop 自动 CQ 循环、qso_log 落库助手）、waterfall（3 kHz 频谱）、ADIF；音频采集运行在独立子进程（capture_proc，进程边界隔离 CoreAudio 会话退化）；UtcRing 按绝对序号 `X % capacity` 寻址 |
 | `server/web/` | FastAPI REST/WS + 移动 PWA 静态资源（含 `band.js` 波段选择） |
 | `deploy/` | Caddyfile（模板+live 实例）、Caddy root LaunchDaemon、systemd unit、macOS LaunchAgent（密码哈希经 `python -m server.main --hash-password` bootstrap） |

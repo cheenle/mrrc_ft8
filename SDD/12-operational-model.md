@@ -36,6 +36,8 @@ Priority STOP runs before audio/rig/worker teardown. An in-progress QSO becomes 
 
 Configuration covers domain/proxy trust, password-hash bootstrap, radio/rigctld, audio devices, station identity, band table, decoder profile/threads, safety deadlines, storage/retention and logging. Secrets are never committed. Safety-impacting invalid values fail startup. V1.0 decoder defaults (I9): profile 3, threads Auto = `clamp(cpu_count - 1, 1, 12)`, decode-lateness cutoff slot end + 2.5 s. The reply TX decision window is `TX_DECISION_CUTOFF_SECONDS` (5.0) with a fit guard at ~2.4 s into the slot.
 
+`MRRC_FT8_JTDX_LOG_PATH` (empty = disabled) points at the JTDX ADIF export (`~/FB/JTDX/wsjtx_log.adi`); the server imports it once at startup and then every hour, additive and idempotent — a missing file only logs a warning and the hourly tick retries. LOG surfaces (`/logs/qsos`, `/logs/adif`) are windowed to the last 7 days (NFR-085).
+
 ## 12.7 Backup and Retention
 
 - QSO database and configuration are backup-critical.

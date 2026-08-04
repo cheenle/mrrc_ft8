@@ -59,3 +59,5 @@ STARTING -> READY -> BUSY -> READY
 
 SQLite is canonical. Minimum tables are `qso`, `qso_event`, `audit_event`, `decode_event`, `setting_meta` and schema migration metadata. Session secrets remain in a dedicated security store/runtime and are never included in diagnostics. ADIF is a generated interoperability artifact, not the sole database.
 
+The `qso` row carries a `source` attribute: `'live'` (completed through the sequencer) or `'jtdx'` (imported from the JTDX ADIF export). The JTDX import path (`server/engine/adif_import.py`) is additive and idempotent — a record is skipped when its dedupe key `(dx_call, utc date, started_utc, band)` already exists in any source, so a live QSO is never re-imported and re-syncs only add new rows.
+

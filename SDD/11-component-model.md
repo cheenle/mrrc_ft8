@@ -136,12 +136,13 @@ signal and is never part of the production surface.
 | `msgparse.py` | Supported standard-message parsing and validation |
 | `repository.py` | SQLite transactions, retention and schema migrations |
 | `adif.py` | ADIF generation/export from canonical QSO data |
+| `adif_import.py` | JTDX ADIF export parser + idempotent incremental import (`sync_jtdx_log`); dedupe key `(dx_call, utc date, started_utc, band)`; `source='jtdx'` rows |
 
 ## 11.3 Web Layer
 
 | Component | Responsibility |
 |---|---|
-| `main.py` | Lifespan composition root — wires the TX driver, CQ loop controller and watchdog-polled QSO logging — and Uvicorn entry point |
+| `main.py` | Lifespan composition root — wires the TX driver, CQ loop controller, watchdog-polled QSO logging, startup + hourly JTDX ADIF sync — and Uvicorn entry point |
 | `web/auth.py` | Password hash, sessions, re-auth and rate limiting |
 | `web/lease.py` | Acquire/heartbeat/release/expiry and dead-man callback |
 | `web/api.py` | Versioned REST intent endpoints |

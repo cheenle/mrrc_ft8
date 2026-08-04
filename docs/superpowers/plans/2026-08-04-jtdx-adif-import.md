@@ -389,7 +389,7 @@ def test_map_record_rejects_unparseable() -> None:
     assert map_record(
         {"call": "K1ABC", "qso_date": "bad", "time_on": "nope"},
         my_call="M0XX", my_grid="IO91",
-    ) is None  # no qso_date -> dropped (qso_date/time_on required)
+    ) is None  # qso_date/time_on must be valid digits
 
 
 def test_dedupe_key_uses_adif_date() -> None:
@@ -421,10 +421,8 @@ from __future__ import annotations
 
 import logging
 import re
-import time
 from dataclasses import dataclass
 from datetime import datetime, timezone
-from typing import Any
 
 from .repository import Repository
 from .sequencer import QSORecord
@@ -481,7 +479,9 @@ def map_record(
     call = fields.get("call", "").strip()
     qso_date = fields.get("qso_date", "").strip()
     time_on = fields.get("time_on", "").strip()
-    if not call or not qso_date or not time_on:
+    if not call or len(qso_date) != 8 or not qso_date.isdigit():
+        return None
+    if len(time_on) != 6 or not time_on.isdigit():
         return None
     freq_hz = 0
     freq = fields.get("freq", "").strip()
@@ -612,7 +612,7 @@ def test_sync_never_reimports_live_qso(tmp_path, clock_fake) -> None:
     repository_fake.record_qso(
         QSORecord(my_call="BG1SB", my_grid="ON80DA", dx_call="K1ABC",
                   started_utc="005730", band="20m", freq_hz=14_075_500),
-        completed_epoch=1677473940.0,   # 2023-02-27 00:59:00 UTC (same date)
+        completed_epoch=1677459540.0,   # 2023-02-27 00:59:00 UTC (same date)
     )
     path = str(tmp_path / "wsjtx_log.adi")
     path.write_text(_sample("K1ABC"))
