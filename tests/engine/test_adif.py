@@ -32,6 +32,7 @@ def stored(
         completed_epoch=epoch,
         void_actor=None,
         void_reason=None,
+        source="live",
     )
 
 
