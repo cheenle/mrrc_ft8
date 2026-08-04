@@ -722,6 +722,44 @@ def create_router(state: AppState) -> APIRouter:
                 body = resp.json()
         except Exception as exc:
             return _reject(502, "band_hunt_unreachable", detail=str(exc))
+        if not isinstance(body, dict) or body.get("ok") is not True:
+            return JSONResponse(body if isinstance(body, dict) else {"ok": False, "reason": "bad_upstream"})
+
+        # Unify the concept: here "spots" are NEW-DXCC spots.  The upstream
+        # pskreporter endpoint returns every nearby spot; the authoritative
+        # worked-entity set (canonical QSO log → cty.dat) lives on this side,
+        # so filter here and drop bands with no new-DXCC spot left.
+        from ..engine.dxcc import dxcc_summary
+
+        cache = state.dxcc_cache
+        if cache is None or state.repository.dxcc_dirty:
+            cache = await asyncio.to_thread(
+                dxcc_summary, state.repository, _cty_database()
+            )
+            state.dxcc_cache = cache
+            state.repository.dxcc_dirty = False
+        worked = {e.name for e in cache.entities}
+        cty = _cty_database()
+        bands_out: list[dict[str, Any]] = []
+        for band in body.get("bands", []):
+            spots = band.get("spots") or []
+            new_spots, worked_n = [], 0
+            for s in spots:
+                ent = cty.lookup((s.get("callsign") or "").upper())
+                name = ent[0] if ent else None
+                if name and name in worked:
+                    worked_n += 1
+                    continue  # already worked — not a hunt opportunity
+                new_spots.append(s)
+            if not new_spots:
+                continue  # band yields no new DXCC — drop it
+            out = dict(band)
+            out["spots"] = new_spots
+            out["new_spot_count"] = len(new_spots)
+            out["worked_spot_count"] = worked_n
+            bands_out.append(out)
+        body = dict(body)
+        body["bands"] = bands_out
         return JSONResponse(body)
 
     # ---- diagnostics ---------------------------------------------------------

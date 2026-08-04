@@ -5,6 +5,7 @@ from __future__ import annotations
 import io
 import tarfile
 import time
+from types import SimpleNamespace
 
 import pytest
 from fastapi.testclient import TestClient
@@ -906,7 +907,19 @@ def test_band_hunt_proxy_forwards_params_and_body(
         async def get(self, url: str, params: object = None) -> _FakeResponse:
             captured["url"] = url
             captured["params"] = params
-            return _FakeResponse({"ok": True, "bands": [{"band": "20m"}]})
+            return _FakeResponse({
+                "ok": True,
+                "bands": [{
+                    "band": "20m",
+                    "nearby_spot_count": 1,
+                    "spots": [{
+                        "callsign": "TN8GD", "entity": "Republic of the Congo",
+                        "band": "20m", "frequency": 14074441, "snr": -13,
+                        "receiver_locator": "OM65NB",
+                        "qso_time": "2026-08-03T08:59:30",
+                    }],
+                }],
+            })
 
     monkeypatch.setattr("httpx.AsyncClient", _FakeClient)
     session_id = login(client)
@@ -921,6 +934,116 @@ def test_band_hunt_proxy_forwards_params_and_body(
     assert params["window_min"] == "10"
     assert params["detail"] == "1"
     assert params["home_grid"] == state.my_grid.upper()
+
+
+def test_band_hunt_proxy_filters_to_new_dxcc(
+    monkeypatch: pytest.MonkeyPatch, client: TestClient, state: AppState
+) -> None:
+    """The proxy keeps only NEW-DXCC spots (worked-entity set is authoritative)."""
+    state.band_hunt_url = "http://psk.test/api/band_hunt"
+    state.dxcc_cache = SimpleNamespace(entities=[SimpleNamespace(name="Japan")])
+    state.repository.dxcc_dirty = False
+
+    upstream = {
+        "ok": True,
+        "bands": [{
+            "band": "20m",
+            "nearby_spot_count": 2,
+            "spots": [
+                {"callsign": "JA1AAA", "entity": "Japan", "band": "20m",
+                 "frequency": 14074000, "snr": -9, "receiver_locator": "PM73",
+                 "qso_time": "2026-08-05T01:00:00"},
+                {"callsign": "TN8GD", "entity": "Republic of the Congo", "band": "20m",
+                 "frequency": 14074441, "snr": -13, "receiver_locator": "OM65NB",
+                 "qso_time": "2026-08-03T08:59:30"},
+            ],
+        }],
+    }
+
+    class _FakeResponse:
+        def __init__(self, payload: dict) -> None:
+            self._payload = payload
+
+        def raise_for_status(self) -> None:
+            return None
+
+        def json(self) -> dict:
+            return self._payload
+
+    class _FakeClient:
+        def __init__(self, *args: object, **kwargs: object) -> None:
+            pass
+
+        async def __aenter__(self) -> "_FakeClient":
+            return self
+
+        async def __aexit__(self, *args: object) -> None:
+            return None
+
+        async def get(self, url: str, params: object = None) -> _FakeResponse:
+            return _FakeResponse(upstream)
+
+    monkeypatch.setattr("httpx.AsyncClient", _FakeClient)
+    session_id = login(client)
+    res = client.get(
+        "/api/v1/band-hunt?window_min=4320&detail=1", headers=auth_headers(session_id)
+    )
+    assert res.status_code == 200
+    bands = res.json()["bands"]
+    assert len(bands) == 1  # band survives because it still has a new-DXCC spot
+    assert bands[0]["new_spot_count"] == 1
+    assert bands[0]["worked_spot_count"] == 1
+    assert [s["callsign"] for s in bands[0]["spots"]] == ["TN8GD"]
+
+
+def test_band_hunt_proxy_drops_fully_worked_band(
+    monkeypatch: pytest.MonkeyPatch, client: TestClient, state: AppState
+) -> None:
+    """A band whose every nearby spot is already worked is not an opportunity."""
+    state.band_hunt_url = "http://psk.test/api/band_hunt"
+    state.dxcc_cache = SimpleNamespace(entities=[SimpleNamespace(name="Japan")])
+    state.repository.dxcc_dirty = False
+
+    upstream = {
+        "ok": True,
+        "bands": [{
+            "band": "20m",
+            "nearby_spot_count": 1,
+            "spots": [{
+                "callsign": "JA1AAA", "entity": "Japan", "band": "20m",
+                "frequency": 14074000, "snr": -9, "receiver_locator": "PM73",
+                "qso_time": "2026-08-05T01:00:00",
+            }],
+        }],
+    }
+
+    class _FakeResponse:
+        def raise_for_status(self) -> None:
+            return None
+
+        def json(self) -> dict:
+            return upstream
+
+    class _FakeClient:
+        def __init__(self, *args: object, **kwargs: object) -> None:
+            pass
+
+        async def __aenter__(self) -> "_FakeClient":
+            return self
+
+        async def __aexit__(self, *args: object) -> None:
+            return None
+
+        async def get(self, url: str, params: object = None) -> _FakeResponse:
+            return _FakeResponse()
+
+    monkeypatch.setattr("httpx.AsyncClient", _FakeClient)
+    session_id = login(client)
+    res = client.get(
+        "/api/v1/band-hunt?window_min=4320&detail=1", headers=auth_headers(session_id)
+    )
+    assert res.status_code == 200
+    assert res.json()["bands"] == []
 
 
 def test_auto_call_setting_rejects_non_bool(client: TestClient) -> None:

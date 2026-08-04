@@ -7,7 +7,7 @@
 - 配置：`MRRC_FT8_BAND_HUNT_URL`（默认空 = 功能整体不加载）+ `RADIUS_KM`/`WINDOW_MIN`/`INTERVAL`/`COOLDOWN`（越界值回退默认，不 fail-startup）；设置菜单栏加 `auto_band_hunt` 开关（后端持久化，`/settings`）。
 - 波段扩展：FT8 波段选择从 7/14/21/28 MHz 扩到 **7/10/14/18/21/24/28 MHz**（FT8 呼号频点）；pskreporter `band_utils` 新增 `FT8_DIAL_FREQ` 单源表。
 - 依赖：`httpx` 从 dev 移到运行时依赖（生产轮询用，默认 5 s 超时）。
-- 驾驶舱看板：Auto band hunt 开关下加「New-DXCC spots dashboard」链接 → 全屏看板经 `/api/v1/band-hunt` **同源代理**（服务端 httpx 转发 pskreporter，跨库仍仅 HTTP）拉取 **10/30 分钟 / 1/4 小时 / 1/3/7 天** 七个窗口的邻近 spot 明细（每窗口展示最新 200 条）；客户端用 DXCC 视图的 worked 实体集过滤，只列未通联实体（pskreporter `/api/band_hunt?detail=1` 返回逐 spot 列表）。
+- 驾驶舱看板：Auto band hunt 开关下加「New-DXCC spots dashboard」链接 → 全屏看板经 `/api/v1/band-hunt` **同源代理**（服务端 httpx 转发 pskreporter，跨库仍仅 HTTP）拉取 **10/30 分钟 / 1/4 小时 / 1/3/7 天** 七个窗口的邻近 spot 明细（每窗口展示最新 200 条）。**「spots」概念统一为新 DXCC spots**：代理用权威 worked 实体集（canonical 日志 → cty.dat）过滤，只保留未通联实体 spot、丢弃全已通联的波段，并返回 `new_spot_count` / `worked_spot_count` 供上下文（pskreporter `/api/band_hunt?detail=1` 返回含已通联的原始逐 spot 列表，过滤在 FT8 侧统一进行）；看板不再各自过滤，标注「N new-DXCC spot(s) · M worked nearby」。
 - 深窗口支持：pskreporter `/api/band_hunt` 的 `window_min` 上限从 1 天扩到 **7 天**，查询 `ORDER BY qso_time DESC` 并按窗口缩放 `LIMIT`（≤3 天 300k / 7 天 500k）保证大窗口取最新数据；实测 1/3/7 天邻近 spot 263 / 819 / 1155 条。代理 `/api/v1/band-hunt` 超时从 5 s 提到 **20 s**（深窗口首次未缓存查询耗时可达 ~5-8 s，原超时导致 `band_hunt_unreachable`）。
 - Regressions: mrrc-ft8 `tests/engine/test_band_hunter.py`（rank/decide/fetch 矩阵）、`test_main.py::test_from_env_band_hunt_optional`、`test_api.py`（auto_band_hunt round-trip + 422、`/band-hunt` 代理 not_configured + 转发参数/信封）；pskreporter `test_band_hunt.py`（距离门/阈值/DB 异常/detail spots）。全量套件绿（mrrc-ft8 721 passed）。
 

@@ -405,16 +405,15 @@ export function createSettingsDrawer() {
   async function openBandHuntView() {
     bandHuntOverlay.hidden = false;
     document.body.classList.add("log-open");
-    bandHuntContent.innerHTML = "<p class='drawer-hint'>Loading nearby spots…</p>";
+    bandHuntContent.innerHTML = "<p class='drawer-hint'>Loading new-DXCC spots…</p>";
 
-    // Worked entities come from the authoritative DXCC view; only spots whose
-    // entity is unworked (or unknown) are "new DXCC" for the dashboard.
-    const [dxccRes, ...windowRes] = await Promise.all([
-      api.dxcc(),
-      ...BAND_HUNT_WINDOWS.map(([windowMin]) =>
+    // "Spots" here means NEW-DXCC spots: the /band-hunt proxy already filters
+    // every band's spots against the authoritative worked set, so what arrives
+    // is exactly the hunt opportunities (worked count rides along for context).
+    const windowRes = await Promise.all(
+      BAND_HUNT_WINDOWS.map(([windowMin]) =>
         api.bandHunt({ window_min: windowMin, detail: 1, min_spots: 1 })),
-    ]);
-    const worked = new Set((dxccRes.entities || []).map((e) => e.name));
+    );
 
     const html = [];
     BAND_HUNT_WINDOWS.forEach(([windowMin, label], i) => {
@@ -424,16 +423,19 @@ export function createSettingsDrawer() {
         html.push(`<p class='drawer-hint dim'>${escapeHtml(res.reason || res.status)}</p>`);
         return;
       }
-      const spots = (res.bands || []).flatMap((b) => b.spots || []);
-      const allNew = spots.filter((s) => !s.entity || !worked.has(s.entity));
-      const fresh = allNew.slice(0, BAND_HUNT_SPOT_CAP);
-      if (!fresh.length) {
-        html.push("<p class='drawer-hint dim'>No new-DXCC spots nearby in this window.</p>");
+      const bands = res.bands || [];
+      const allSpots = bands.flatMap((b) => b.spots || []);
+      const workedTotal = bands.reduce((n, b) => n + (b.worked_spot_count || 0), 0);
+      if (!allSpots.length) {
+        html.push(`<p class='drawer-hint dim'>0 new-DXCC spots` +
+          `${workedTotal ? ` · ${workedTotal} already-worked nearby` : ""}.</p>`);
         return;
       }
+      const fresh = allSpots.slice(0, BAND_HUNT_SPOT_CAP);
       html.push(`<div class="qso-row"><span class="qso-call"></span>` +
-        `<span class="qso-meta">${allNew.length} spot(s)` +
-        `${allNew.length > fresh.length ? ` (showing ${fresh.length})` : ""}</span></div>`);
+        `<span class="qso-meta">${allSpots.length} new-DXCC spot(s)` +
+        `${workedTotal ? ` · ${workedTotal} worked nearby` : ""}` +
+        `${allSpots.length > fresh.length ? ` (showing ${fresh.length})` : ""}</span></div>`);
       for (const s of fresh) {
         const name = s.entity || s.callsign || "?";
         const band = s.band || "?";
