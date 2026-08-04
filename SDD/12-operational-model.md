@@ -8,7 +8,7 @@ Caddy is the public service. FastAPI listens only on loopback and supervises the
 
 - User LaunchAgent starts MRRC-FT8 after the interactive user session is available.
 - The user grants microphone/audio device permissions.
-- Caddy owns the public TLS port and proxies to loopback FastAPI. (Reference topology keeps 80/443; the BG1SB deployment runs a root LaunchDaemon on 9988 with an operator-issued acme.sh DNS-01 certificate because inbound 80/443 are ISP-blocked.) The app's Host/Origin ACL (`MRRC_FT8_ALLOWED_HOSTS`) must list the public domain — it now includes `radio.vlsc.net` — or every public mutation/WebSocket is 403 and only GETs work.
+- Caddy owns the public TLS port and proxies to loopback FastAPI. (Reference topology keeps 80/443; the live deployment runs a root LaunchDaemon on 9988 with an operator-issued acme.sh DNS-01 certificate because inbound 80/443 are ISP-blocked.) The app's Host/Origin ACL (`MRRC_FT8_ALLOWED_HOSTS`) must list the public domain — it now includes `radio.vlsc.net` — or every public mutation/WebSocket is 403 and only GETs work.
 - Release acceptance uses the real FT-710, USB audio, rigctld and PTT.
 
 ## 12.3 Linux

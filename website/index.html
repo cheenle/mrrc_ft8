@@ -11,7 +11,6 @@
       name="keywords"
       content="FT8, FT4, WSJT-X, headless, amateur radio, digital modes, DSP, OpenMP, FastAPI, rigctld, Caddy, PTT safety, waterfall"
     />
-    <meta name="author" content="BG1SB" />
     <meta name="theme-color" content="#0a0a0a" />
 
     <title>MRRC-FT8 — Headless FT8/FT4 Server</title>
@@ -257,7 +256,7 @@
       <div class="container" style="text-align: center">
         <div class="section-header">
           <span class="section-label">Live Station</span>
-          <h2 class="section-title">BG1SB / FT-710, ON80DA Field Sessions</h2>
+          <h2 class="section-title">FT-710 Field Sessions</h2>
           <p class="section-subtitle">
             v1.0.0 is running the real FT-710 station. The 2026-08-03 field
             session closed the RX/TX root causes — UTC-ring eviction
@@ -366,7 +365,7 @@
           <div class="step">
             <h4>2 · Configure secrets</h4>
             <p>A <code>.env</code> (or the service env file) must define the hash, call sign and grid; optional overrides for allowed hosts and the audio device. The server refuses to start without the first three.</p>
-            <code>MRRC_FT8_PASSWORD_HASH=… MRRC_FT8_MY_CALL=BG1SB MRRC_FT8_MY_GRID=…</code>
+            <code>MRRC_FT8_PASSWORD_HASH=… MRRC_FT8_MY_CALL=YOURCALL MRRC_FT8_MY_GRID=…</code>
           </div>
           <div class="step">
             <h4>3 · Run as a service</h4>
@@ -1050,7 +1049,7 @@
               Headless FT8/FT4 server powered by the WSJT-X 3.0.2 Improved DSP
               core. Built by
               <a href="https://github.com/cheenle" style="color: var(--accent)"
-                >BG1SB</a
+                >cheenle</a
               >.
             </p>
           </div>

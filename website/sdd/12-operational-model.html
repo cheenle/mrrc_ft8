@@ -130,7 +130,7 @@
 <ul>
 <li>User LaunchAgent starts MRRC-FT8 after the interactive user session is available.</li>
 <li>The user grants microphone/audio device permissions.</li>
-<li>Caddy owns the public TLS port and proxies to loopback FastAPI. (Reference topology keeps 80/443; the BG1SB deployment runs a root LaunchDaemon on 9988 with an operator-issued acme.sh DNS-01 certificate because inbound 80/443 are ISP-blocked.) The app’s Host/Origin ACL (<code>MRRC_FT8_ALLOWED_HOSTS</code>) must list the public domain — it now includes <code>radio.vlsc.net</code> — or every public mutation/WebSocket is 403 and only GETs work.</li>
+<li>Caddy owns the public TLS port and proxies to loopback FastAPI. (Reference topology keeps 80/443; the live deployment runs a root LaunchDaemon on 9988 with an operator-issued acme.sh DNS-01 certificate because inbound 80/443 are ISP-blocked.) The app’s Host/Origin ACL (<code>MRRC_FT8_ALLOWED_HOSTS</code>) must list the public domain — it now includes <code>radio.vlsc.net</code> — or every public mutation/WebSocket is 403 and only GETs work.</li>
 <li>Release acceptance uses the real FT-710, USB audio, rigctld and PTT.</li>
 </ul>
 <h2 id="linux">12.3 Linux</h2>
