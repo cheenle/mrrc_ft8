@@ -187,10 +187,76 @@ def test_loop_dispatches_each_ended_slot_and_announces_starts() -> None:
         assert event.batch.slot_id == event.slot_id
         assert event.messages[0].parsed.is_cq
         assert event.messages[0].result.snr == -10
-        # Dispatch happened at the slot boundary plus the delivery grace.
+        # Dispatch happens at the slot boundary: the source here serves the
+        # slot immediately, so decode starts as early as physically possible
+        # (no fixed delivery grace is added; the grace is only a timeout).
         assert event.dispatched_epoch == pytest.approx(
-            slot_start_epoch(event.slot_id + 1) + DELIVERY_GRACE_SECONDS
+            slot_start_epoch(event.slot_id + 1)
         )
+
+
+def test_dispatch_waits_for_the_slot_data_not_a_fixed_grace() -> None:
+    """Decode starts the instant the slot's data lands, not at boundary + grace.
+
+    Regression for the manual-reply catch window (UC-003/I9): a fixed 0.4 s
+    delivery grace shaves ~0.3 s off the operator's window against the slot's
+    fit deadline; polling dispatches as early as the ring actually serves it.
+    """
+
+    clock = FakeClock(7.5)
+    decoder = FakeDecoder(clock, texts=["CQ K1ABC FN42"])
+    pcm = b"\x00" * 360_000
+    events: list[SlotDecode] = []
+    orchestrator = Orchestrator(
+        decoder,
+        lambda slot_id: (
+            pcm if clock() >= slot_start_epoch(slot_id + 1) + 0.1 else None
+        ),
+        Sequencer("N0CALL", "FN42"),
+        clock=clock,
+        sleep_until=clock.sleep_until,
+        on_slot_start=lambda slot_id: None,
+        on_decode=lambda event: (
+            events.append(event),
+            orchestrator.stop() if len(events) == 2 else None,
+        ),
+    )
+    asyncio.run(orchestrator.run())
+
+    assert [call[0] for call in decoder.calls] == [0, 1]
+    assert orchestrator.counters.slots_skipped == 0
+    for event in events:
+        data_ready = slot_start_epoch(event.slot_id + 1) + 0.1
+        # Dispatch lands at data-ready (within one poll interval), never at
+        # the old boundary + 0.4 s grace.
+        assert data_ready <= event.dispatched_epoch <= data_ready + 0.03
+
+
+def test_slot_that_never_lands_is_skipped_after_the_grace_timeout() -> None:
+    """A slot whose data never arrives is skipped (bounded wait), not hung."""
+
+    clock = FakeClock(7.5)
+    decoder = FakeDecoder(clock, texts=["CQ K1ABC FN42"])
+    pcm = b"\x00" * 360_000
+    events: list[SlotDecode] = []
+    orchestrator = Orchestrator(
+        decoder,
+        lambda slot_id: None if slot_id == 0 else pcm,
+        Sequencer("N0CALL", "FN42"),
+        clock=clock,
+        sleep_until=clock.sleep_until,
+        on_slot_start=lambda slot_id: None,
+        on_decode=lambda event: (events.append(event), orchestrator.stop()),
+    )
+    asyncio.run(orchestrator.run())
+
+    assert [call[0] for call in decoder.calls] == [1]  # slot 0 never decoded
+    assert orchestrator.counters.slots_skipped == 1
+    assert orchestrator.counters.decodes == 1
+    assert events[0].slot_id == 1
+    assert events[0].dispatched_epoch == pytest.approx(
+        slot_start_epoch(2)  # slot 1 ends at 30.0; data served immediately
+    )
 
 
 def test_on_time_results_are_fed_to_the_sequencer() -> None:

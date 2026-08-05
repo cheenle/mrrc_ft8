@@ -273,6 +273,33 @@ def test_reply_phase_is_opposite_the_selected_slot(
     assert state.sequencer.tx_phase == 0  # odd slot -> reply on even
 
 
+def test_reply_with_inline_candidate_arms_in_one_request(
+    client: TestClient, state: AppState
+) -> None:
+    """Double-click selects + arms in a single round trip (manual-reply window).
+
+    The fit deadline is ~2.2 s into the slot, so a reply must not burn RTTs
+    on a separate select; carrying the candidate inline is the whole point.
+    """
+
+    session_id = login(client)
+    client.post("/api/v1/lease/acquire", headers=auth_headers(session_id))
+    reply = client.post(
+        "/api/v1/operation/reply",
+        json={"dx_call": "k1abc", "dx_grid": "fn42", "snr_db": -15, "slot_id": 3},
+        headers=auth_headers(session_id),
+    )
+    assert reply.status_code == 200
+    assert state.sequencer.tx_enabled
+    assert state.sequencer.dx_call == "K1ABC"
+    assert state.selected_slot_id == 3
+    assert state.sequencer.tx_phase == 0  # odd slot -> reply on even
+    body = reply.json()
+    assert body["scheduled_tx"]["deferred"] in (True, False)
+    assert len(body["scheduled_tx"]["utc"]) == 6  # HHMMSS
+    assert "reply" in [a["operation"] for a in state.repository.audit_events()]
+
+
 def test_cq_and_tx_off_require_the_lease(client: TestClient, state: AppState) -> None:
     session_id = login(client)
     no_lease = client.post("/api/v1/operation/cq", headers=auth_headers(session_id))

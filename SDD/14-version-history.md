@@ -1,5 +1,15 @@
 # 14. Version History
 
+## Unreleased — 2026-08-05 — Manual Reply Races the Current Slot
+
+- 现场根因（production DB 佐证）：手动 Reply 只有在**当前时隙开始后 ~2.2 s 内**（fit guard：12.64 s 波形必须塞进 15 s 时隙）武装才能当拍发射；而解码行要到时隙开始后 ~0.67 s 才上屏（0.4 s 投递宽限 + 解码），双击又是 select→(lease)→select→reply 2–4 个 HTTP 往返，操作员实际在 +4 s/+7 s/+13 s 才点中，**永远错过窗口**，回复推迟到下一个同相时隙——实测 26–38 s 后才发射（S54E 38 s、BA6CC/OE4AHG 26 s）。
+- 三处修复：
+  1. `Orchestrator` 解码投递改为**边界起轮询 ring**（`_wait_for_slot`，25 ms 步长），数据一到立即解码，`DELIVERY_GRACE_SECONDS` 语义从固定等待改为超时上限；解码上屏提前 ~0.3 s，且 `on_slot_start`（TxDriver 决策窗）也提前 ~0.3 s 打开。
+  2. `operation/reply` 接受内联候选（`dx_call/grid/snr/slot_id`），**双击 = 一次往返 select+arm**；前端 `api.reply(candidate)` 去掉独立 select 往返，lease 缺失时同 select 一样隐式获取。
+  3. 回复响应带 `scheduled_tx`（fit 感知的下一发射时隙 `slot_id/utc/deferred`），前端在推迟时 toast「Reply armed → TX at HH:MM:SS」——操作员不再盲目连点（现场曾 9 s 内连点两次 OE4AHG）。
+- 物理边界不变：迟于 ~2.2 s 的点按仍只能等下个同相时隙（对方只在相反相隙收听）；本次把「能当拍」的窗口和路径拉满到物理极限，并把推迟情形显性化。
+- Regressions: `test_orchestrator.py`（数据就绪即投递 + 超时跳过 + 原 grace 断言改为边界投递）、`test_api.py::test_reply_with_inline_candidate_arms_in_one_request`。全量套件 726 passed。
+
 ## Unreleased — 2026-08-05 — Propagation-Driven New-DXCC Band Hunt (NFR-088)
 
 - 新功能：`band_hunter` 让服务器自主换波段去守新 DXCC。通过 pskreporter 仓库的 `GET /api/band_hunt`（**HTTP 是两库间唯一耦合**，严格隔离：不 import、不共享 DB 凭据）拿到"附近网格（距本网格 ≤ radius_km）此刻在听的 FT8 波段"；本地用 worked 实体集过滤出仍有新 DXCC 的波段排序；空闲且开关 `auto_band_hunt` 开启时把 rig 切到榜首波段，再由 auto-call（NFR-087）闭环通联。

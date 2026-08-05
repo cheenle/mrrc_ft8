@@ -28,8 +28,10 @@ from fastapi.responses import JSONResponse, PlainTextResponse, RedirectResponse
 
 from ..engine.adif import generate_adif
 from ..engine.msgparse import ParsedMessage
+from ..engine.orchestrator import FT8_PERIOD_SECONDS
 from ..engine.repository import Repository, VoidWindowExpired
 from ..engine.safety import Interlock, SafetyController, TxRefused
+from ..engine.tx_driver import TX_FIT_MARGIN_SECONDS, TX_WAVEFORM_SECONDS
 
 log = logging.getLogger("mrrc-ft8.api")
 from ..engine.sequencer import DisarmReason, Sequencer
@@ -382,6 +384,21 @@ def create_router(state: AppState) -> APIRouter:
         await validate_mutation(request)
         if (hit := replay(request)) is not None:
             return hit
+        content_length = request.headers.get("content-length")
+        body = await request.json() if content_length and content_length != "0" else {}
+        if isinstance(body, dict) and isinstance(body.get("dx_call"), str) and body["dx_call"]:
+            # Single-round-trip double-click: select + arm in one request so a
+            # manual reply races the current slot's fit window with one RTT
+            # (the fit deadline is ~2.2 s into the slot).  Mirrors
+            # ``operation/select`` exactly; selecting never transmits by itself.
+            state.selected = ParsedMessage(
+                text=str(body.get("text") or body["dx_call"]),
+                is_cq=bool(body.get("is_cq", False)),
+                from_call=body["dx_call"].upper(),
+                grid=str(body.get("dx_grid") or "").upper(),
+            )
+            state.selected_snr_db = body.get("snr_db") if isinstance(body.get("snr_db"), int) else None
+            state.selected_slot_id = body.get("slot_id") if isinstance(body.get("slot_id"), int) else None
         if state.selected is None or state.selected_snr_db is None:
             return _reject(409, "no_selection")
         try:
@@ -394,7 +411,15 @@ def create_router(state: AppState) -> APIRouter:
         tx_phase = 0 if slot_id is None else 1 - (slot_id % 2)
         state.sequencer.reply_to(state.selected, state.selected_snr_db, tx_phase=tx_phase)
         await _audit(state, session, "reply", state.selected.from_call, "")
-        return await mutate(request, request.headers.get("idempotency-key"), 200, {"sequencer": state.sequencer.state.value})
+        return await mutate(
+            request,
+            request.headers.get("idempotency-key"),
+            200,
+            {
+                "sequencer": state.sequencer.state.value,
+                "scheduled_tx": _scheduled_tx(tx_phase),
+            },
+        )
 
     @router.post("/operation/cq")
     async def operation_cq(request: Request, session: Session = Depends(require_lease)) -> JSONResponse:
@@ -876,6 +901,36 @@ def _health(state: AppState) -> dict[str, Any]:
         counters = state.orchestrator.counters
         health["deadline_misses"] = counters.deadline_misses
     return health
+
+
+def _scheduled_tx(tx_phase: int) -> dict[str, Any]:
+    """Best-effort next TX slot for an armed reply, fit-deadline aware.
+
+    UC-003/I9: a reply can only transmit on slots of ``tx_phase`` parity, and
+    a 12.64 s waveform must start by ~2.2 s into the slot (the fit guard).
+    Returns the slot the ``TxDriver`` will use so the UI can tell the operator
+    when the reply actually goes out instead of leaving them guessing.
+    """
+
+    now = time.time()
+    period = FT8_PERIOD_SECONDS
+    cur = int(now // period)
+    cur_start = cur * period
+    fit_deadline = cur_start + period - TX_WAVEFORM_SECONDS - TX_FIT_MARGIN_SECONDS
+    if tx_phase == cur % 2 and now <= fit_deadline:
+        return {
+            "slot_id": cur,
+            "utc": time.strftime("%H%M%S", time.gmtime(cur_start)),
+            "deferred": False,
+        }
+    nxt = cur + 1
+    while nxt % 2 != tx_phase:
+        nxt += 1
+    return {
+        "slot_id": nxt,
+        "utc": time.strftime("%H%M%S", time.gmtime(nxt * period)),
+        "deferred": True,
+    }
 
 
 async def _audit(

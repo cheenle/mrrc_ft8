@@ -99,11 +99,31 @@ export function createCandidates(listElement) {
   }
 
   async function reply(candidate) {
-    // Double-click = select + Reply through the exact same gated paths.
-    if (await select(candidate)) {
-      const result = await api.reply();
-      if (!result.ok) showToast(`Reply rejected: ${result.reason || result.status}`);
+    // Double-click = select + Reply in ONE round trip: the fit deadline is
+    // only ~2.2 s into the slot, so the arm must race it, not waste RTTs on
+    // a separate select (the lease-less case mirrors select() below).
+    let result = await api.reply(candidate);
+    if (!result.ok && result.reason === "lease_required" && !getState().lease.held) {
+      const acquired = await api.acquireLease();
+      result = acquired.ok ? await api.reply(candidate) : acquired;
     }
+    if (result.ok) {
+      patch({ selected: { call: candidate.call, grid: candidate.grid || "" } });
+      const tx = result.scheduled_tx;
+      if (tx && tx.deferred) {
+        const utc = tx.utc;
+        showToast(
+          `Reply armed → TX at ${utc.slice(0, 2)}:${utc.slice(2, 4)}:${utc.slice(4, 6)} UTC`,
+        );
+      }
+      return true;
+    }
+    showToast(
+      result.reason === "lease_required"
+        ? "Control is held by another session"
+        : `Reply rejected: ${result.reason || result.status}`,
+    );
+    return false;
   }
 
   subscribe(render);

@@ -2,9 +2,9 @@
 
 SDD AD-006 and §9.2/§9.4: slot identity is always ``floor(epoch / TRperiod)``
 computed from an injectable epoch clock — relative timers may wake the loop
-but never define protocol phase.  At every slot boundary, after a short
-delivery grace for the real audio blocks to land in the ring, the
-orchestrator pulls the just-ended 12 kHz slot from the injected source,
+but never define protocol phase.  At every slot boundary the orchestrator
+polls the injected source for the just-ended 12 kHz slot, dispatching the
+decode as soon as the real audio blocks have landed in the ring,
 dispatches one decode through the injected decoder and applies the I9
 decision cutoff: a batch that arrives after slot end + cutoff is
 display-only for that slot, is counted as a deadline miss and is never fed
@@ -36,9 +36,15 @@ DEFAULT_DECISION_CUTOFF_SECONDS = 2.5
 # Real audio lands one block (~85 ms) plus scheduling after its sample time;
 # reading exactly at the boundary always misses the slot tail (found by the
 # foreground/launchd deployment: every slot skipped with a healthy ring).
-# Decode dispatch therefore waits this delivery grace past slot end; the
-# decision cutoff above still has ~2 s of headroom.
+# Dispatch therefore polls the slot source from the boundary until the data
+# is actually present, and ``DELIVERY_GRACE_SECONDS`` is only the *timeout*
+# beyond which a slot that never lands is treated as missing.  This reads
+# as early as physically possible instead of waiting a fixed grace, which
+# widens the operator's manual-reply window against the slot's fit deadline
+# (UC-003, I9); the decision cutoff above still has ~2 s of headroom.
 DELIVERY_GRACE_SECONDS = 0.4
+# Poll cadence while waiting for the slot's last block to land in the ring.
+SLOT_POLL_SECONDS = 0.025
 SLOT_SAMPLES_NBYTES = 360_000  # exact 12 kHz int16 mono slot (AD-004)
 
 
@@ -114,6 +120,7 @@ class Orchestrator:
         period: float = FT8_PERIOD_SECONDS,
         decision_cutoff: float = DEFAULT_DECISION_CUTOFF_SECONDS,
         delivery_grace: float = DELIVERY_GRACE_SECONDS,
+        slot_poll_interval: float = SLOT_POLL_SECONDS,
         clock: Callable[[], float] = time.time,
         sleep_until: Callable[[float], Awaitable[None]] | None = None,
         on_slot_start: Callable[[int], None] | None = None,
@@ -126,12 +133,15 @@ class Orchestrator:
             raise ValueError("decision cutoff must be smaller than the slot period")
         if delivery_grace < 0:
             raise ValueError("delivery grace must not be negative")
+        if slot_poll_interval <= 0:
+            raise ValueError("slot poll interval must be positive")
         self._decoder = decoder
         self._slot_source = slot_source
         self._sequencer = sequencer
         self._period = period
         self._decision_cutoff = decision_cutoff
         self._delivery_grace = delivery_grace
+        self._slot_poll_interval = slot_poll_interval
         self._clock = clock
         self._sleep_until = sleep_until or self._asyncio_sleep_until
         self._on_slot_start = on_slot_start
@@ -163,16 +173,36 @@ class Orchestrator:
                 self.counters.slots_started += 1
                 if self._on_slot_start is not None:
                     self._on_slot_start(current)
-            await self._sleep_until(boundary + self._delivery_grace)
+            await self._sleep_until(boundary)
             if not self._running:
                 break
-            await self._slot_ended(current, boundary)
+            samples = await self._wait_for_slot(current, boundary)
+            if samples is None:
+                self.counters.slots_skipped += 1
+                continue
+            await self._slot_ended(current, boundary, samples)
 
-    async def _slot_ended(self, slot_id: int, boundary_epoch: float) -> None:
-        samples = self._slot_source(slot_id)
-        if samples is None:
-            self.counters.slots_skipped += 1
-            return
+    async def _wait_for_slot(self, slot_id: int, boundary_epoch: float) -> bytes | None:
+        """Return the ended slot's samples as soon as they land in the ring.
+
+        The capture writes the last block of a slot roughly one block (~85 ms)
+        plus scheduling after the sample time, so polling at the boundary
+        dispatches the decode earlier than a fixed grace (UC-003 manual-reply
+        window) while remaining robust to jitter — a slot that never lands
+        within ``delivery_grace`` of the boundary returns ``None``.
+        """
+
+        deadline = boundary_epoch + self._delivery_grace
+        while True:
+            samples = self._slot_source(slot_id)
+            if samples is not None:
+                return samples
+            now = self._clock()
+            if now >= deadline:
+                return None
+            await self._sleep_until(min(now + self._slot_poll_interval, deadline))
+
+    async def _slot_ended(self, slot_id: int, boundary_epoch: float, samples: bytes) -> None:
         if len(samples) != SLOT_SAMPLES_NBYTES:
             raise ValueError(
                 f"slot source must return exactly {SLOT_SAMPLES_NBYTES} bytes"

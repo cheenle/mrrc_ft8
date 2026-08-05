@@ -53,7 +53,21 @@ export const api = {
         slot_id: candidate.slot_id,
       },
     }),
-  reply: () => request("/operation/reply", { method: "POST", idempotencyKey: key() }),
+  reply: (candidate) =>
+    request("/operation/reply", {
+      method: "POST",
+      idempotencyKey: key(),
+      body: candidate
+        ? {
+            dx_call: candidate.call,
+            dx_grid: candidate.grid || "",
+            snr_db: candidate.snr,
+            text: candidate.text,
+            is_cq: candidate.is_cq,
+            slot_id: candidate.slot_id,
+          }
+        : {},
+    }),
   cq: (loop = false) =>
     request("/operation/cq", { method: "POST", idempotencyKey: key(), body: { loop } }),
   band: (freqHz) =>
