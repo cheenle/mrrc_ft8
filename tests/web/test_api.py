@@ -19,6 +19,7 @@ from server.engine.repository import QsoStatus, Repository
 from server.engine.safety import Interlock, SafetyController
 from server.engine.sequencer import QSORecord, Sequencer
 from server.web.api import COOKIE_NAME, AppState, _fresh_dxcc_cache, create_app
+from server.web.api import _BandHuntCache
 from server.web.auth import AuthService, hash_password
 from server.web.lease import LeaseService
 
@@ -1102,6 +1103,100 @@ def test_band_hunt_proxy_drops_fully_worked_band(
     )
     assert res.status_code == 200
     assert res.json()["bands"] == []
+
+
+def test_band_hunt_cache_hit_miss_and_expiry() -> None:
+    now = [0.0]
+    cache = _BandHuntCache(clock=lambda: now[0])
+    assert cache.get(("k",)) is None
+    cache.put(("k",), {"ok": True}, ttl_s=10)
+    assert cache.get(("k",)) == {"ok": True}
+    now[0] = 10.0
+    assert cache.get(("k",)) is None  # expired
+
+
+def test_band_hunt_cache_evicts_oldest_when_full() -> None:
+    now = [0.0]
+    cache = _BandHuntCache(clock=lambda: now[0], max_entries=2)
+    cache.put(("a",), {"ok": True}, ttl_s=60)
+    cache.put(("b",), {"ok": True}, ttl_s=60)
+    cache.put(("c",), {"ok": True}, ttl_s=60)  # evicts "a" (oldest)
+    assert cache.get(("a",)) is None
+    assert cache.get(("b",)) is not None
+    assert cache.get(("c",)) is not None
+
+
+def test_band_hunt_proxy_serves_second_request_from_cache(
+    monkeypatch: pytest.MonkeyPatch, client: TestClient, state: AppState
+) -> None:
+    state.band_hunt_url = "http://psk.test/api/band_hunt"
+    state.dxcc_cache = SimpleNamespace(entities=[SimpleNamespace(name="Japan")])
+    state.repository.dxcc_dirty = False
+    hits = {"n": 0}
+
+    class _FakeResponse:
+        def raise_for_status(self) -> None:
+            return None
+
+        def json(self) -> dict:
+            return {"ok": True, "bands": []}
+
+    class _FakeClient:
+        def __init__(self, *args: object, **kwargs: object) -> None:
+            pass
+
+        async def __aenter__(self) -> "_FakeClient":
+            return self
+
+        async def __aexit__(self, *args: object) -> None:
+            return None
+
+        async def get(self, url: str, params: object = None) -> _FakeResponse:
+            hits["n"] += 1
+            return _FakeResponse()
+
+    monkeypatch.setattr("httpx.AsyncClient", _FakeClient)
+    headers = auth_headers(login(client))
+    for _ in range(2):
+        res = client.get("/api/v1/band-hunt?window_min=10&detail=1", headers=headers)
+        assert res.status_code == 200
+    assert hits["n"] == 1  # second request served from the TTL cache
+
+
+def test_band_hunt_proxy_does_not_cache_error_bodies(
+    monkeypatch: pytest.MonkeyPatch, client: TestClient, state: AppState
+) -> None:
+    state.band_hunt_url = "http://psk.test/api/band_hunt"
+    state.dxcc_cache = SimpleNamespace(entities=[SimpleNamespace(name="Japan")])
+    state.repository.dxcc_dirty = False
+    hits = {"n": 0}
+
+    class _FakeResponse:
+        def raise_for_status(self) -> None:
+            return None
+
+        def json(self) -> dict:
+            hits["n"] += 1
+            return {"ok": False, "reason": "db_down"}
+
+    class _FakeClient:
+        def __init__(self, *args: object, **kwargs: object) -> None:
+            pass
+
+        async def __aenter__(self) -> "_FakeClient":
+            return self
+
+        async def __aexit__(self, *args: object) -> None:
+            return None
+
+        async def get(self, url: str, params: object = None) -> _FakeResponse:
+            return _FakeResponse()
+
+    monkeypatch.setattr("httpx.AsyncClient", _FakeClient)
+    headers = auth_headers(login(client))
+    for _ in range(2):
+        client.get("/api/v1/band-hunt?window_min=10&detail=1", headers=headers)
+    assert hits["n"] == 2  # ok:false bodies are never cached
 
 
 def test_auto_call_setting_rejects_non_bool(client: TestClient) -> None:

@@ -94,6 +94,42 @@ class IdempotencyCache:
             self._entries.pop(stale, None)
 
 
+class _BandHuntCache:
+    """TTL cache for raw upstream /api/band_hunt bodies (proxy + poller share).
+
+    TTL = min(window_min, 3600) s: small windows stay fresh, deep windows avoid
+    repeated cold 5-8 s fetches. Raw (unfiltered) bodies are cached; the
+    worked-entity filter always runs fresh per request so a just-completed QSO
+    shows immediately. Errors and ``ok:false`` bodies are never cached.
+    """
+
+    def __init__(
+        self,
+        *,
+        clock: Callable[[], float] = time.monotonic,
+        max_entries: int = 64,
+    ) -> None:
+        self._clock = clock
+        self._max_entries = max_entries
+        self._entries: dict[tuple, tuple[float, dict[str, Any]]] = {}
+
+    def get(self, key: tuple) -> dict[str, Any] | None:
+        entry = self._entries.get(key)
+        if entry is None:
+            return None
+        expires, body = entry
+        if self._clock() >= expires:
+            del self._entries[key]
+            return None
+        return body
+
+    def put(self, key: tuple, body: dict[str, Any], ttl_s: float) -> None:
+        if len(self._entries) >= self._max_entries:
+            oldest = min(self._entries, key=lambda k: self._entries[k][0])
+            del self._entries[oldest]
+        self._entries[key] = (self._clock() + ttl_s, body)
+
+
 @dataclass
 class AppState:
     """Composition root shared by the REST and WS layers."""
@@ -122,6 +158,7 @@ class AppState:
     radio_freq_hz: int | None = None  # last polled dial frequency, if rig is up
     dxcc_cache: Any = None  # cached DxccSummary; rebuilt when repository.dxcc_dirty
     band_hunt_url: str | None = None  # pskreporter /api/band_hunt (NFR-088); None = off
+    band_hunt_cache: _BandHuntCache = field(default_factory=_BandHuntCache)
 
     def bump(self) -> int:
         self.revision += 1
@@ -740,20 +777,32 @@ def create_router(state: AppState) -> APIRouter:
         }
         if request.query_params.get("detail") == "1":
             params["detail"] = "1"
-        try:
-            import httpx
+        key = (
+            params["window_min"],
+            params["home_grid"],
+            params["radius_km"],
+            params.get("detail", "0"),
+        )
+        body = state.band_hunt_cache.get(key)
+        if body is None:
+            try:
+                import httpx
 
-            # Deep windows (1/3/7 days) take up to ~5-8 s to fetch + filter on
-            # first (uncached) hit, so the dashboard proxy needs headroom well
-            # past the poller's 5 s timeout.
-            async with httpx.AsyncClient(timeout=20.0) as client:
-                resp = await client.get(state.band_hunt_url, params=params)
-                resp.raise_for_status()
-                body = resp.json()
-        except Exception as exc:
-            return _reject(502, "band_hunt_unreachable", detail=str(exc))
-        if not isinstance(body, dict) or body.get("ok") is not True:
-            return JSONResponse(body if isinstance(body, dict) else {"ok": False, "reason": "bad_upstream"})
+                # Deep windows take up to ~5-8 s on first (uncached) hit; the
+                # poller's own timeout stays 5 s, the dashboard proxy needs 20 s.
+                async with httpx.AsyncClient(timeout=20.0) as client:
+                    resp = await client.get(state.band_hunt_url, params=params)
+                    resp.raise_for_status()
+                    body = resp.json()
+            except Exception as exc:
+                return _reject(502, "band_hunt_unreachable", detail=str(exc))
+            if not isinstance(body, dict) or body.get("ok") is not True:
+                return JSONResponse(body if isinstance(body, dict) else {"ok": False, "reason": "bad_upstream"})
+            try:
+                ttl_s = max(5, min(int(params["window_min"]), 3600))
+            except (TypeError, ValueError):
+                ttl_s = 60
+            state.band_hunt_cache.put(key, body, ttl_s=ttl_s)
 
         # Unify the concept: here "spots" are NEW-DXCC spots.  The upstream
         # pskreporter endpoint returns every nearby spot; the authoritative
