@@ -82,7 +82,7 @@ const BAND_HUNT_WINDOWS = [
 针对剩余最慢环节（1 天窗口冷缓存 5-8 s、多窗口串/并行全等）：
 
 - **渐进渲染**：`settings.js:413` 从 `Promise.all`（等最慢）改为逐窗口 `fetch` 后**先到先渲染**。10 分钟窗口 ~1 s 内可见，1 天窗口后续补上。渲染函数拆成 `renderWindow(res, label)` 单窗口版本。
-- **上游 TTL 缓存**：`api.py` `band_hunt_proxy` 加进程内缓存，键 `(window_min, home_grid, radius_km)`，值 `(epoch, body)`。TTL = `min(window_min, 3600)` 秒：小窗口短 TTL 保新鲜，深窗口长 TTL 免重复冷拉。band_hunt_loop 的 30 分钟轮询与 dashboard 多次打开共享热缓存。
+- **上游 TTL 缓存**：`api.py` `band_hunt_proxy` 加进程内缓存，键 `(window_min, home_grid, radius_km, detail)`，值 `(expires_epoch, body)`。TTL = `min(window_min, 3600)` 秒：小窗口短 TTL 保新鲜，深窗口长 TTL 免重复冷拉；dashboard 在 TTL 内二次打开直接命中（尤其 1 天窗口冷缓存 5-8 s 只付一次/小时）。`band_hunt_loop` **不共享此缓存**：它每 60 s 轮询且只拉 band 级（`detail=0`），与 dashboard 的 `detail=1` 键不同，且 `min(window_min,3600)` 对 30 分钟窗口的 30 s TTL 活不过轮询间隔，共享是死路径——loop 保持每 tick 新鲜拉取（传播门本身）。
   - 边界：`detail=1` 请求与 `detail=0` 分开缓存（响应体积不同）；错误响应（非 200/`ok:false`）不缓存。
   - 并发：首个请求在途时后续请求直接等待同一 in-flight future（可选，`asyncio` 单事件循环下简单）。
 
