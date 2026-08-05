@@ -42,7 +42,7 @@ from .engine.sequencer import DisarmReason, QsoContext, QSOState, Sequencer
 from .engine.bands import band_from_freq_hz
 from .engine.audio_tx import TxPlayer
 from .engine.waterfall import SpectrumComputer, SpectrumFanout
-from .web.api import AppState, create_app, _snapshot
+from .web.api import AppState, create_app, _fresh_dxcc_cache, _snapshot
 from .web.auth import AuthService
 from .web.lease import LeaseEventKind, LeaseService
 from .web.ws import DecodeBroadcaster, StateBroadcaster
@@ -600,13 +600,7 @@ def create_server(
         if orchestrator is not None:
             # Pre-fill the DXCC cache so on_decode can mark is_new_dxcc
             # without a full scan per slot (NFR-086/087).
-            if state.dxcc_cache is None or repository.dxcc_dirty:
-                from .engine.dxcc import dxcc_summary, get_cty_database
-
-                state.dxcc_cache = await asyncio.to_thread(
-                    dxcc_summary, repository, get_cty_database()
-                )
-                repository.dxcc_dirty = False
+            await _fresh_dxcc_cache(state)
             await asyncio.to_thread(supervisor.start)
             tasks.append(asyncio.create_task(orchestrator.run()))
 
@@ -701,6 +695,7 @@ def create_server(
                         or state.selected is not None
                     ):
                         continue
+                    await _fresh_dxcc_cache(state)
                     if state.dxcc_cache is None:
                         continue  # worked set unknown — never switch blindly
                     payload = await fetch_opportunities(

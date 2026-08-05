@@ -149,6 +149,19 @@ def _cty_database() -> Any:
     return get_cty_database()
 
 
+async def _fresh_dxcc_cache(state: Any) -> None:
+    """Rebuild state.dxcc_cache only when missing or a QSO write happened
+    since the last build (repository.dxcc_dirty).  Runs the scan off-thread;
+    0.2 s thanks to the indexed lookup (Task 1)."""
+    if state.dxcc_cache is None or state.repository.dxcc_dirty:
+        from ..engine.dxcc import dxcc_summary
+
+        state.dxcc_cache = await asyncio.to_thread(
+            dxcc_summary, state.repository, _cty_database()
+        )
+        state.repository.dxcc_dirty = False
+
+
 def get_state(request: Request) -> AppState:
     return request.app.state.app_state
 
@@ -701,17 +714,9 @@ def create_router(state: AppState) -> APIRouter:
 
     @router.get("/dxcc")
     async def dxcc(session: Session = Depends(require_session)) -> JSONResponse:
-        from ..engine.dxcc import dxcc_summary
-
         # 低频数据：缓存到首次打开/任何 QSO 写入（dirty）后才重建（决策 A）。
-        cache = state.dxcc_cache
-        if cache is None or state.repository.dxcc_dirty:
-            cache = await asyncio.to_thread(
-                dxcc_summary, state.repository, _cty_database()
-            )
-            state.dxcc_cache = cache
-            state.repository.dxcc_dirty = False
-        return _ok(cache.to_dict())
+        await _fresh_dxcc_cache(state)
+        return _ok(state.dxcc_cache.to_dict())
 
     @router.get("/band-hunt")
     async def band_hunt_proxy(
@@ -754,16 +759,8 @@ def create_router(state: AppState) -> APIRouter:
         # pskreporter endpoint returns every nearby spot; the authoritative
         # worked-entity set (canonical QSO log → cty.dat) lives on this side,
         # so filter here and drop bands with no new-DXCC spot left.
-        from ..engine.dxcc import dxcc_summary
-
-        cache = state.dxcc_cache
-        if cache is None or state.repository.dxcc_dirty:
-            cache = await asyncio.to_thread(
-                dxcc_summary, state.repository, _cty_database()
-            )
-            state.dxcc_cache = cache
-            state.repository.dxcc_dirty = False
-        worked = {e.name for e in cache.entities}
+        await _fresh_dxcc_cache(state)
+        worked = {e.name for e in state.dxcc_cache.entities}
         cty = _cty_database()
         bands_out: list[dict[str, Any]] = []
         for band in body.get("bands", []):

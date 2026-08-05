@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import io
 import tarfile
 import time
@@ -17,7 +18,7 @@ from server.engine.cq_loop import CqLoopController
 from server.engine.repository import QsoStatus, Repository
 from server.engine.safety import Interlock, SafetyController
 from server.engine.sequencer import QSORecord, Sequencer
-from server.web.api import COOKIE_NAME, AppState, create_app
+from server.web.api import COOKIE_NAME, AppState, _fresh_dxcc_cache, create_app
 from server.web.auth import AuthService, hash_password
 from server.web.lease import LeaseService
 
@@ -857,6 +858,36 @@ def test_dxcc_endpoint_still_works_after_singleton_refactor(
     body = client.get("/api/v1/dxcc", headers=auth_headers(session_id)).json()
     assert body.get("ok") is True
     assert body["total"] >= 1
+
+
+def test_fresh_dxcc_cache_rebuilds_when_dirty(state) -> None:
+    state.dxcc_cache = None
+    state.repository.dxcc_dirty = True
+    asyncio.run(_fresh_dxcc_cache(state))
+    assert state.dxcc_cache is not None
+    assert state.repository.dxcc_dirty is False
+
+
+def test_fresh_dxcc_cache_keeps_cache_when_clean(state) -> None:
+    state.dxcc_cache = SimpleNamespace(entities=[SimpleNamespace(name="Japan")])
+    state.repository.dxcc_dirty = False
+    asyncio.run(_fresh_dxcc_cache(state))
+    assert [e.name for e in state.dxcc_cache.entities] == ["Japan"]
+
+
+def test_fresh_dxcc_cache_reflects_new_qso(state) -> None:
+    """After a QSO completes (dxcc_dirty), a refresh must surface the new
+    entity in the worked set so the band hunt stops hunting it."""
+    from server.engine.sequencer import QSORecord
+
+    state.repository.record_qso(
+        QSORecord(my_call="M0XX", my_grid="IO91", dx_call="BI1TX", band="20m"),
+        completed_epoch=1700000000.0,
+    )
+    state.dxcc_cache = None
+    asyncio.run(_fresh_dxcc_cache(state))
+    worked = {e.name for e in state.dxcc_cache.entities}
+    assert "China" in worked
 
 
 def test_auto_call_setting_round_trip(client: TestClient, state: AppState) -> None:
