@@ -393,7 +393,7 @@ export function createSettingsDrawer() {
   const bandHuntContent = document.getElementById("bandhunt-content");
   const BAND_HUNT_WINDOWS = [
     [10, "10 min"], [30, "30 min"], [60, "1 hour"], [240, "4 hours"],
-    [1440, "1 day"], [4320, "3 days"], [10080, "7 days"],
+    [1440, "1 day"],
   ];
   const BAND_HUNT_SPOT_CAP = 200; // rows per window; newest first
 
