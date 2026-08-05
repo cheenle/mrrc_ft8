@@ -1,5 +1,15 @@
 # 14. Version History
 
+## Unreleased — 2026-08-05 — New-DXCC Hunt Reaction Optimization
+
+- 实测基线（生产 DB 10,533 QSO）：`cty.lookup` 单次 1.5 ms（线性扫描 346 实体 × ~38.5k 前缀）；`dxcc_summary` 全量重建 10.2 s（6,749 次 lookup × 2.59 亿 startswith）；每次 QSO 写入后 `/dxcc`、`/band-hunt` 首次请求被 10 s+ 重建阻塞；dashboard `Promise.all` 等最慢深窗口（3/7 天冷缓存 5-8 s）。
+- `CtyDatabase.lookup` 索引化：`__post_init__` 构建 `_exact`（`=CALL` 精确优先）+ 前缀 trie（最长前缀；`(数字)` 替换已在加载时展开），`setdefault` 保留并列最先遇到。语义与旧线性扫描**逐字节等价**（语义一致性回归：cty.dat 全展开模式 + 2000 合成呼号 + 真实 QSO 日志 dx_call 全量比对）。lookup 1.5 ms → 亚微秒；`dxcc_summary` 重建 10.2 s → ~0.2 s。
+- 去掉 New-DXCC dashboard 的 3/7 天深窗口（`BAND_HUNT_WINDOWS` 收窄到 10/30 分钟、1/4 小时、1 天）。
+- 抽 `_fresh_dxcc_cache(state)` 共享刷新助手（`/dxcc`、`/band-hunt`、启动预填、`band_hunt_loop` 四处复用）；**修复自动波段猎人陈旧 worked 集**——每 tick 先刷新，刚通联的实体不再被重复 hunt。
+- dashboard 渐进渲染：所有窗口 fetch 并行、先到先渲染（顺序保持），10 分钟窗口 ~1 s 内可见。
+- `/band-hunt` 代理加上游 TTL 缓存（`_BandHuntCache`，键 `(window_min, grid, radius, detail)`，TTL `min(window_min, 3600)` s，只缓存 `ok:true` 原始 body，worked 过滤仍每请求实时跑）；dashboard 在 TTL 内二次打开免冷拉，band_hunt_loop 保持每 tick 新鲜拉取。
+- Regressions: `test_dxcc.py`（索引语义等价 + 速度烟测）、`test_api.py`（`_fresh_dxcc_cache` dirty/clean/新 QSO、`_BandHuntCache` hit/miss/过期/驱逐、代理二次请求命中缓存、错误不缓存）、既有 `band_hunt_proxy_*` 全绿。全量套件绿。
+
 ## Unreleased — 2026-08-05 — Manual Reply Races the Current Slot
 
 - 现场根因（production DB 佐证）：手动 Reply 只有在**当前时隙开始后 ~2.2 s 内**（fit guard：12.64 s 波形必须塞进 15 s 时隙）武装才能当拍发射；而解码行要到时隙开始后 ~0.67 s 才上屏（0.4 s 投递宽限 + 解码），双击又是 select→(lease)→select→reply 2–4 个 HTTP 往返，操作员实际在 +4 s/+7 s/+13 s 才点中，**永远错过窗口**，回复推迟到下一个同相时隙——实测 26–38 s 后才发射（S54E 38 s、BA6CC/OE4AHG 26 s）。
