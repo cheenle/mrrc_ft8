@@ -59,22 +59,34 @@ def _lookup_linear(entities, call: str):
     return (best.name, best.continent) if best else None
 
 
-def _corpus_from_cty(db: CtyDatabase) -> set[str]:
-    """Every expanded pattern plus suffix perturbations — covers exact, digit
-    replacement, and plain-prefix hit paths deterministically."""
-    calls: set[str] = set()
+def _corpus_from_cty(db: CtyDatabase, *, prefix_sample: int = 300, exact_step: int = 10) -> set[str]:
+    """Bounded adversarial corpus over the repo cty.dat: a deterministic
+    sample of every reachable exact key plus prefix-hit variants (bare, digit,
+    alphabetic, portable, lowercased).  Sized so the pre-index reference scan
+    finishes in seconds — enumerating all ~40k prefixes would take minutes
+    against the old linear lookup (the reason the original unbounded version
+    hung).  Slash-free exact keys are the only reachable exact entries:
+    ``lookup`` strips ``/suffix`` before matching."""
+    exact: list[str] = []
+    non_exact: list[str] = []
     for entity in db.entities:
         for stored in entity.prefixes:
             if stored.startswith("="):
-                calls.add(stored[1:])               # exact hit
+                if "/" not in stored:
+                    exact.append(stored[1:])
             else:
-                for suffix in ("", "1", "ABC", "1234", "X", "00", "P", "QRA"):
-                    calls.add(stored + suffix)      # prefix hit
-                calls.add(stored + suffix.lower())  # lowercased (uppercase path)
+                non_exact.append(stored)
+    calls: set[str] = set()
+    calls.update(exact[::exact_step])            # deterministic sample of exact keys
+    calls.update(exact[:50])                     # head of the exact list
+    for stored in non_exact[:prefix_sample]:
+        calls.add(stored)                        # bare prefix (shortest hit)
+        for suffix in ("1", "ABC", "P", "qra"):  # digit / alphabetic / portable / lowercase
+            calls.add(stored + suffix)
     return calls
 
 
-def _synthetic_calls(seed: int = 42, n: int = 2000) -> set[str]:
+def _synthetic_calls(seed: int = 42, n: int = 1500) -> set[str]:
     rng = random.Random(seed)
     chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
     out: set[str] = set()
