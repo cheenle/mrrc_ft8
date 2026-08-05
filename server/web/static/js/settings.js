@@ -402,52 +402,57 @@ export function createSettingsDrawer() {
       ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
   }
 
+  function buildWindowHtml(label, res) {
+    const html = [];
+    html.push(`<h3>${label}</h3>`);
+    if (!res.ok) {
+      html.push(`<p class='drawer-hint dim'>${escapeHtml(res.reason || res.status)}</p>`);
+      return html.join("");
+    }
+    const bands = res.bands || [];
+    const allSpots = bands.flatMap((b) => b.spots || []);
+    const workedTotal = bands.reduce((n, b) => n + (b.worked_spot_count || 0), 0);
+    if (!allSpots.length) {
+      html.push(`<p class='drawer-hint dim'>0 new-DXCC spots` +
+        `${workedTotal ? ` · ${workedTotal} already-worked nearby` : ""}.</p>`);
+      return html.join("");
+    }
+    const fresh = allSpots.slice(0, BAND_HUNT_SPOT_CAP);
+    html.push(`<div class="qso-row"><span class="qso-call"></span>` +
+      `<span class="qso-meta">${allSpots.length} new-DXCC spot(s)` +
+      `${workedTotal ? ` · ${workedTotal} worked nearby` : ""}` +
+      `${allSpots.length > fresh.length ? ` (showing ${fresh.length})` : ""}</span></div>`);
+    for (const s of fresh) {
+      const name = s.entity || s.callsign || "?";
+      const band = s.band || "?";
+      const snr = s.snr == null ? "" : ` ${s.snr}dB`;
+      const t = s.qso_time ? s.qso_time.replace("T", " ").slice(5, 16) : "";
+      html.push(
+        `<div class="qso-row"><span class="qso-call">${escapeHtml(name)}</span>` +
+        `<span class="qso-meta">${escapeHtml(s.callsign)} · ${escapeHtml(band)}` +
+        `${snr} · ${escapeHtml(t)}</span></div>`);
+    }
+    return html.join("");
+  }
+
   async function openBandHuntView() {
     bandHuntOverlay.hidden = false;
     document.body.classList.add("log-open");
     bandHuntContent.innerHTML = "<p class='drawer-hint'>Loading new-DXCC spots…</p>";
 
-    // "Spots" here means NEW-DXCC spots: the /band-hunt proxy already filters
-    // every band's spots against the authoritative worked set, so what arrives
-    // is exactly the hunt opportunities (worked count rides along for context).
-    const windowRes = await Promise.all(
-      BAND_HUNT_WINDOWS.map(([windowMin]) =>
-        api.bandHunt({ window_min: windowMin, detail: 1, min_spots: 1 })),
-    );
-
-    const html = [];
-    BAND_HUNT_WINDOWS.forEach(([windowMin, label], i) => {
-      const res = windowRes[i];
-      html.push(`<h3>${label}</h3>`);
-      if (!res.ok) {
-        html.push(`<p class='drawer-hint dim'>${escapeHtml(res.reason || res.status)}</p>`);
-        return;
-      }
-      const bands = res.bands || [];
-      const allSpots = bands.flatMap((b) => b.spots || []);
-      const workedTotal = bands.reduce((n, b) => n + (b.worked_spot_count || 0), 0);
-      if (!allSpots.length) {
-        html.push(`<p class='drawer-hint dim'>0 new-DXCC spots` +
-          `${workedTotal ? ` · ${workedTotal} already-worked nearby` : ""}.</p>`);
-        return;
-      }
-      const fresh = allSpots.slice(0, BAND_HUNT_SPOT_CAP);
-      html.push(`<div class="qso-row"><span class="qso-call"></span>` +
-        `<span class="qso-meta">${allSpots.length} new-DXCC spot(s)` +
-        `${workedTotal ? ` · ${workedTotal} worked nearby` : ""}` +
-        `${allSpots.length > fresh.length ? ` (showing ${fresh.length})` : ""}</span></div>`);
-      for (const s of fresh) {
-        const name = s.entity || s.callsign || "?";
-        const band = s.band || "?";
-        const snr = s.snr == null ? "" : ` ${s.snr}dB`;
-        const t = s.qso_time ? s.qso_time.replace("T", " ").slice(5, 16) : "";
-        html.push(
-          `<div class="qso-row"><span class="qso-call">${escapeHtml(name)}</span>` +
-          `<span class="qso-meta">${escapeHtml(s.callsign)} · ${escapeHtml(band)}` +
-          `${snr} · ${escapeHtml(t)}</span></div>`);
-      }
-    });
-    bandHuntContent.innerHTML = html.join("");
+    // Fire every window fetch in parallel, then render each window the moment
+    // it resolves (re-render keeps window ORDER stable; the 10-min window is
+    // visible in ~1 s instead of waiting for the 1-day window).
+    const pending = BAND_HUNT_WINDOWS.map(([windowMin, label]) =>
+      api.bandHunt({ window_min: windowMin, detail: 1, min_spots: 1 })
+        .then((res) => [label, res]));
+    const rendered = new Map();
+    for (const p of pending) {
+      const [label, res] = await p;
+      rendered.set(label, buildWindowHtml(label, res));
+      bandHuntContent.innerHTML =
+        BAND_HUNT_WINDOWS.map(([, l]) => rendered.get(l) ?? "").join("");
+    }
   }
 
   function closeBandHuntView() {
