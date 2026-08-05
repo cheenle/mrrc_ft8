@@ -12,7 +12,8 @@ from __future__ import annotations
 
 import logging
 import re
-from dataclasses import dataclass
+from dataclasses import dataclass, field
+from typing import Any
 
 log = logging.getLogger(__name__)
 
@@ -51,24 +52,44 @@ def _expand_entry(entry: str) -> list[tuple[str, bool]]:
 @dataclass
 class CtyDatabase:
     entities: list[CtyEntity]
+    _exact: dict[str, tuple[str, str]] = field(init=False, repr=False)
+    _trie: dict[str, Any] = field(init=False, repr=False)
+
+    def __post_init__(self) -> None:
+        """Build the exact-match dict + prefix trie. ``setdefault`` preserves
+        first-encountered on duplicate patterns (matches the old scan)."""
+        self._exact = {}
+        self._trie: dict[str, Any] = {}
+        for entity in self.entities:
+            for stored in entity.prefixes:
+                if stored.startswith("="):
+                    self._exact.setdefault(
+                        stored[1:], (entity.name, entity.continent)
+                    )
+                else:
+                    node = self._trie
+                    for ch in stored:
+                        node = node.setdefault(ch, {})
+                    node.setdefault("__entity__", (entity.name, entity.continent))
 
     def lookup(self, call: str) -> tuple[str, str] | None:
         """(entity_name, continent) for a callsign; exact match wins, then
         the longest prefix match; None when nothing matches."""
 
         base = call.split("/", 1)[0].upper()
-        best_len = -1
-        best: CtyEntity | None = None
-        for entity in self.entities:
-            for stored in entity.prefixes:
-                if stored.startswith("="):
-                    if base == stored[1:]:
-                        return (entity.name, entity.continent)
-                elif base.startswith(stored):
-                    if len(stored) > best_len:
-                        best_len = len(stored)
-                        best = entity
-        return (best.name, best.continent) if best else None
+        exact = self._exact.get(base)
+        if exact is not None:
+            return exact
+        node = self._trie
+        best: tuple[str, str] | None = None
+        for ch in base:
+            node = node.get(ch)
+            if node is None:
+                break
+            entity = node.get("__entity__")
+            if entity is not None:
+                best = entity  # deeper = longer prefix; last assignment wins
+        return best
 
 
 def load_cty(path: str) -> CtyDatabase:

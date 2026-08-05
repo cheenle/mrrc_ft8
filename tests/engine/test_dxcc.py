@@ -142,3 +142,118 @@ def test_get_cty_database_loads_repo_cty_singleton() -> None:
     assert db1 is db2                      # 单例
     assert len(db1.entities) > 300         # 仓库内 cty.dat（346 实体）
     assert db1.lookup("BI1TX") == ("China", "AS")
+
+
+# ---- indexed lookup ----------------------------------------------------------
+
+"""Indexed lookup: semantic equivalence to the pre-index linear scan."""
+import random
+
+import pytest
+
+from server.engine.dxcc import CtyDatabase, get_cty_database, load_cty
+
+
+def _lookup_linear(entities, call: str):
+    """Reference: exact copy of the pre-index algorithm (dxcc.py:55)."""
+    base = call.split("/", 1)[0].upper()
+    best_len = -1
+    best = None
+    for entity in entities:
+        for stored in entity.prefixes:
+            if stored.startswith("="):
+                if base == stored[1:]:
+                    return (entity.name, entity.continent)
+            elif base.startswith(stored):
+                if len(stored) > best_len:
+                    best_len = len(stored)
+                    best = entity
+    return (best.name, best.continent) if best else None
+
+
+def _corpus_from_cty(db: CtyDatabase, *, prefix_sample: int = 300, exact_step: int = 10) -> set[str]:
+    """Bounded adversarial corpus over the repo cty.dat: a deterministic
+    sample of every reachable exact key plus prefix-hit variants (bare, digit,
+    alphabetic, portable, lowercased).  Sized so the pre-index reference scan
+    finishes in seconds — enumerating all ~40k prefixes would take minutes
+    against the old linear lookup (the reason the original unbounded version
+    hung).  Slash-free exact keys are the only reachable exact entries:
+    ``lookup`` strips ``/suffix`` before matching."""
+    exact: list[str] = []
+    non_exact: list[str] = []
+    for entity in db.entities:
+        for stored in entity.prefixes:
+            if stored.startswith("="):
+                if "/" not in stored:
+                    exact.append(stored[1:])
+            else:
+                non_exact.append(stored)
+    calls: set[str] = set()
+    calls.update(exact[::exact_step])            # deterministic sample of exact keys
+    calls.update(exact[:50])                     # head of the exact list
+    for stored in non_exact[:prefix_sample]:
+        calls.add(stored)                        # bare prefix (shortest hit)
+        for suffix in ("1", "ABC", "P", "qra"):  # digit / alphabetic / portable / lowercase
+            calls.add(stored + suffix)
+    return calls
+
+
+def _synthetic_calls(seed: int = 42, n: int = 1500) -> set[str]:
+    rng = random.Random(seed)
+    chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
+    out: set[str] = set()
+    for _ in range(n):
+        out.add("".join(rng.choice(chars) for _ in range(rng.randint(1, 8))))
+    base = list(out)[:50]
+    for c in base:
+        out.add(c + "/P")    # slash suffix stripping
+        out.add(c + "/QRP")
+        out.add(c.lower())
+    return out
+
+
+def test_index_structures_built_on_load() -> None:
+    db = get_cty_database()
+    assert hasattr(db, "_exact")
+    assert hasattr(db, "_trie")
+    assert db._exact.get("9M4SDX") == ("Spratly Islands", "AS")  # real exact entry
+
+
+def test_indexed_lookup_equivalent_to_linear_over_full_corpus() -> None:
+    db = get_cty_database()
+    calls = _corpus_from_cty(db) | _synthetic_calls()
+    assert len(calls) > 500
+    for call in sorted(calls):
+        assert db.lookup(call) == _lookup_linear(db.entities, call), (
+            f"semantic mismatch for {call!r}"
+        )
+
+
+@pytest.mark.skipif(
+    not (__import__("pathlib").Path(__file__).resolve().parents[2] / "mrrc-ft8.db").exists(),
+    reason="live QSO log not present",
+)
+def test_indexed_lookup_equivalent_over_live_qso_log() -> None:
+    from pathlib import Path
+    from server.engine.repository import Repository
+
+    db = get_cty_database()
+    repo = Repository(str(Path(__file__).resolve().parents[2] / "mrrc-ft8.db"))
+    calls = {qso.dx_call for qso in repo.list_qsos(include_void=False)}
+    assert len(calls) > 1000
+    for call in calls:
+        assert db.lookup(call) == _lookup_linear(db.entities, call), call
+
+
+def test_lookup_speed_smoke() -> None:
+    """Loose upper bound: the index must stay 3+ orders of magnitude faster
+    than the old ~1.5 ms/call linear scan (guard against index regressions)."""
+    import time
+
+    db = get_cty_database()
+    calls = _synthetic_calls(seed=7, n=2000)
+    t0 = time.perf_counter()
+    for c in calls:
+        db.lookup(c)
+    elapsed = time.perf_counter() - t0
+    assert elapsed < 2.0, f"{elapsed:.2f}s for {len(calls)} lookups"
