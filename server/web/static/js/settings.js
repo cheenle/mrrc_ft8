@@ -440,19 +440,20 @@ export function createSettingsDrawer() {
     document.body.classList.add("log-open");
     bandHuntContent.innerHTML = "<p class='drawer-hint'>Loading new-DXCC spots…</p>";
 
-    // Fire every window fetch in parallel, then render each window the moment
-    // it resolves (re-render keeps window ORDER stable; the 10-min window is
-    // visible in ~1 s instead of waiting for the 1-day window).
-    const pending = BAND_HUNT_WINDOWS.map(([windowMin, label]) =>
-      api.bandHunt({ window_min: windowMin, detail: 1, min_spots: 1 })
-        .then((res) => [label, res]));
+    // Fire every window fetch in parallel; each window renders the moment its
+    // own fetch resolves (re-render keeps the final innerHTML in stable window
+    // ORDER, so the 10-min window is visible in ~1 s instead of waiting for
+    // the 1-day window). Promise.allSettled means one hard-failing fetch no
+    // longer aborts the others — buildWindowHtml already renders an error hint
+    // for {ok:false} responses.
     const rendered = new Map();
-    for (const p of pending) {
-      const [label, res] = await p;
+    const tasks = BAND_HUNT_WINDOWS.map(async ([windowMin, label]) => {
+      const res = await api.bandHunt({ window_min: windowMin, detail: 1, min_spots: 1 });
       rendered.set(label, buildWindowHtml(label, res));
       bandHuntContent.innerHTML =
         BAND_HUNT_WINDOWS.map(([, l]) => rendered.get(l) ?? "").join("");
-    }
+    });
+    await Promise.allSettled(tasks);
   }
 
   function closeBandHuntView() {

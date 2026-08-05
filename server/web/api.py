@@ -95,7 +95,7 @@ class IdempotencyCache:
 
 
 class _BandHuntCache:
-    """TTL cache for raw upstream /api/band_hunt bodies (proxy + poller share).
+    """TTL cache for raw upstream /api/band_hunt bodies (proxy-only).
 
     TTL = min(window_min, 3600) s: small windows stay fresh, deep windows avoid
     repeated cold 5-8 s fetches. Raw (unfiltered) bodies are cached; the
@@ -189,7 +189,7 @@ def _cty_database() -> Any:
 async def _fresh_dxcc_cache(state: Any) -> None:
     """Rebuild state.dxcc_cache only when missing or a QSO write happened
     since the last build (repository.dxcc_dirty).  Runs the scan off-thread;
-    0.2 s thanks to the indexed lookup (Task 1)."""
+    sub-second thanks to the indexed lookup (Task 1)."""
     if state.dxcc_cache is None or state.repository.dxcc_dirty:
         from ..engine.dxcc import dxcc_summary
 

@@ -214,9 +214,9 @@ def _synthetic_calls(seed: int = 42, n: int = 1500) -> set[str]:
 
 def test_index_structures_built_on_load() -> None:
     db = get_cty_database()
-    assert hasattr(db, "_exact")
-    assert hasattr(db, "_trie")
-    assert db._exact.get("9M4SDX") == ("Spratly Islands", "AS")  # real exact entry
+    assert isinstance(db._exact, dict) and db._exact
+    assert isinstance(db._trie, dict) and db._trie
+    assert db.lookup("BI1TX") == ("China", "AS")  # repo cty.dat guarantees this
 
 
 def test_indexed_lookup_equivalent_to_linear_over_full_corpus() -> None:
