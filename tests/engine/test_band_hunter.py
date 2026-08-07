@@ -216,3 +216,43 @@ def test_fetch_opportunities_passes_params() -> None:
     assert captured["home_grid"] == "ON80DA"
     assert captured["radius_km"] == "1000"
     assert captured["window_min"] == "30"
+
+
+# --- pskreporter 实体名归一化（现场 2026-08-07：Germany 已通联仍被判 new） ---
+
+def test_rank_bands_normalizes_germany_alias() -> None:
+    """pskreporter 用普通名 "Germany"，cty 规范名是 "Fed. Rep. of Germany"。
+    worked 集含规范名时必须把它过滤掉——现场 band_hunt 反复切 15m 追已通联实体。"""
+
+    payload = {"ok": True, "bands": [_band("15m", 21_074_000, entities=("Germany",))]}
+    assert rank_bands(payload, {"Fed. Rep. of Germany"}) == []
+
+
+def test_rank_bands_normalizes_malaysia_alias() -> None:
+    """Malaysia → West Malaysia（9M 主体）；worked 含任一分实体即过滤。"""
+
+    payload = {"ok": True, "bands": [_band("20m", 14_074_000, entities=("Malaysia",))]}
+    assert rank_bands(payload, {"West Malaysia"}) == []
+
+
+def test_rank_bands_normalizes_turkey_alias() -> None:
+    """Turkey → Asiatic Turkey（TA 前缀主体）。"""
+
+    payload = {"ok": True, "bands": [_band("20m", 14_074_000, entities=("Turkey",))]}
+    assert rank_bands(payload, {"Asiatic Turkey"}) == []
+
+
+def test_rank_bands_keeps_unworked_alias_entity() -> None:
+    """归一化只用于 worked 比对：别名实体未通联时仍算 new，且保留原名显示。"""
+
+    payload = {"ok": True, "bands": [_band("20m", 14_074_000, entities=("Germany",))]}
+    ranked = rank_bands(payload, {"Japan"})
+    assert ranked[0]["new_entities"] == ["Germany"]
+
+
+def test_rank_bands_keeps_unknown_names_unchanged() -> None:
+    """不在别名表也不在 cty 规范名中的名称保持现状（算 new，不误伤）。"""
+
+    payload = {"ok": True, "bands": [_band("20m", 14_074_000, entities=("Some New Entity",))]}
+    ranked = rank_bands(payload, {"Japan"})
+    assert ranked[0]["new_entities"] == ["Some New Entity"]

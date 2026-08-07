@@ -43,7 +43,7 @@ venv/bin/python -m pytest tests/
 | `server/engine/adif_import.py` | JTDX `wsjtx_log.adi` 容错解析（容忍半行写入）+ 去重键 `(dx_call, utc日期, started_utc, band)` + `sync_jtdx_log` 幂等增量导入；启动 + 每小时由 main.py 调度 |
 | `server/engine/dxcc.py` | 仓库内 `cty.dat`（country-files ADIF 格式）解析 + 呼号→DXCC 实体 lookup（`=`精确 / `(23)`数字替换 / 最长前缀）+ `dxcc_summary` 全量统计（总数/实体列表/波段矩阵） |
 | `server/main.py` 自动呼叫 | decode 消息带 `is_new_dxcc`（实体已通联判定）；开关 `auto_call_new_dxcc` 开启后服务端对第一个新 DXCC CQ 自动通联（`auto_call_candidate` 纯函数 + `safety.arm` + `sequencer.reply_to`，不打断当前 QSO） |
-| `server/engine/band_hunter.py` | NFR-088 波段猎人：轮询外部 `/api/band_hunt`（HTTP 唯一跨库边界，pskreporter 侧），`rank_bands`/`decide_switch` 纯函数过滤已通联实体并排序；`MRRC_FT8_BAND_HUNT_URL`（默认空=关闭）+ 设置 `auto_band_hunt` 双闸门；空闲时经现有 rig 调谐路径切频，再由自动呼叫闭环 |
+| `server/engine/band_hunter.py` | NFR-088 波段猎人：轮询外部 `/api/band_hunt`（HTTP 唯一跨库边界，pskreporter 侧），`rank_bands`/`decide_switch` 纯函数过滤已通联实体并排序（pskreporter 实体名→cty 规范名归一化：Germany/Malaysia/Turkey 别名）；`MRRC_FT8_BAND_HUNT_URL`（默认空=关闭）+ 设置 `auto_band_hunt` 双闸门；空闲时经现有 rig 调谐路径切频，再由自动呼叫闭环 |
 | `server/engine/` | 编排器（UTC 时隙）、音频 RX/TX、rig（rigctld）、sequencer、TX 链路（dsp_encode 编码、tx_driver 时隙奇偶泵 + I9 决策窗口/fit guard + TX 频率跟随 sequencer 伙伴偏移、tx_frequency 占用环/CQ 空闲频点、cq_loop 自动 CQ 循环、qso_log 落库助手）、waterfall（3 kHz 频谱）、ADIF；音频采集运行在独立子进程（capture_proc，进程边界隔离 CoreAudio 会话退化）；UtcRing 按绝对序号 `X % capacity` 寻址 |
 | `server/web/` | FastAPI REST/WS + 移动 PWA 静态资源（含 `band.js` 波段选择） |
 | `deploy/` | Caddyfile（模板+live 实例）、Caddy root LaunchDaemon、systemd unit、macOS LaunchAgent（密码哈希经 `python -m server.main --hash-password` bootstrap）；`restart.sh` 串口占用守卫（AD-008：rigctld 启动前检测非 rigctld 持有者，冲突 fail-fast，`MRRC_FT8_SKIP_SERIAL_GUARD=1` 应急跳过） |

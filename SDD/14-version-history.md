@@ -1,5 +1,11 @@
 # 14. Version History
 
+## Unreleased — 2026-08-08 — band-hunt Entity-Name Normalization (pskreporter → cty)
+
+- **现场根因（12h 复盘）**：band_hunt 反复切 15m 追 "Germany"，但 Germany 实体早已通联（qso 表 64 条 DL/DK 记录）。原因：`rank_bands` 的 worked 过滤直接用 pskreporter 实体名比对 cty.dat 规范名——pskreporter 用普通名 "Germany"/"Malaysia"/"Turkey"，cty 规范名是 "Fed. Rep. of Germany"/"West Malaysia"/"Asiatic Turkey" → 名称失配 → 已通联实体被判 new。实测 42 个 pskreporter 实体名中仅这 3 个不一致。
+- **修复**：`band_hunter.py` 加 `_CTY_NAME_ALIASES` 别名表 + `_canonical_entity_name()`（未知名保持原样，不误伤）；`rank_bands` 的 worked 判定改用规范化名，`new_entities` 保留原名显示。auto_call 的 `is_new_dxcc` 不受影响（两侧都用 cty.lookup，本就一致正确）。
+- Regressions: `test_band_hunter.py`（Germany/Malaysia/Turkey 别名归一化 + 未通联保留 + 未知名称不变）。全量套件绿（768 passed）。
+
 ## Unreleased — 2026-08-07 — Serial-Owner Guard: refuse rigctld start on device conflict (AD-008)
 
 - **现场根因（4 小时 rig 劣化复盘）**：18:01 一台手动 `nohup` 启动的旧 mrrc_ft710 `server.py`（MacPorts 系统 Python，非 start.sh 的 venv 解释器）直接 open 了 FT-710 CAT 串口 `/dev/cu.usbserial-0121DB3A0`，与 rigctld 同时持有 → 字节级争抢 → rig 轮询 90% 超时（18:00–22:20，`wrong reply`/`Rig busy` 数千条），拖累 band_hunt 切频 5 次失败。

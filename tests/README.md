@@ -226,7 +226,10 @@ serial-owner guard (AD-008): the rigctld start is refused textually while
 a non-rigctld process holds the CAT device, with the
 `MRRC_FT8_SKIP_SERIAL_GUARD` escape hatch — field regression: a stray
 mrrc_ft710 `server.py` sharing the serial with rigctld caused 4 h of ~90%
-rig timeouts.
+rig timeouts. The band-hunter suite pins rank/decide pure functions
+including pskreporter→cty entity-name normalization (Germany→Fed. Rep.
+of Germany, Malaysia→West Malaysia, Turkey→Asiatic Turkey) so already
+worked entities never re-rank as new.
 The latency suite pins the NFR-002 histogram bucket boundaries,
 per-(profile, threads) snapshot shape, negative-input rejection, the
 `SupervisorDecoder` recording path and the `/health` exposure of

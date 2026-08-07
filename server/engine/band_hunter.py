@@ -25,6 +25,22 @@ BAND_HUNT_TIMEOUT_S = 5.0
 # (mirrors the cockpit band selector's MATCH_HZ, band.js).
 MATCH_HZ = 50_000
 
+# pskreporter 实体名 → cty.dat 规范名（country-files）。现场 2026-08-07：
+# pskreporter 用普通名 "Germany"，cty 规范名是 "Fed. Rep. of Germany"，
+# rank_bands 的 worked 比对失配 → 已通联实体反复被判 new，band_hunt 白追。
+# 42 个实测实体名中仅这 3 个不一致；未知名称保持原样（不误伤）。
+_CTY_NAME_ALIASES: dict[str, str] = {
+    "Germany": "Fed. Rep. of Germany",
+    "Malaysia": "West Malaysia",  # 9M 主体；East Malaysia 为独立实体
+    "Turkey": "Asiatic Turkey",   # TA 前缀主体；European Turkey 独立
+}
+
+
+def _canonical_entity_name(name: str) -> str:
+    """Map a pskreporter entity name to the cty.dat canonical name."""
+
+    return _CTY_NAME_ALIASES.get(name, name)
+
 
 async def fetch_opportunities(
     base_url: str,
@@ -74,7 +90,10 @@ def rank_bands(
     for band in opportunities.get("bands", []):
         entities = band.get("entities", [])
         new_entities = [
-            e["name"] for e in entities if isinstance(e, dict) and e.get("name") not in worked_entities
+            e["name"]
+            for e in entities
+            if isinstance(e, dict)
+            and _canonical_entity_name(e.get("name", "")) not in worked_entities
         ]
         if not new_entities:
             continue
