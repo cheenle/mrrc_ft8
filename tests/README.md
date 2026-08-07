@@ -221,7 +221,12 @@ unprivileged systemd user with audio groups, `OMP_STACKSIZE=10M` in both
 service managers and no committed secrets — and round-trips the real
 `--hash-password` bootstrap CLI through a subprocess into `PasswordHasher`,
 plus the root Caddy daemon plist (runs `caddy run` against
-`/etc/caddy/Caddyfile` with auto-restart).
+`/etc/caddy/Caddyfile` with auto-restart). `restart.sh` is pinned for the
+serial-owner guard (AD-008): the rigctld start is refused textually while
+a non-rigctld process holds the CAT device, with the
+`MRRC_FT8_SKIP_SERIAL_GUARD` escape hatch — field regression: a stray
+mrrc_ft710 `server.py` sharing the serial with rigctld caused 4 h of ~90%
+rig timeouts.
 The latency suite pins the NFR-002 histogram bucket boundaries,
 per-(profile, threads) snapshot shape, negative-input rejection, the
 `SupervisorDecoder` recording path and the `/health` exposure of

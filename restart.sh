@@ -74,6 +74,32 @@ OLD_RIGCTLD=$(old_rigctld_pids)
 # undecodable audio that never recovers for the process lifetime).
 sleep 8
 
+# ─── 1.5 串口唯一 owner 守卫（AD-008）──────────────────────────────
+# rigctld 是 CAT 串口唯一 owner；若此时仍有非 rigctld 进程持有串口，
+# 启动后必然与 rigctld 争抢字节（现场 2026-08-07：旧 mrrc_ft710 的
+# server.py 手动启动后与 rigctld 抢 /dev/cu.usbserial-0121DB3A0，
+# rig 轮询 90% 超时持续 4 小时）。发现冲突即拒绝启动并列出持有者；
+# MRRC_FT8_SKIP_SERIAL_GUARD=1 可强制跳过（应急/已知冲突场景）。
+serial_guard() {
+    command -v lsof >/dev/null 2>&1 || return 0
+    local holders owner
+    holders="$(lsof -t "$RIG_DEVICE" 2>/dev/null || true)"
+    [ -z "$holders" ] && return 0
+    for pid in $holders; do
+        owner="$(ps -o command= -p "$pid" 2>/dev/null | head -1)"
+        echo "✗ CAT 串口被非 rigctld 进程占用 (PID $pid): $owner" >&2
+    done
+    echo "✗ 串口唯一 owner 是 rigctld（AD-008）：请先停掉冲突进程后重跑本脚本；" >&2
+    echo "  或确认冲突已清理后 MRRC_FT8_SKIP_SERIAL_GUARD=1 强制启动" >&2
+    return 1
+}
+
+if [ -n "${MRRC_FT8_SKIP_SERIAL_GUARD:-}" ]; then
+    echo "（MRRC_FT8_SKIP_SERIAL_GUARD 已设置，跳过串口占用守卫）"
+else
+    serial_guard || exit 1
+fi
+
 # ─── 2. 启动 rigctld 并等待就绪 ──────────────────────────────────────
 start_rigctld() {
     echo "Starting rigctld ($RIG_DEVICE @ $RIG_BAUD, model $RIG_MODEL, port $RIGCTLD_PORT)..."

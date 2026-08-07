@@ -29,6 +29,11 @@ def unit() -> str:
     return (DEPLOY / "mrrc-ft8.service").read_text(encoding="utf-8")
 
 
+@pytest.fixture(scope="module")
+def restart_sh() -> str:
+    return (ROOT / "restart.sh").read_text(encoding="utf-8")
+
+
 def test_caddyfile_proxies_to_loopback_fastapi(caddyfile: str) -> None:
     """§12.1: Caddy owns the edge; FastAPI stays on 127.0.0.1:8000."""
 
@@ -92,6 +97,24 @@ def test_caddy_daemon_plist_shape() -> None:
     assert "/etc/caddy/Caddyfile" in plist["ProgramArguments"]
     assert plist["RunAtLoad"] is True
     assert plist["KeepAlive"] is True
+
+
+def test_restart_sh_serial_guard_blocks_conflicting_holders(
+    restart_sh: str,
+) -> None:
+    """AD-008: rigctld must be the only serial owner.
+
+    Field finding 2026-08-07: a stray ``server.py`` (old mrrc_ft710 web
+    server) holding the CAT serial alongside rigctld caused ~90% rig timeouts
+    for 4 h.  restart.sh must refuse to start rigctld when a non-rigctld
+    process owns the device, with an explicit escape hatch.
+    """
+
+    assert "serial_guard()" in restart_sh
+    assert 'lsof -t "$RIG_DEVICE"' in restart_sh
+    assert "非 rigctld 进程持有串口" in restart_sh or "占用" in restart_sh
+    assert "MRRC_FT8_SKIP_SERIAL_GUARD" in restart_sh
+    assert "serial_guard || exit 1" in restart_sh
 
 
 def test_hash_password_cli_prints_verifiable_argon2id() -> None:

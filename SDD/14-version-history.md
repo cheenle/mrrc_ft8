@@ -1,5 +1,14 @@
 # 14. Version History
 
+## Unreleased — 2026-08-07 — Serial-Owner Guard: refuse rigctld start on device conflict (AD-008)
+
+- **现场根因（4 小时 rig 劣化复盘）**：18:01 一台手动 `nohup` 启动的旧 mrrc_ft710 `server.py`（MacPorts 系统 Python，非 start.sh 的 venv 解释器）直接 open 了 FT-710 CAT 串口 `/dev/cu.usbserial-0121DB3A0`，与 rigctld 同时持有 → 字节级争抢 → rig 轮询 90% 超时（18:00–22:20，`wrong reply`/`Rig busy` 数千条），拖累 band_hunt 切频 5 次失败。
+- **暴露的漏洞（switch.sh/stop.sh，旧项目）**：`ft710_running()` 与 `stop.sh` 的 `pgrep -f "python.*server\.py"` 大小写敏感，匹配不到 `Python server.py`（MacPorts 解释器首字母大写）→ 误判未运行 → 切换时漏停残留进程；停止逻辑依赖 pid 文件 + WEB 端口，非 start.sh 启动的进程两者皆无。
+- **修复（ft8 侧）**：`restart.sh` 新增 `serial_guard()`——启动 rigctld 前检查 CAT 串口是否被非 rigctld 进程持有（`lsof -t $RIG_DEVICE`），冲突即拒绝启动并列出持有者（fail-fast），`MRRC_FT8_SKIP_SERIAL_GUARD=1` 应急跳过；`tests/test_deploy_artifacts.py` 文本回归。
+- **修复（mrrc_ft710 侧，旧项目）**：`switch.sh`/`stop.sh` pgrep 改大小写不敏感（`pgrep -if "server\.py"`），`ft710_running()` 加串口持有者语义兜底（非 rigctld 持有即视为残留），`stop.sh` 加 section 5 串口持有者释放（保留 rigctld）。
+- 现场处置：停掉 56041 后 rig 立即恢复（连续轮询成功）；本文档 V1.3 频率纪律修复（UC-003/004）不受影响。
+- Regressions: `test_deploy_artifacts.py`（restart.sh 守卫文本回归）。全量套件绿。
+
 ## Unreleased — 2026-08-07 — CQ Picks an Unoccupied Offset near 1500 Hz (UC-004)
 
 - **现场根因**：回复频率跟随伙伴后（同日 UC-003 修复），主动 CQ 仍固定 1500 Hz——与占用该频点的他台信号重叠时双方解码互相掩盖（CQ 收不到应答）。
