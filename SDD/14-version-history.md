@@ -1,5 +1,38 @@
 # 14. Version History
 
+## Unreleased — 2026-08-07 — CQ Picks an Unoccupied Offset near 1500 Hz (UC-004)
+
+- **现场根因**：回复频率跟随伙伴后（同日 UC-003 修复），主动 CQ 仍固定 1500 Hz——与占用该频点的他台信号重叠时双方解码互相掩盖（CQ 收不到应答）。
+- **修复**：新增 `server/engine/tx_frequency.py` —— `FrequencyOccupancy` 占用环（120 s TTL，main.py on_decode 对每个解码频率 note，含自身回波——频点确实承载我方信号）+ 纯函数 `pick_cq_frequency`（螺旋扫描：1500 → 1501 → 1499 → …，与所有占用中心距 >= 30 Hz guard 的首个整数频点；窗口 1500±300 内全占用则回退默认）。`Sequencer.start_cq(tx_frequency=…)` 接受调用方频点；显式 `/operation/cq` 与 cq_loop（`pick_frequency` 注入，每次 CQ 启动与 re-CQ 重选）都走 picker；`AppState.occupancy` 组装。
+- Regressions: `test_tx_frequency.py`（纯函数螺旋/guard/窗口/回退 + 占用环 TTL 边界）、`test_cq_loop.py`（picker 注入、DONE re-CQ 重选）、`test_api.py`（/operation/cq 避开占用、空波段回默认）。全量套件绿（762 passed）。
+
+## Unreleased — 2026-08-07 — Reply Frequency Follows the Partner (UC-003 RX-offset half)
+
+- **现场根因（复盘链）**：`TxDriver` 的 TX 音频频率写死 1500 Hz（`DEFAULT_TX_AUDIO_FREQUENCY`），从不跟随被叫台解码频率。TN8GD（尼日尔，新 DXCC）09:46 auto-call 命中其 f=843 Hz 的 CQ，应答却发在 1500 Hz → 对方（pileup 模式的自动化 DX 台）未配对，重传 4 次无应答、RETRY_EXHAUSTED 丢弃未落库；随后 TN8GD 转去通联 JA4AQS/VU2KPH。对照：成功 QSO 均因对方人工在自己频率（1600/1401）应答；同样只有 1500 回波的 UA4LDP 同样未完成。RX 侧一直解码到自身 1500 Hz 发射回波（`mine` 过滤正常，佐证 TX 频率确为固定 1500）。
+- **修复**：Sequencer 持有每 QSO `tx_frequency`（`reply_to(…, tx_frequency=…)` 记录伙伴解码频率；`start_cq` 与 `_reset_partner` 回默认 1500）。`TxDriver` 编码改读 `sequencer.tx_frequency`（删掉自身 `tx_audio_frequency` 字段）；`DEFAULT_TX_AUDIO_FREQUENCY` 归口 sequencer.py（tx_driver 别名导入，单一事实源）。接线：`operation/select` 与 `operation/reply` 透传 body 的 `freq`（UI candidate 已带 `freq`；`_parse_freq` 校验 >0 的 int/float，bool 拒绝）；auto-call 用 view 的 `freq`；`AppState.selected_freq` 随 QSO 结束清理。旧客户端不带 `freq` 时保持历史 1500 Hz 行为。
+- Regressions: `test_sequencer.py`（reply_to 记录伙伴频率/缺省默认/start_cq 复位）、`test_tx_driver.py`（应答编码频率=伙伴频率、CQ=默认频率）、`test_api.py`（select/reply 透传 freq、缺省回退）、`test_main.py`（auto-call 用解码频率/无 freq 回退）。全量套件绿（747 passed）。
+
+## Unreleased — 2026-08-06 — Selected-State Leak Gating Band-Hunt/Auto-Call (P7)
+
+- **根因（现场复现链）**：`state.selected` 只有赋值、从不置 None（grep 无 `selected = None`）。用户点选/回复一次后 selected 永久残留 → band-hunt 与 auto-call 的 `selected is None` 门**永久关闭**（诊断日志：00:26 seq=idle 但 selected=True；audit 无 band_hunt 记录）。开关、pskreporter、fetch/rank/decide 链路均正常（模拟验证 target=21074000），断点在 selected 门。
+- **修复**：`Sequencer` 新增 `on_stop` 回调（stop 与 complete 时 fire，带 DisarmReason）；`main.py` 挂接后清 `state.selected/selected_slot_id/selected_snr_db`。仅 QSO 生命周期结束（完成/中断）清除；只 select 不 reply 的高亮保留。
+- **联动验证**：修复后 band_hunt 立即动作——切到 15m（21.074 MHz），new DXCC Germany，方案 A 主动 capture 重启联动，audit 记录 band_hunt。auto-call 同窗口在 P7 修复前的旧进程已观察到成功触发（TN8GD），修复后门解除。
+- Regressions: `test_sequencer.py`（on_stop fire 时机/原因）、`test_main.py`；全量套件绿（737 passed）。
+
+## Unreleased — 2026-08-05 — AUDIO False-Positive Re-Verify + New-DXCC Worked-Set Freshness
+
+- **B1 — 退化检测误判自愈**：退化重启 capture 后开启 2-slot 复验窗口——重启后的新流仍热+零解码说明退化检测误判（波段上本无 FT8 内容，如夜间 40m 强语音台；现场 22:11 切 40m 后 fault 锁 90 分钟），自动清除 AUDIO fault。TX 仍需操作员手动重新 arm，不违反 no-recovery-auto-resumes-TX（§12）。误判只触发一次（`_triggered` 保持，直到恢复解码/静音才复位）。
+- **P1 — new-DXCC worked 集陈旧（auto-call 重复呼叫 + 识别滞后）**：`is_new_dxcc` 判定用启动预填的 DXCC cache；QSO 写库后（`repository.dxcc_dirty`）若 band-hunt 关闭则 cache 永不刷新 → 刚通联实体仍判 new，auto-call 重复呼叫同一站。修复：`on_decode` 在判定前同步重建（仅 dirty 时，索引化后 ~0.2s/15s 至多一次）；`band_hunt_loop` 的刷新提前到 `auto_band_hunt` 开关检查前（auto-call 也依赖最新 worked 集）。
+- **带外根因（用户侧）**：`auto_call_new_dxcc` / `auto_band_hunt` 后端开关从未开启（setting_meta 空表）→ auto-call 与 band-hunt 完全静默。需要操作员在 UI 开启；band-hunt 冷却默认 1200 s（`MRRC_FT8_BAND_HUNT_COOLDOWN`）限制切波段及时性。
+- Regressions: `test_main.py`（on_decode 刷新路径）、`test_audio_rx.py`/`test_capture_proc.py`（复验窗口）、全量套件绿（737 passed）。
+
+## Unreleased — 2026-08-05 — Proactive Band-Switch Capture Restart (AUDIO-Fault Prevention)
+
+- 现场根因（2026-08-05）：FT-710 切换波段后其 C-Media USB codec 的 RX 流会静默退化——流"热但零解码"（时间链错位），60 s 后触发退化检测 → AUDIO fault 锁 + TX 拒绝。实测：10:25 切 20m→15m 后 ring 出现 `gaps=1`，10:26 切 15m→17m 后解码全灭（rms 6938 零消息），10:28 退化 latch + capture 重启才恢复。
+- 方案 A（根治路径）：**跨波段主动重启 capture**。`rig_poll`（外部/手动调谐）与 band-hunter 切频（内部自动）观察到拨号频率进入不同 FT8 波段时，立即重开 capture 子进程（新流永远干净），同波段幂等（每波段至多一次）、发射中 defer 到 RX 恢复后补执行、服务器启动首轮仅建基准。避免整个退化→锁 TX→人工解除的周期。
+- 附带修复：`CaptureProcess.healthy` 加锁对齐 `restart()`——watchdog 原本在锁外检查，会撞上 teardown→spawn 的 `_process is None` 中间窗口，在主动重启后 3 ms 内二次重启（现场 caprestarts 0→2）；加锁后互斥，实测切 10m/回 20m 各只重启一次（caprestarts 0→1）。
+- Regressions: `tests/engine/test_capture_proc.py`（healthy 加锁后 watchdog/restart 交互）、`tests/web/test_main.py`（rig_poll/band_hunt 改动路径）、全量套件绿（737 passed）。
+
 ## Unreleased — 2026-08-05 — New-DXCC Hunt Reaction Optimization
 
 - 实测基线（生产 DB 10,533 QSO）：`cty.lookup` 单次 1.5 ms（线性扫描 346 实体 × ~38.5k 前缀）；`dxcc_summary` 全量重建 10.2 s（6,749 次 lookup × 2.59 亿 startswith）；每次 QSO 写入后 `/dxcc`、`/band-hunt` 首次请求被 10 s+ 重建阻塞；dashboard `Promise.all` 等最慢深窗口（3/7 天冷缓存 5-8 s）。

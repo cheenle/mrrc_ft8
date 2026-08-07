@@ -38,7 +38,13 @@ from .engine.orchestrator import Orchestrator
 from .engine.repository import Repository
 from .engine.rig import RigClient
 from .engine.safety import Interlock, SafetyController
-from .engine.sequencer import DisarmReason, QsoContext, QSOState, Sequencer
+from .engine.sequencer import (
+    DEFAULT_TX_AUDIO_FREQUENCY,
+    DisarmReason,
+    QsoContext,
+    QSOState,
+    Sequencer,
+)
 from .engine.bands import band_from_freq_hz
 from .engine.audio_tx import TxPlayer
 from .engine.waterfall import SpectrumComputer, SpectrumFanout
@@ -247,7 +253,17 @@ async def _auto_call(
         )
         state.selected_snr_db = view.get("snr")
         state.selected_slot_id = slot_id
-        state.sequencer.reply_to(state.selected, view.get("snr"), tx_phase=tx_phase)
+        # UC-003: the reply leaves on the offset the new-DXCC CQ was decoded
+        # at, so the partner's receiver pairs it (WSJT-X split behaviour); a
+        # view without a usable offset keeps the station default.
+        freq = view.get("freq")
+        tx_frequency = float(freq) if isinstance(freq, (int, float)) and freq > 0 else DEFAULT_TX_AUDIO_FREQUENCY
+        state.sequencer.reply_to(
+            state.selected,
+            view.get("snr"),
+            tx_phase=tx_phase,
+            tx_frequency=tx_frequency,
+        )
         await asyncio.to_thread(
             repository.record_audit,
             actor="system",
@@ -299,6 +315,19 @@ def create_server(
         decode_broadcast=DecodeBroadcaster(),
         waterfall_fanout=SpectrumFanout(),
     )
+
+    # P7 (2026-08-05): state.selected was only ever assigned, never cleared,
+    # so any select/reply left `selected is None` permanently False and
+    # gated both band-hunt and auto-call off.  Clear it when the QSO
+    # lifecycle ends (complete or interrupted) via the sequencer on_stop
+    # callback; a select that never starts a QSO keeps its highlight.
+    def _clear_selection_on_qso_end(_reason: Any) -> None:
+        state.selected = None
+        state.selected_slot_id = None
+        state.selected_snr_db = None
+        state.selected_freq = None
+
+    sequencer.on_stop = _clear_selection_on_qso_end
 
     # Dead-man and lease audit wiring (§15.4, §10.6).  Callbacks may fire
     # from any thread, so coroutines are scheduled onto the lifespan loop.
@@ -366,6 +395,9 @@ def create_server(
         clock=time.monotonic,
         idle_timeout=cq_loop_idle_timeout,
         on_audit=cq_loop_audit,
+        # UC-004: re-CQ picks an unoccupied offset near 1500 Hz from the
+        # live decode occupancy.
+        pick_frequency=lambda: state.occupancy.pick_frequency(),
     )
 
     capture: CaptureProcess | None = None
@@ -599,6 +631,10 @@ def create_server(
             views = []
             for message in slot_decode.messages:
                 view = decode_message_view(message, config.my_call)
+                # UC-004: feed the live frequency occupancy (own echoes
+                # included — the offset genuinely carries our signal) so CQ
+                # calling picks an unoccupied offset near 1500 Hz.
+                state.occupancy.note(view["freq"])
                 if view["call"] and not view["mine"] and worked_dxcc is not None:
                     entity = get_cty_database().lookup(view["call"])
                     view["is_new_dxcc"] = bool(entity) and entity[0] not in worked_dxcc

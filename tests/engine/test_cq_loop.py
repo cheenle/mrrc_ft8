@@ -21,7 +21,11 @@ class FakeArm:
 
 
 def make_controller(
-    *, lease: bool = True, timeout: int = 600, arm: FakeArm | None = None
+    *,
+    lease: bool = True,
+    timeout: int = 600,
+    arm: FakeArm | None = None,
+    pick_frequency: object | None = None,
 ) -> tuple[Sequencer, CqLoopController, list[float], list[tuple[str, str]]]:
     sequencer = Sequencer(my_call="M0XX", my_grid="IO91")
     now = [1000.0]
@@ -33,6 +37,7 @@ def make_controller(
         clock=lambda: now[0],
         idle_timeout=lambda: timeout,
         on_audit=lambda op, detail: audits.append((op, detail)),
+        **({} if pick_frequency is None else {"pick_frequency": pick_frequency}),
     )
     return sequencer, controller, now, audits
 
@@ -140,3 +145,34 @@ def test_status_shape() -> None:
     now[0] += 100
     status = controller.status()
     assert status == {"active": True, "idle_remaining_s": 500}
+
+
+def test_cq_start_uses_injected_frequency_picker() -> None:
+    """UC-004: the loop asks the composition root for an unoccupied offset
+    (FrequencyOccupancy picker) instead of hard-coding 1500 Hz."""
+
+    sequencer, controller, _now, _audits = make_controller(
+        pick_frequency=lambda: 1435.0
+    )
+    start(controller)
+    assert sequencer.tx_frequency == 1435.0
+    assert controller.active
+
+
+def test_cq_rearm_re_picks_frequency() -> None:
+    """DONE re-CQ asks the picker again — the offset can move between QSOs."""
+
+    picks: list[float] = [1200.0, 1377.0]
+    sequencer, controller, _now, _audits = make_controller(
+        pick_frequency=lambda: picks.pop(0)
+    )
+    start(controller)
+    assert sequencer.tx_frequency == 1200.0
+    sequencer.on_message(parse_message("M0XX K1ABC FN42"))   # caller answers CQ
+    sequencer.next_tx_message()                                # Tx1 grid reply
+    sequencer.on_message(parse_message("M0XX K1ABC R-12"))  # partner report → ROGERS
+    sequencer.next_tx_message()                                # Tx4 RR73
+    sequencer.on_message(parse_message("M0XX K1ABC RR73"))  # → DONE (complete)
+    assert sequencer.state is QSOState.DONE
+    controller.tick()  # DONE → re-CQ with a fresh pick
+    assert sequencer.tx_frequency == 1377.0

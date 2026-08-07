@@ -16,6 +16,8 @@ The operator taps a candidate to inspect it, then separately taps Reply. The ser
 
 *Implemented (2026-08-03):* the "opposite TX slot" is carried by the sequencer's `tx_phase` — `1 − slot_id % 2` of the slot the partner's message was decoded from, plumbed through `operation/select`'s `slot_id` field from the UI candidate — and the `TxDriver` gates on it, so a reply to an even-slot caller transmits on odd slots and vice versa. The reply decision is provisional: when the sequencer is idle at slot start, the driver polls until `TX_DECISION_CUTOFF_SECONDS` (5.0) so a Reply transmits as soon as it is armed, with a fit guard refusing any start past ~2.4 s (the latest a fixed 12.64 s waveform fits a 15 s slot); a Reply armed past that deadline defers to the next eligible slot.
 
+*Implemented (2026-08-07):* the "RX offset" half is closed — a Reply is encoded on the audio offset the partner's message was decoded at (`freq` rides the select/reply payloads from the UI candidate and the auto-call view), so the partner's receiver pairs the transmission (WSJT-X split behaviour). The sequencer owns the per-QSO `tx_frequency` (`DEFAULT_TX_AUDIO_FREQUENCY` 1500 Hz when no partner offset is known: CQ calling and legacy clients); `TxDriver` encodes every message at `sequencer.tx_frequency` instead of a hard-coded 1500 Hz. Regression: TN8GD's 09:46 auto-call replied at 1500 Hz to a CQ heard at 843 Hz and was never paired — QSO lost.
+
 ### UC-011 Select FT8 Band
 
 The lease holder picks a band (7/14/21/28 MHz) from the top-bar selector. The server tunes the rig dial to the band's FT8 frequency (7.074/14.074/21.074/28.074 MHz) through the lease-gated `/radio/band` mutation. A free lease is acquired implicitly (UC-002); the change is rejected while TX is armed, and failures are surfaced rather than silent. The selector reflects the rig's polled dial frequency when it lands on a known band.
@@ -23,6 +25,8 @@ The lease holder picks a band (7/14/21/28 MHz) from the top-bar selector. The se
 ### UC-004 Call CQ
 
 The lease holder explicitly starts CQ. The sequencer generates the standard CQ message and sends only in an eligible slot. It may proceed with one caller; it does not select a new target after completion.
+
+*Implemented (2026-08-07):* the CQ offset is no longer hard-coded — the composition root tracks the recent decode occupancy (`FrequencyOccupancy`, 120 s TTL) and picks an unoccupied integer offset near the 1500 Hz default (`pick_cq_frequency`: spiral scan with a 30 Hz guard, fallback to the default when the window is full). Both the explicit `/operation/cq` and the auto CQ loop (`cq_loop.pick_frequency` injected at the composition root) call it on every CQ start and re-CQ, so a CQ does not overlap an existing signal and re-picks between QSOs.
 
 ### UC-005 Complete One QSO
 

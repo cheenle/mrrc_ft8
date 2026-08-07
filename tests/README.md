@@ -85,8 +85,18 @@ broad failure counting (`tx_attempts`/`tx_failed`) without propagation for
 encode, TX-refused and WorkerFault paths, the rule that a safety `TxRefused`
 never reaches the error hook (a STOP-cancelled playback must not latch the
 DSP interlock), the in-flight overlap guard, the
-audit hook, retry-exhaustion silence and invalid-parity rejection. The
-CQ-loop suite covers DONE re-arm with idle-timer reset, retry-exhaustion and
+audit hook, retry-exhaustion silence and invalid-parity rejection. The reply
+frequency follows the partner (UC-003 split behaviour): the sequencer records
+the partner's decoded offset from `reply_to(…, tx_frequency=…)`, `start_cq`
+resets it to the 1500 Hz default, and the driver encodes at
+`sequencer.tx_frequency` — pinned by `test_tx_driver.py` (reply at 843.0,
+CQ at default) plus `test_api.py`/`test_main.py` plumb tests for the select,
+manual-reply and auto-call paths, with legacy-client fallback to the default.
+The CQ offset is picked, not fixed: `test_tx_frequency.py` pins the pure
+`pick_cq_frequency` spiral scan (guard/window/fallback) and the
+`FrequencyOccupancy` TTL ring, while `test_cq_loop.py`/`test_api.py` prove
+the injected picker feeds every CQ start and re-CQ.
+The CQ-loop suite covers DONE re-arm with idle-timer reset, retry-exhaustion and
 partner-loss re-arm without reset, manual/fault disarm and lease loss
 stopping the loop, the idle timeout stopping and disarming, idempotent
 audited start, arm-refusal failure and the snapshot status shape. The

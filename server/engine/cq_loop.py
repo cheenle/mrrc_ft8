@@ -12,7 +12,12 @@ from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
 from enum import StrEnum
 
-from .sequencer import DisarmReason, QSOState, Sequencer
+from .sequencer import (
+    DEFAULT_TX_AUDIO_FREQUENCY,
+    DisarmReason,
+    QSOState,
+    Sequencer,
+)
 
 DEFAULT_IDLE_TIMEOUT_S = 600
 MIN_IDLE_TIMEOUT_S = 60
@@ -40,6 +45,7 @@ class CqLoopController:
     clock: Callable[[], float]
     idle_timeout: Callable[[], int]
     on_audit: Callable[[str, str], None]
+    pick_frequency: Callable[[], float] = lambda: DEFAULT_TX_AUDIO_FREQUENCY
     active: bool = False
     _last_progress: float = field(default=0.0)
     _observed: tuple[QSOState, DisarmReason | None] = field(
@@ -56,7 +62,7 @@ class CqLoopController:
         except Exception:
             self.on_audit("cq_loop_stop", LoopStopReason.ARM_REFUSED.value)
             return
-        self.sequencer.start_cq()
+        self.sequencer.start_cq(tx_frequency=self.pick_frequency())
         self.active = True
         self._last_progress = self.clock()
         self._observed = (self.sequencer.state, self.sequencer.disarm_reason)
@@ -84,9 +90,9 @@ class CqLoopController:
             self._observed = observed
             if state is QSOState.DONE:
                 self._last_progress = self.clock()
-                self.sequencer.start_cq()
+                self.sequencer.start_cq(tx_frequency=self.pick_frequency())
             elif reason in _REARM_REASONS:
-                self.sequencer.start_cq()  # failed QSO: re-CQ, no timer reset
+                self.sequencer.start_cq(tx_frequency=self.pick_frequency())  # failed QSO: re-CQ, no timer reset
             elif reason in _STOP_REASONS:
                 self.stop(
                     LoopStopReason.FAULT

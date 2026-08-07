@@ -123,8 +123,9 @@ signal and is never part of the production surface.
 | `orchestrator.py` | UTC slot identity, capture/decision deadlines, mode/profile scheduling |
 | `dsp_decode.py` | Supervisor-backed SlotDecoder: exact slot → shared memory → Protocol v1 batch |
 | `dsp_encode.py` | Supervisor-backed encoder: message → shared memory → Protocol v1 encode |
-| `tx_driver.py` | Slot-parity TX pump gated on the sequencer's per-QSO `tx_phase`; provisional (I9) decision window (polling, 5 s cutoff) with a fit guard deferring past ~2.4 s — one sequencer message per eligible slot, encode → gated transmit |
-| `cq_loop.py` | Automatic CQ loop: DONE/retry/partner-loss re-arm, lease/idle/manual/fault stop |
+| `tx_driver.py` | Slot-parity TX pump gated on the sequencer's per-QSO `tx_phase`; every encode uses the sequencer's per-QSO `tx_frequency` (partner's decoded offset for a Reply, picked unoccupied offset near 1500 Hz for a CQ — UC-003/004); provisional (I9) decision window (polling, 5 s cutoff) with a fit guard deferring past ~2.4 s — one sequencer message per eligible slot, encode → gated transmit |
+| `tx_frequency.py` | Frequency occupancy ring (120 s TTL, fed from every decode) + pure `pick_cq_frequency` spiral scan: first offset near the default with >= 30 Hz guard from all occupied offsets, default fallback (UC-004) |
+| `cq_loop.py` | Automatic CQ loop: DONE/retry/partner-loss re-arm (re-picking the CQ offset via the injected `pick_frequency`), lease/idle/manual/fault stop |
 | `qso_log.py` | Sequencer log record → canonical QSO store offload |
 | `audio_rx.py` | 48 kHz capture, one 4:1 conversion, UTC ring (absolute-index `X % capacity` keying; eviction never shifts data) and overrun metrics |
 | `capture_proc.py` | Isolated capture subprocess + parent supervisor (fresh-session restart on stall/death) |

@@ -32,9 +32,9 @@ from ..engine.orchestrator import FT8_PERIOD_SECONDS
 from ..engine.repository import Repository, VoidWindowExpired
 from ..engine.safety import Interlock, SafetyController, TxRefused
 from ..engine.tx_driver import TX_FIT_MARGIN_SECONDS, TX_WAVEFORM_SECONDS
-
+from ..engine.tx_frequency import FrequencyOccupancy
+from ..engine.sequencer import DEFAULT_TX_AUDIO_FREQUENCY, DisarmReason, Sequencer
 log = logging.getLogger("mrrc-ft8.api")
-from ..engine.sequencer import DisarmReason, Sequencer
 from .auth import AuthService, Session, host_allowed, origin_allowed
 from .lease import LeaseService
 
@@ -155,6 +155,8 @@ class AppState:
     selected: ParsedMessage | None = None
     selected_snr_db: int | None = None
     selected_slot_id: int | None = None  # slot the selected message was heard in
+    selected_freq: float | None = None  # audio offset the selected message was heard at
+    occupancy: FrequencyOccupancy = field(default_factory=FrequencyOccupancy)
     radio_freq_hz: int | None = None  # last polled dial frequency, if rig is up
     dxcc_cache: Any = None  # cached DxccSummary; rebuilt when repository.dxcc_dirty
     band_hunt_url: str | None = None  # pskreporter /api/band_hunt (NFR-088); None = off
@@ -172,6 +174,18 @@ class AppState:
 
 def _ok(body: dict[str, Any] | None = None, status: int = 200) -> JSONResponse:
     return JSONResponse({"ok": True, **(body or {})}, status_code=status)
+
+
+def _parse_freq(value: object) -> float | None:
+    """Coerce a client-supplied audio offset (Hz); None when unusable.
+
+    Bools are ints in Python and must not pass as 1 Hz/0 Hz offsets.
+    """
+
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        return None
+    freq = float(value)
+    return freq if freq > 0 else None
 
 
 def _reject(status: int, reason: str, **extra: Any) -> JSONResponse:
@@ -427,6 +441,7 @@ def create_router(state: AppState) -> APIRouter:
         )
         state.selected_snr_db = body.get("snr_db") if isinstance(body.get("snr_db"), int) else None
         state.selected_slot_id = body.get("slot_id") if isinstance(body.get("slot_id"), int) else None
+        state.selected_freq = _parse_freq(body.get("freq"))
         return await mutate(request, request.headers.get("idempotency-key"), 200, {"selected": state.selected.from_call})
 
     @router.post("/operation/reply")
@@ -449,6 +464,7 @@ def create_router(state: AppState) -> APIRouter:
             )
             state.selected_snr_db = body.get("snr_db") if isinstance(body.get("snr_db"), int) else None
             state.selected_slot_id = body.get("slot_id") if isinstance(body.get("slot_id"), int) else None
+            state.selected_freq = _parse_freq(body.get("freq"))
         if state.selected is None or state.selected_snr_db is None:
             return _reject(409, "no_selection")
         try:
@@ -459,7 +475,20 @@ def create_router(state: AppState) -> APIRouter:
         # was heard in; a message without a known slot defaults to even.
         slot_id = state.selected_slot_id
         tx_phase = 0 if slot_id is None else 1 - (slot_id % 2)
-        state.sequencer.reply_to(state.selected, state.selected_snr_db, tx_phase=tx_phase)
+        # UC-003: transmit on the audio offset the partner was decoded at so
+        # their receiver pairs the reply; clients without ``freq`` keep the
+        # station default.
+        tx_frequency = (
+            state.selected_freq
+            if state.selected_freq and state.selected_freq > 0
+            else DEFAULT_TX_AUDIO_FREQUENCY
+        )
+        state.sequencer.reply_to(
+            state.selected,
+            state.selected_snr_db,
+            tx_phase=tx_phase,
+            tx_frequency=tx_frequency,
+        )
         await _audit(state, session, "reply", state.selected.from_call, "")
         return await mutate(
             request,
@@ -492,7 +521,12 @@ def create_router(state: AppState) -> APIRouter:
                 await state.safety.arm()
             except TxRefused as exc:
                 return _reject(409, REASON_INTERLOCK_OPEN, detail=str(exc))
-            state.sequencer.start_cq()
+            # UC-004: CQ on an unoccupied offset near the station default so
+            # the call does not overlap another signal; falls back to the
+            # default when the band around it is full.
+            state.sequencer.start_cq(
+                tx_frequency=state.occupancy.pick_frequency()
+            )
         await _audit(state, session, "cq", "", "loop" if loop else "")
         return await mutate(request, request.headers.get("idempotency-key"), 200, {"sequencer": state.sequencer.state.value})
 

@@ -4,7 +4,10 @@ The orchestrator announces every slot start; this driver transmits only on
 the sequencer's current phase (FT8 TX/RX alternation), pulls at most one
 message per eligible slot from the sequencer (driving the NFR-055 budget),
 encodes it through the supervised Worker and hands the waveform to the safety
-controller.  Encode failures are counted and reported through the error
+controller.  Every encode uses the sequencer's per-QSO ``tx_frequency`` — the
+offset the partner's message was decoded at for a Reply (UC-003 split
+behaviour), the station default for a CQ — so the partner's receiver pairs
+the transmission.  Encode failures are counted and reported through the error
 hook (the composition layer latches the DSP interlock); a ``TxRefused``
 from the safety controller is only counted — refusal or abort by the
 safety authority (STOP, disarm, watchdog, latched interlock) is the safety
@@ -39,7 +42,6 @@ from .sequencer import Sequencer
 
 _log = logging.getLogger("mrrc-ft8.tx")
 
-DEFAULT_TX_AUDIO_FREQUENCY = 1500.0
 DEFAULT_TX_PERIOD_SECONDS = 15.0  # FT8 slot; slot_start = slot_id * period
 # Operator-selected decision window (2026-08-03): how long after a candidate
 # appears the operator may still click Reply.  The fit guard caps the latest
@@ -65,7 +67,6 @@ class TxDriver:
     sequencer: Sequencer
     encoder: Any       # SupervisorEncoder; duck-typed for tests
     safety: Any        # SafetyController; duck-typed for tests
-    tx_audio_frequency: float = DEFAULT_TX_AUDIO_FREQUENCY
     period: float = DEFAULT_TX_PERIOD_SECONDS
     decision_cutoff: float = TX_DECISION_CUTOFF_SECONDS
     clock: Callable[[], float] = time.time
@@ -133,8 +134,11 @@ class TxDriver:
         self.counters["tx_attempts"] += 1
         self._tx_in_flight = True
         try:
+            # UC-003: encode on the sequencer's audio offset — the partner's
+            # decoded offset for a Reply, the station default for a CQ — so
+            # the partner's receiver pairs the transmission.
             waveform = await self.encoder.encode(
-                message, self.tx_audio_frequency, slot_id=slot_id
+                message, self.sequencer.tx_frequency, slot_id=slot_id
             )
             await self.safety.transmit(waveform)
         except TxRefused:

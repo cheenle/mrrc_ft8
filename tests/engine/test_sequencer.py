@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from server.engine.msgparse import parse_message
 from server.engine.sequencer import (
+    DEFAULT_TX_AUDIO_FREQUENCY,
     DisarmReason,
     QSOState,
     QSORecord,
@@ -314,3 +315,31 @@ def test_log_record_carries_start_time_and_context() -> None:
     assert record.started_utc == "221320"
     assert record.freq_hz == 14_074_000
     assert record.band == "20m"
+
+
+# ---- TX audio offset follows the partner (UC-003, regression: TN8GD) ----
+
+def test_reply_to_records_partner_tx_frequency() -> None:
+    """A reply must leave on the audio offset the partner was heard on, so
+    the partner's receiver pairs it (WSJT-X split behaviour)."""
+
+    seq = make()
+    seq.reply_to(parse_message("CQ K1ABC FN42"), snr_db=-10, tx_frequency=843.0)
+    assert seq.tx_frequency == 843.0
+
+
+def test_reply_to_defaults_tx_frequency_when_omitted() -> None:
+    """Older callers without the partner offset keep the historical 1500 Hz."""
+
+    seq = make()
+    seq.reply_to(parse_message("CQ K1ABC FN42"), snr_db=-10)
+    assert seq.tx_frequency == DEFAULT_TX_AUDIO_FREQUENCY
+
+
+def test_start_cq_resets_tx_frequency_to_default() -> None:
+    """A fresh CQ never inherits the previous QSO's partner offset."""
+
+    seq = make()
+    seq.reply_to(parse_message("CQ K1ABC FN42"), snr_db=-10, tx_frequency=843.0)
+    seq.start_cq()
+    assert seq.tx_frequency == DEFAULT_TX_AUDIO_FREQUENCY

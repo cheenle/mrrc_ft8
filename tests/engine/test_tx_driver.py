@@ -249,3 +249,27 @@ def test_tx_refused_does_not_report_dsp_fault() -> None:
     run(driver.on_slot_start(0))
     assert driver.counters["tx_failed"] == 1
     assert recorded == []
+
+
+def test_reply_transmits_on_partner_frequency() -> None:
+    """UC-003 completion: a reply is encoded at the audio offset the partner
+    was heard on — not the fixed 1500 Hz default (regression: TN8GD's CQ at
+    843 Hz was answered at 1500 Hz and never paired)."""
+
+    sequencer = Sequencer(my_call="M0XX", my_grid="IO91")
+    encoder, safety = FakeEncoder(), FakeSafety()
+    driver = TxDriver(sequencer, encoder, safety)  # type: ignore[arg-type]
+    sequencer.reply_to(
+        parse_message("CQ K1ABC FN42"), snr_db=-10, tx_phase=1, tx_frequency=843.0
+    )
+    run(driver.on_slot_start(1))
+    assert encoder.calls == [("K1ABC M0XX IO91", 843.0, 1)]
+
+
+def test_cq_transmits_at_default_frequency() -> None:
+    """CQ calling keeps the historical 1500 Hz default (no partner offset)."""
+
+    sequencer, driver = make_driver(FakeEncoder(), FakeSafety())
+    sequencer.start_cq()
+    run(driver.on_slot_start(0))
+    assert driver.encoder.calls[0][1] == 1500.0

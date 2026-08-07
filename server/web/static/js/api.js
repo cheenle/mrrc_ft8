@@ -51,6 +51,7 @@ export const api = {
         text: candidate.text,
         is_cq: candidate.is_cq,
         slot_id: candidate.slot_id,
+        freq: candidate.freq,
       },
     }),
   reply: (candidate) =>
@@ -65,6 +66,7 @@ export const api = {
             text: candidate.text,
             is_cq: candidate.is_cq,
             slot_id: candidate.slot_id,
+            freq: candidate.freq,
           }
         : {},
     }),

@@ -1207,3 +1207,85 @@ def test_auto_call_setting_rejects_non_bool(client: TestClient) -> None:
         headers=auth_headers(session_id),
     )
     assert put.status_code == 422
+
+
+def test_reply_uses_selected_partner_frequency(
+    client: TestClient, state: AppState
+) -> None:
+    """UC-003: a manual Reply is encoded at the offset the partner was heard
+    on (``freq`` rides the select payload from the UI candidate)."""
+
+    session_id = login(client)
+    client.post("/api/v1/lease/acquire", headers=auth_headers(session_id))
+    select = client.post(
+        "/api/v1/operation/select",
+        json={"dx_call": "K1ABC", "dx_grid": "FN42", "snr_db": -15,
+              "slot_id": 0, "freq": 843.0},
+        headers=auth_headers(session_id),
+    )
+    assert select.status_code == 200
+    assert state.selected_freq == 843.0
+    reply = client.post("/api/v1/operation/reply", headers=auth_headers(session_id))
+    assert reply.status_code == 200
+    assert state.sequencer.tx_frequency == 843.0
+
+
+def test_reply_inline_candidate_carries_partner_frequency(
+    client: TestClient, state: AppState
+) -> None:
+    """Double-click reply: the freq field rides the single-round-trip body."""
+
+    session_id = login(client)
+    client.post("/api/v1/lease/acquire", headers=auth_headers(session_id))
+    reply = client.post(
+        "/api/v1/operation/reply",
+        json={"dx_call": "k1abc", "dx_grid": "fn42", "snr_db": -15,
+              "slot_id": 3, "freq": 1205.5},
+        headers=auth_headers(session_id),
+    )
+    assert reply.status_code == 200
+    assert state.sequencer.tx_frequency == 1205.5
+
+
+def test_reply_defaults_frequency_when_client_omits_it(
+    client: TestClient, state: AppState
+) -> None:
+    """Older clients without ``freq`` keep the historical 1500 Hz default."""
+
+    session_id = login(client)
+    client.post("/api/v1/lease/acquire", headers=auth_headers(session_id))
+    client.post(
+        "/api/v1/operation/select",
+        json={"dx_call": "K1ABC", "dx_grid": "FN42", "snr_db": -15, "slot_id": 0},
+        headers=auth_headers(session_id),
+    )
+    client.post("/api/v1/operation/reply", headers=auth_headers(session_id))
+    assert state.sequencer.tx_frequency == 1500.0
+
+
+def test_cq_uses_unoccupied_frequency_near_default(
+    client: TestClient, state: AppState
+) -> None:
+    """UC-004: a CQ picks an unoccupied offset near 1500 Hz from the live
+    decode occupancy instead of transmitting at the fixed 1500 Hz."""
+
+    session_id = login(client)
+    client.post("/api/v1/lease/acquire", headers=auth_headers(session_id))
+    state.occupancy.note(1500.0)  # 1500 Hz is taken by another signal (real clock)
+    cq = client.post("/api/v1/operation/cq", headers=auth_headers(session_id))
+    assert cq.status_code == 200
+    assert state.sequencer.tx_enabled
+    assert state.sequencer.tx_frequency != 1500.0
+    assert abs(state.sequencer.tx_frequency - 1500.0) <= 30.0  # guard edge
+
+
+def test_cq_uses_default_when_band_is_empty(
+    client: TestClient, state: AppState
+) -> None:
+    """No recent decodes → the picker falls back to the station default."""
+
+    session_id = login(client)
+    client.post("/api/v1/lease/acquire", headers=auth_headers(session_id))
+    cq = client.post("/api/v1/operation/cq", headers=auth_headers(session_id))
+    assert cq.status_code == 200
+    assert state.sequencer.tx_frequency == 1500.0

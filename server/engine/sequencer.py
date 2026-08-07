@@ -29,6 +29,11 @@ from .msgparse import ParsedMessage, addressed_to, base_call
 REPORT_MIN, REPORT_MAX = -50, 50
 DEFAULT_REPORT_DB = -10
 
+# Audio offset (Hz) used when no partner offset is known — CQ calling and
+# legacy clients without ``freq`` (UC-003: a reply otherwise transmits on the
+# offset the partner's message was decoded at, WSJT-X split behaviour).
+DEFAULT_TX_AUDIO_FREQUENCY = 1500.0
+
 
 class QSOState(StrEnum):
     """One-QSO sequence phase; maps to WSJT-X Tx1–Tx5 message kinds."""
@@ -107,31 +112,51 @@ class Sequencer:
     max_retransmissions: int = 3     # NFR-055: one initial send plus three
     disarm_reason: DisarmReason | None = None
     tx_phase: int = 0                # 0 = even slots, 1 = odd (UC-003)
+    tx_frequency: float = DEFAULT_TX_AUDIO_FREQUENCY  # audio offset (UC-003)
     _tx_count: int = field(default=0, repr=False)
     _signoff_sent: bool = field(default=False, repr=False)
     clock: Callable[[], float] = time.time
     context: Callable[[], QsoContext] = lambda: QsoContext()
     on_qso: Callable[[QSORecord], None] | None = None
+    # Fired on every QSO lifecycle end (stop or complete) with the reason.
+    # Lets the app clear UI selection state (P7: state.selected leaked and
+    # permanently gated band-hunt/auto-call behind `selected is None`).
+    on_stop: Callable[[DisarmReason], None] | None = None
     _qso_logged: bool = field(default=False, repr=False)
     _qso_started_epoch: float | None = field(default=None, repr=False)
 
     # ---- external triggers ------------------------------------------
 
-    def start_cq(self) -> None:
-        """Arm repeated CQ calling until a caller answers (UC-004)."""
+    def start_cq(self, tx_frequency: float = DEFAULT_TX_AUDIO_FREQUENCY) -> None:
+        """Arm repeated CQ calling until a caller answers (UC-004).
+
+        ``tx_frequency`` is the audio offset the CQ transmits on; callers
+        pass an unoccupied offset picked near the station default (the
+        ``FrequencyOccupancy`` helper) so a CQ does not overlap another
+        signal.
+        """
 
         self._reset_partner()
         self.state = QSOState.CALLING
+        self.tx_frequency = tx_frequency
         self.tx_enabled = True
 
     def reply_to(
-        self, msg: ParsedMessage, snr_db: int, *, tx_phase: int = 0
+        self,
+        msg: ParsedMessage,
+        snr_db: int,
+        *,
+        tx_phase: int = 0,
+        tx_frequency: float = DEFAULT_TX_AUDIO_FREQUENCY,
     ) -> None:
         """Arm a reply to an operator-selected CQ/call message (UC-003).
 
         ``tx_phase`` is the parity the reply must transmit on (0 = even slots,
         1 = odd): UC-003 requires the slot opposite the one the partner's
         message was heard in, so the caller passes ``1 - (slot_id % 2)``.
+        ``tx_frequency`` is the audio offset the partner was decoded at; the
+        reply must leave on that same offset so the partner's receiver pairs
+        it (WSJT-X split behaviour), defaulting to the station's CQ offset.
         """
 
         if not msg.from_call:
@@ -139,6 +164,7 @@ class Sequencer:
         self._reset_partner()
         self._qso_started_epoch = self.clock()
         self.tx_phase = tx_phase
+        self.tx_frequency = tx_frequency
         self.dx_call = msg.from_call
         self.dx_grid = msg.grid
         self.report_sent = snr_db
@@ -152,6 +178,8 @@ class Sequencer:
         if self.state != QSOState.DONE:
             self.state = QSOState.IDLE
         self.disarm_reason = reason
+        if self.on_stop is not None:
+            self.on_stop(reason)
 
     # ---- cycle driving ------------------------------------------------
 
@@ -271,6 +299,8 @@ class Sequencer:
         self.tx_enabled = False
         self.state = QSOState.DONE
         self.disarm_reason = DisarmReason.COMPLETE
+        if self.on_stop is not None:
+            self.on_stop(DisarmReason.COMPLETE)
 
     def _ensure_log(self) -> None:
         # UC-005: fire the completed record exactly once, immediately out of
@@ -305,6 +335,7 @@ class Sequencer:
         self.report_rcvd = None
         self.disarm_reason = None
         self.tx_phase = 0  # CQ and unknown-slot replies default to even
+        self.tx_frequency = DEFAULT_TX_AUDIO_FREQUENCY
         self._tx_count = 0
         self._signoff_sent = False
         self._qso_logged = False

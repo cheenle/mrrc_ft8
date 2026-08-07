@@ -492,3 +492,77 @@ def test_auto_call_candidate_skips_non_new_or_non_cq_or_mine() -> None:
         {"is_new_dxcc": True, "is_cq": True, "mine": True},
         sequencer_state="idle", has_selection=False, auto_call_enabled=True,
     ) is False
+
+
+# ---- auto_call 把解码频率带给 sequencer（UC-003 频率跟随）--------------
+
+class _FakeAutoSafety:
+    async def arm(self) -> None:
+        pass
+
+
+class _FakeAutoSequencer:
+    def reply_to(self, msg, snr_db, *, tx_phase=0, tx_frequency=1500.0) -> None:  # type: ignore[no-untyped-def]
+        self.captured = {
+            "snr": snr_db,
+            "tx_phase": tx_phase,
+            "tx_frequency": tx_frequency,
+        }
+
+
+class _FakeAutoRepo:
+    def record_audit(self, **_: object) -> None:
+        pass
+
+
+class _FakeAutoState:
+    safety = _FakeAutoSafety()
+    sequencer = _FakeAutoSequencer()
+    selected = None
+    selected_snr_db = None
+    selected_slot_id = None
+
+
+def _run_auto_call(view: dict[str, object]) -> dict[str, object]:
+    from server.main import _auto_call
+
+    state = _FakeAutoState()
+    asyncio.run(
+        _auto_call(state, _FakeAutoRepo(), view, slot_id=119071144, tx_phase=1)
+    )
+    return state.sequencer.captured
+
+
+def test_auto_call_reply_uses_decode_frequency() -> None:
+    """The auto-call reply leaves on the offset the new-DXCC CQ was heard on
+    (regression: TN8GD CQ at 843 Hz was answered at the fixed 1500 Hz)."""
+
+    captured = _run_auto_call(
+        {
+            "text": "CQ TN8GD JI75",
+            "call": "TN8GD",
+            "grid": "JI75",
+            "is_cq": True,
+            "snr": -21,
+            "freq": 843.0,
+        }
+    )
+    assert captured["tx_frequency"] == 843.0
+    assert captured["tx_phase"] == 1
+    assert captured["snr"] == -21
+
+
+def test_auto_call_reply_defaults_frequency_without_decode_freq() -> None:
+    """A view without a usable offset falls back to the historical default."""
+
+    captured = _run_auto_call(
+        {
+            "text": "CQ TN8GD JI75",
+            "call": "TN8GD",
+            "grid": "JI75",
+            "is_cq": True,
+            "snr": -21,
+            "freq": 0.0,
+        }
+    )
+    assert captured["tx_frequency"] == 1500.0
