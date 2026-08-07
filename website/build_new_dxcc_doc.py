@@ -64,6 +64,9 @@ def build_page(body_html: str) -> str:
         .sdd-content hr {{ border: none; border-top: 1px solid var(--border); margin: 2rem 0; }}
         .sdd-content a {{ color: var(--accent); }}
         .sdd-content img {{ max-width: 100%; border-radius: 0.5rem; margin: 1rem 0; }}
+        .doc-fig {{ margin: 1.5rem 0; padding: 1rem; background: var(--bg-tertiary); border: 1px solid var(--border); border-radius: 0.75rem; }}
+        .doc-fig svg {{ width: 100%; height: auto; display: block; }}
+        .doc-fig figcaption {{ margin-top: 0.75rem; font-size: 0.8125rem; color: var(--text-muted); text-align: center; line-height: 1.5; }}
         @media (max-width: 900px) {{ .sdd-layout {{ flex-direction: column; padding: 0 1rem; }} }}
     </style>
 </head>
@@ -122,11 +125,26 @@ window.addEventListener('scroll', () => {{
 </html>"""
 
 
+IMG_SVG_RE = re.compile(r'<img src="(\.\./images/[^"]+\.svg)" alt="([^"]*)"\s*/?>')
+
+
+def inline_svg_figures(html: str, out_path: Path) -> str:
+    def _sub(m: re.Match[str]) -> str:
+        svg_path = (out_path.parent / m.group(1)).resolve()
+        if not svg_path.is_file():
+            raise SystemExit(f"missing svg figure: {svg_path}")
+        svg = svg_path.read_text(encoding="utf-8").strip()
+        caption = f"<figcaption>{m.group(2)}</figcaption>" if m.group(2) else ""
+        return f'<figure class="doc-fig">{svg}{caption}</figure>'
+    return IMG_SVG_RE.sub(_sub, html)
+
+
 def main() -> None:
     OUT.parent.mkdir(parents=True, exist_ok=True)
     body = convert(MD)
     # pandoc emits the document h1 as the first h1; keep it as the page hero.
-    (OUT).write_text(build_page(body), encoding="utf-8")
+    body_html = inline_svg_figures(build_page(body), OUT)
+    (OUT).write_text(body_html, encoding="utf-8")
     print(f"  {MD.name} → {OUT} ({len(body)} bytes body)")
 
 
