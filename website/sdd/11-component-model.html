@@ -226,11 +226,15 @@
 </tr>
 <tr>
 <td><code>tx_driver.py</code></td>
-<td>Slot-parity TX pump gated on the sequencer’s per-QSO <code>tx_phase</code>; provisional (I9) decision window (polling, 5 s cutoff) with a fit guard deferring past ~2.4 s — one sequencer message per eligible slot, encode → gated transmit</td>
+<td>Slot-parity TX pump gated on the sequencer’s per-QSO <code>tx_phase</code>; every encode uses the sequencer’s per-QSO <code>tx_frequency</code> (partner’s decoded offset for a Reply, picked unoccupied offset near 1500 Hz for a CQ — UC-003/004); provisional (I9) decision window (polling, 5 s cutoff) with a fit guard deferring past ~2.4 s — one sequencer message per eligible slot, encode → gated transmit</td>
+</tr>
+<tr>
+<td><code>tx_frequency.py</code></td>
+<td>Frequency occupancy ring (120 s TTL, fed from every decode) + pure <code>pick_cq_frequency</code> spiral scan: first offset near the default with &gt;= 30 Hz guard from all occupied offsets, default fallback (UC-004)</td>
 </tr>
 <tr>
 <td><code>cq_loop.py</code></td>
-<td>Automatic CQ loop: DONE/retry/partner-loss re-arm, lease/idle/manual/fault stop</td>
+<td>Automatic CQ loop: DONE/retry/partner-loss re-arm (re-picking the CQ offset via the injected <code>pick_frequency</code>), lease/idle/manual/fault stop</td>
 </tr>
 <tr>
 <td><code>qso_log.py</code></td>

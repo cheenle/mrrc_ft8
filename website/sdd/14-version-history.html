@@ -124,6 +124,87 @@
     </aside>
     <main class="sdd-content">
 <h1 id="version-history">14. Version History</h1>
+<h2 id="unreleased-2026-08-08-band-hunt-entity-name-normalization-pskreporter-cty">Unreleased — 2026-08-08 — band-hunt Entity-Name Normalization (pskreporter → cty)</h2>
+<ul>
+<li><strong>现场根因（12h 复盘）</strong>：band_hunt 反复切 15m 追 “Germany”，但 Germany 实体早已通联（qso 表 64 条 DL/DK 记录）。原因：<code>rank_bands</code> 的 worked 过滤直接用 pskreporter 实体名比对 cty.dat 规范名——pskreporter 用普通名 “Germany”/“Malaysia”/“Turkey”，cty 规范名是 “Fed. Rep. of Germany”/“West Malaysia”/“Asiatic Turkey” → 名称失配 → 已通联实体被判 new。实测 42 个 pskreporter 实体名中仅这 3 个不一致。</li>
+<li><strong>修复</strong>：<code>band_hunter.py</code> 加 <code>_CTY_NAME_ALIASES</code> 别名表 + <code>_canonical_entity_name()</code>（未知名保持原样，不误伤）；<code>rank_bands</code> 的 worked 判定改用规范化名，<code>new_entities</code> 保留原名显示。auto_call 的 <code>is_new_dxcc</code> 不受影响（两侧都用 cty.lookup，本就一致正确）。</li>
+<li>Regressions: <code>test_band_hunter.py</code>（Germany/Malaysia/Turkey 别名归一化 + 未通联保留 + 未知名称不变）。全量套件绿（768 passed）。</li>
+</ul>
+<h2 id="unreleased-2026-08-07-serial-owner-guard-refuse-rigctld-start-on-device-conflict-ad-008">Unreleased — 2026-08-07 — Serial-Owner Guard: refuse rigctld start on device conflict (AD-008)</h2>
+<ul>
+<li><strong>现场根因（4 小时 rig 劣化复盘）</strong>：18:01 一台手动 <code>nohup</code> 启动的旧 mrrc_ft710 <code>server.py</code>（MacPorts 系统 Python，非 start.sh 的 venv 解释器）直接 open 了 FT-710 CAT 串口 <code>/dev/cu.usbserial-0121DB3A0</code>，与 rigctld 同时持有 → 字节级争抢 → rig 轮询 90% 超时（18:00–22:20，<code>wrong reply</code>/<code>Rig busy</code> 数千条），拖累 band_hunt 切频 5 次失败。</li>
+<li><strong>暴露的漏洞（switch.sh/stop.sh，旧项目）</strong>：<code>ft710_running()</code> 与 <code>stop.sh</code> 的 <code>pgrep -f "python.*server\.py"</code> 大小写敏感，匹配不到 <code>Python server.py</code>（MacPorts 解释器首字母大写）→ 误判未运行 → 切换时漏停残留进程；停止逻辑依赖 pid 文件 + WEB 端口，非 start.sh 启动的进程两者皆无。</li>
+<li><strong>修复（ft8 侧）</strong>：<code>restart.sh</code> 新增 <code>serial_guard()</code>——启动 rigctld 前检查 CAT 串口是否被非 rigctld 进程持有（<code>lsof -t $RIG_DEVICE</code>），冲突即拒绝启动并列出持有者（fail-fast），<code>MRRC_FT8_SKIP_SERIAL_GUARD=1</code> 应急跳过；<code>tests/test_deploy_artifacts.py</code> 文本回归。</li>
+<li><strong>修复（mrrc_ft710 侧，旧项目）</strong>：<code>switch.sh</code>/<code>stop.sh</code> pgrep 改大小写不敏感（<code>pgrep -if "server\.py"</code>），<code>ft710_running()</code> 加串口持有者语义兜底（非 rigctld 持有即视为残留），<code>stop.sh</code> 加 section 5 串口持有者释放（保留 rigctld）。</li>
+<li>现场处置：停掉 56041 后 rig 立即恢复（连续轮询成功）；本文档 V1.3 频率纪律修复（UC-003/004）不受影响。</li>
+<li>Regressions: <code>test_deploy_artifacts.py</code>（restart.sh 守卫文本回归）。全量套件绿。</li>
+</ul>
+<h2 id="unreleased-2026-08-07-cq-picks-an-unoccupied-offset-near-1500-hz-uc-004">Unreleased — 2026-08-07 — CQ Picks an Unoccupied Offset near 1500 Hz (UC-004)</h2>
+<ul>
+<li><strong>现场根因</strong>：回复频率跟随伙伴后（同日 UC-003 修复），主动 CQ 仍固定 1500 Hz——与占用该频点的他台信号重叠时双方解码互相掩盖（CQ 收不到应答）。</li>
+<li><strong>修复</strong>：新增 <code>server/engine/tx_frequency.py</code> —— <code>FrequencyOccupancy</code> 占用环（120 s TTL，main.py on_decode 对每个解码频率 note，含自身回波——频点确实承载我方信号）+ 纯函数 <code>pick_cq_frequency</code>（螺旋扫描：1500 → 1501 → 1499 → …，与所有占用中心距 &gt;= 30 Hz guard 的首个整数频点；窗口 1500±300 内全占用则回退默认）。<code>Sequencer.start_cq(tx_frequency=…)</code> 接受调用方频点；显式 <code>/operation/cq</code> 与 cq_loop（<code>pick_frequency</code> 注入，每次 CQ 启动与 re-CQ 重选）都走 picker；<code>AppState.occupancy</code> 组装。</li>
+<li>Regressions: <code>test_tx_frequency.py</code>（纯函数螺旋/guard/窗口/回退 + 占用环 TTL 边界）、<code>test_cq_loop.py</code>（picker 注入、DONE re-CQ 重选）、<code>test_api.py</code>（/operation/cq 避开占用、空波段回默认）。全量套件绿（762 passed）。</li>
+</ul>
+<h2 id="unreleased-2026-08-07-reply-frequency-follows-the-partner-uc-003-rx-offset-half">Unreleased — 2026-08-07 — Reply Frequency Follows the Partner (UC-003 RX-offset half)</h2>
+<ul>
+<li><strong>现场根因（复盘链）</strong>：<code>TxDriver</code> 的 TX 音频频率写死 1500 Hz（<code>DEFAULT_TX_AUDIO_FREQUENCY</code>），从不跟随被叫台解码频率。TN8GD（尼日尔，新 DXCC）09:46 auto-call 命中其 f=843 Hz 的 CQ，应答却发在 1500 Hz → 对方（pileup 模式的自动化 DX 台）未配对，重传 4 次无应答、RETRY_EXHAUSTED 丢弃未落库；随后 TN8GD 转去通联 JA4AQS/VU2KPH。对照：成功 QSO 均因对方人工在自己频率（1600/1401）应答；同样只有 1500 回波的 UA4LDP 同样未完成。RX 侧一直解码到自身 1500 Hz 发射回波（<code>mine</code> 过滤正常，佐证 TX 频率确为固定 1500）。</li>
+<li><strong>修复</strong>：Sequencer 持有每 QSO <code>tx_frequency</code>（<code>reply_to(…, tx_frequency=…)</code> 记录伙伴解码频率；<code>start_cq</code> 与 <code>_reset_partner</code> 回默认 1500）。<code>TxDriver</code> 编码改读 <code>sequencer.tx_frequency</code>（删掉自身 <code>tx_audio_frequency</code> 字段）；<code>DEFAULT_TX_AUDIO_FREQUENCY</code> 归口 sequencer.py（tx_driver 别名导入，单一事实源）。接线：<code>operation/select</code> 与 <code>operation/reply</code> 透传 body 的 <code>freq</code>（UI candidate 已带 <code>freq</code>；<code>_parse_freq</code> 校验 &gt;0 的 int/float，bool 拒绝）；auto-call 用 view 的 <code>freq</code>；<code>AppState.selected_freq</code> 随 QSO 结束清理。旧客户端不带 <code>freq</code> 时保持历史 1500 Hz 行为。</li>
+<li>Regressions: <code>test_sequencer.py</code>（reply_to 记录伙伴频率/缺省默认/start_cq 复位）、<code>test_tx_driver.py</code>（应答编码频率=伙伴频率、CQ=默认频率）、<code>test_api.py</code>（select/reply 透传 freq、缺省回退）、<code>test_main.py</code>（auto-call 用解码频率/无 freq 回退）。全量套件绿（747 passed）。</li>
+</ul>
+<h2 id="unreleased-2026-08-06-selected-state-leak-gating-band-huntauto-call-p7">Unreleased — 2026-08-06 — Selected-State Leak Gating Band-Hunt/Auto-Call (P7)</h2>
+<ul>
+<li><strong>根因（现场复现链）</strong>：<code>state.selected</code> 只有赋值、从不置 None（grep 无 <code>selected = None</code>）。用户点选/回复一次后 selected 永久残留 → band-hunt 与 auto-call 的 <code>selected is None</code> 门<strong>永久关闭</strong>（诊断日志：00:26 seq=idle 但 selected=True；audit 无 band_hunt 记录）。开关、pskreporter、fetch/rank/decide 链路均正常（模拟验证 target=21074000），断点在 selected 门。</li>
+<li><strong>修复</strong>：<code>Sequencer</code> 新增 <code>on_stop</code> 回调（stop 与 complete 时 fire，带 DisarmReason）；<code>main.py</code> 挂接后清 <code>state.selected/selected_slot_id/selected_snr_db</code>。仅 QSO 生命周期结束（完成/中断）清除；只 select 不 reply 的高亮保留。</li>
+<li><strong>联动验证</strong>：修复后 band_hunt 立即动作——切到 15m（21.074 MHz），new DXCC Germany，方案 A 主动 capture 重启联动，audit 记录 band_hunt。auto-call 同窗口在 P7 修复前的旧进程已观察到成功触发（TN8GD），修复后门解除。</li>
+<li>Regressions: <code>test_sequencer.py</code>（on_stop fire 时机/原因）、<code>test_main.py</code>；全量套件绿（737 passed）。</li>
+</ul>
+<h2 id="unreleased-2026-08-05-audio-false-positive-re-verify-new-dxcc-worked-set-freshness">Unreleased — 2026-08-05 — AUDIO False-Positive Re-Verify + New-DXCC Worked-Set Freshness</h2>
+<ul>
+<li><strong>B1 — 退化检测误判自愈</strong>：退化重启 capture 后开启 2-slot 复验窗口——重启后的新流仍热+零解码说明退化检测误判（波段上本无 FT8 内容，如夜间 40m 强语音台；现场 22:11 切 40m 后 fault 锁 90 分钟），自动清除 AUDIO fault。TX 仍需操作员手动重新 arm，不违反 no-recovery-auto-resumes-TX（§12）。误判只触发一次（<code>_triggered</code> 保持，直到恢复解码/静音才复位）。</li>
+<li><strong>P1 — new-DXCC worked 集陈旧（auto-call 重复呼叫 + 识别滞后）</strong>：<code>is_new_dxcc</code> 判定用启动预填的 DXCC cache；QSO 写库后（<code>repository.dxcc_dirty</code>）若 band-hunt 关闭则 cache 永不刷新 → 刚通联实体仍判 new，auto-call 重复呼叫同一站。修复：<code>on_decode</code> 在判定前同步重建（仅 dirty 时，索引化后 ~0.2s/15s 至多一次）；<code>band_hunt_loop</code> 的刷新提前到 <code>auto_band_hunt</code> 开关检查前（auto-call 也依赖最新 worked 集）。</li>
+<li><strong>带外根因（用户侧）</strong>：<code>auto_call_new_dxcc</code> / <code>auto_band_hunt</code> 后端开关从未开启（setting_meta 空表）→ auto-call 与 band-hunt 完全静默。需要操作员在 UI 开启；band-hunt 冷却默认 1200 s（<code>MRRC_FT8_BAND_HUNT_COOLDOWN</code>）限制切波段及时性。</li>
+<li>Regressions: <code>test_main.py</code>（on_decode 刷新路径）、<code>test_audio_rx.py</code>/<code>test_capture_proc.py</code>（复验窗口）、全量套件绿（737 passed）。</li>
+</ul>
+<h2 id="unreleased-2026-08-05-proactive-band-switch-capture-restart-audio-fault-prevention">Unreleased — 2026-08-05 — Proactive Band-Switch Capture Restart (AUDIO-Fault Prevention)</h2>
+<ul>
+<li>现场根因（2026-08-05）：FT-710 切换波段后其 C-Media USB codec 的 RX 流会静默退化——流”热但零解码”（时间链错位），60 s 后触发退化检测 → AUDIO fault 锁 + TX 拒绝。实测：10:25 切 20m→15m 后 ring 出现 <code>gaps=1</code>，10:26 切 15m→17m 后解码全灭（rms 6938 零消息），10:28 退化 latch + capture 重启才恢复。</li>
+<li>方案 A（根治路径）：<strong>跨波段主动重启 capture</strong>。<code>rig_poll</code>（外部/手动调谐）与 band-hunter 切频（内部自动）观察到拨号频率进入不同 FT8 波段时，立即重开 capture 子进程（新流永远干净），同波段幂等（每波段至多一次）、发射中 defer 到 RX 恢复后补执行、服务器启动首轮仅建基准。避免整个退化→锁 TX→人工解除的周期。</li>
+<li>附带修复：<code>CaptureProcess.healthy</code> 加锁对齐 <code>restart()</code>——watchdog 原本在锁外检查，会撞上 teardown→spawn 的 <code>_process is None</code> 中间窗口，在主动重启后 3 ms 内二次重启（现场 caprestarts 0→2）；加锁后互斥，实测切 10m/回 20m 各只重启一次（caprestarts 0→1）。</li>
+<li>Regressions: <code>tests/engine/test_capture_proc.py</code>（healthy 加锁后 watchdog/restart 交互）、<code>tests/web/test_main.py</code>（rig_poll/band_hunt 改动路径）、全量套件绿（737 passed）。</li>
+</ul>
+<h2 id="unreleased-2026-08-05-new-dxcc-hunt-reaction-optimization">Unreleased — 2026-08-05 — New-DXCC Hunt Reaction Optimization</h2>
+<ul>
+<li>实测基线（生产 DB 10,533 QSO）：<code>cty.lookup</code> 单次 1.5 ms（线性扫描 346 实体 × ~38.5k 前缀）；<code>dxcc_summary</code> 全量重建 10.2 s（6,749 次 lookup × 2.59 亿 startswith）；每次 QSO 写入后 <code>/dxcc</code>、<code>/band-hunt</code> 首次请求被 10 s+ 重建阻塞；dashboard <code>Promise.all</code> 等最慢深窗口（3/7 天冷缓存 5-8 s）。</li>
+<li><code>CtyDatabase.lookup</code> 索引化：<code>__post_init__</code> 构建 <code>_exact</code>（<code>=CALL</code> 精确优先）+ 前缀 trie（最长前缀；<code>(数字)</code> 替换已在加载时展开），<code>setdefault</code> 保留并列最先遇到。语义与旧线性扫描<strong>逐字节等价</strong>（语义一致性回归：cty.dat 全展开模式 + 2000 合成呼号 + 真实 QSO 日志 dx_call 全量比对）。lookup 1.5 ms → 亚微秒；<code>dxcc_summary</code> 重建 10.2 s → ~0.2 s。</li>
+<li>去掉 New-DXCC dashboard 的 3/7 天深窗口（<code>BAND_HUNT_WINDOWS</code> 收窄到 10/30 分钟、1/4 小时、1 天）。</li>
+<li>抽 <code>_fresh_dxcc_cache(state)</code> 共享刷新助手（<code>/dxcc</code>、<code>/band-hunt</code>、启动预填、<code>band_hunt_loop</code> 四处复用）；<strong>修复自动波段猎人陈旧 worked 集</strong>——每 tick 先刷新，刚通联的实体不再被重复 hunt。</li>
+<li>dashboard 渐进渲染：所有窗口 fetch 并行、先到先渲染（顺序保持），10 分钟窗口 ~1 s 内可见。</li>
+<li><code>/band-hunt</code> 代理加上游 TTL 缓存（<code>_BandHuntCache</code>，键 <code>(window_min, grid, radius, detail)</code>，TTL <code>min(window_min, 3600)</code> s，只缓存 <code>ok:true</code> 原始 body，worked 过滤仍每请求实时跑）；dashboard 在 TTL 内二次打开免冷拉，band_hunt_loop 保持每 tick 新鲜拉取。</li>
+<li>Regressions: <code>test_dxcc.py</code>（索引语义等价 + 速度烟测）、<code>test_api.py</code>（<code>_fresh_dxcc_cache</code> dirty/clean/新 QSO、<code>_BandHuntCache</code> hit/miss/过期/驱逐、代理二次请求命中缓存、错误不缓存）、既有 <code>band_hunt_proxy_*</code> 全绿。全量套件绿。</li>
+</ul>
+<h2 id="unreleased-2026-08-05-manual-reply-races-the-current-slot">Unreleased — 2026-08-05 — Manual Reply Races the Current Slot</h2>
+<ul>
+<li>现场根因（production DB 佐证）：手动 Reply 只有在<strong>当前时隙开始后 ~2.2 s 内</strong>（fit guard：12.64 s 波形必须塞进 15 s 时隙）武装才能当拍发射；而解码行要到时隙开始后 ~0.67 s 才上屏（0.4 s 投递宽限 + 解码），双击又是 select→(lease)→select→reply 2–4 个 HTTP 往返，操作员实际在 +4 s/+7 s/+13 s 才点中，<strong>永远错过窗口</strong>，回复推迟到下一个同相时隙——实测 26–38 s 后才发射（S54E 38 s、BA6CC/OE4AHG 26 s）。</li>
+<li>三处修复：
+<ol type="1">
+<li><code>Orchestrator</code> 解码投递改为<strong>边界起轮询 ring</strong>（<code>_wait_for_slot</code>，25 ms 步长），数据一到立即解码，<code>DELIVERY_GRACE_SECONDS</code> 语义从固定等待改为超时上限；解码上屏提前 ~0.3 s，且 <code>on_slot_start</code>（TxDriver 决策窗）也提前 ~0.3 s 打开。</li>
+<li><code>operation/reply</code> 接受内联候选（<code>dx_call/grid/snr/slot_id</code>），<strong>双击 = 一次往返 select+arm</strong>；前端 <code>api.reply(candidate)</code> 去掉独立 select 往返，lease 缺失时同 select 一样隐式获取。</li>
+<li>回复响应带 <code>scheduled_tx</code>（fit 感知的下一发射时隙 <code>slot_id/utc/deferred</code>），前端在推迟时 toast「Reply armed → TX at HH:MM:SS」——操作员不再盲目连点（现场曾 9 s 内连点两次 OE4AHG）。</li>
+</ol></li>
+<li>物理边界不变：迟于 ~2.2 s 的点按仍只能等下个同相时隙（对方只在相反相隙收听）；本次把「能当拍」的窗口和路径拉满到物理极限，并把推迟情形显性化。</li>
+<li>Regressions: <code>test_orchestrator.py</code>（数据就绪即投递 + 超时跳过 + 原 grace 断言改为边界投递）、<code>test_api.py::test_reply_with_inline_candidate_arms_in_one_request</code>。全量套件 726 passed。</li>
+</ul>
+<h2 id="unreleased-2026-08-05-propagation-driven-new-dxcc-band-hunt-nfr-088">Unreleased — 2026-08-05 — Propagation-Driven New-DXCC Band Hunt (NFR-088)</h2>
+<ul>
+<li>新功能：<code>band_hunter</code> 让服务器自主换波段去守新 DXCC。通过 pskreporter 仓库的 <code>GET /api/band_hunt</code>（<strong>HTTP 是两库间唯一耦合</strong>，严格隔离：不 import、不共享 DB 凭据）拿到”附近网格（距本网格 ≤ radius_km）此刻在听的 FT8 波段”；本地用 worked 实体集过滤出仍有新 DXCC 的波段排序；空闲且开关 <code>auto_band_hunt</code> 开启时把 rig 切到榜首波段，再由 auto-call（NFR-087）闭环通联。</li>
+<li>护栏：仅空闲切频（同 auto-call 门禁：sequencer IDLE 且无人工选择）、min-dwell 冷却（默认 1200 s）防抖、<code>safety.armed/ptt_on</code> 时绝不调谐、端点失败本轮跳过不崩溃、无 worked 集不盲目切换、每次切换 audit（<code>band_hunt</code>）。</li>
+<li>配置：<code>MRRC_FT8_BAND_HUNT_URL</code>（默认空 = 功能整体不加载）+ <code>RADIUS_KM</code>/<code>WINDOW_MIN</code>/<code>INTERVAL</code>/<code>COOLDOWN</code>（越界值回退默认，不 fail-startup）；设置菜单栏加 <code>auto_band_hunt</code> 开关（后端持久化，<code>/settings</code>）。</li>
+<li>波段扩展：FT8 波段选择从 7/14/21/28 MHz 扩到 <strong>7/10/14/18/21/24/28 MHz</strong>（FT8 呼号频点）；pskreporter <code>band_utils</code> 新增 <code>FT8_DIAL_FREQ</code> 单源表。</li>
+<li>依赖：<code>httpx</code> 从 dev 移到运行时依赖（生产轮询用，默认 5 s 超时）。</li>
+<li>驾驶舱看板：Auto band hunt 开关下加「New-DXCC spots dashboard」链接 → 全屏看板经 <code>/api/v1/band-hunt</code> <strong>同源代理</strong>（服务端 httpx 转发 pskreporter，跨库仍仅 HTTP）拉取 <strong>10/30 分钟 / 1/4 小时 / 1/3/7 天</strong> 七个窗口的邻近 spot 明细（每窗口展示最新 200 条）。<strong>「spots」概念统一为新 DXCC spots</strong>：代理用权威 worked 实体集（canonical 日志 → cty.dat）过滤，只保留未通联实体 spot、丢弃全已通联的波段，并返回 <code>new_spot_count</code> / <code>worked_spot_count</code> 供上下文（pskreporter <code>/api/band_hunt?detail=1</code> 返回含已通联的原始逐 spot 列表，过滤在 FT8 侧统一进行）；看板不再各自过滤，标注「N new-DXCC spot(s) · M worked nearby」。</li>
+<li>深窗口支持：pskreporter <code>/api/band_hunt</code> 的 <code>window_min</code> 上限从 1 天扩到 <strong>7 天</strong>，查询 <code>ORDER BY qso_time DESC</code> 并按窗口缩放 <code>LIMIT</code>（≤3 天 300k / 7 天 500k）保证大窗口取最新数据；实测 1/3/7 天邻近 spot 263 / 819 / 1155 条。代理 <code>/api/v1/band-hunt</code> 超时从 5 s 提到 <strong>20 s</strong>（深窗口首次未缓存查询耗时可达 ~5-8 s，原超时导致 <code>band_hunt_unreachable</code>）。</li>
+<li>Regressions: mrrc-ft8 <code>tests/engine/test_band_hunter.py</code>（rank/decide/fetch 矩阵）、<code>test_main.py::test_from_env_band_hunt_optional</code>、<code>test_api.py</code>（auto_band_hunt round-trip + 422、<code>/band-hunt</code> 代理 not_configured + 转发参数/信封）；pskreporter <code>test_band_hunt.py</code>（距离门/阈值/DB 异常/detail spots）。全量套件绿（mrrc-ft8 721 passed）。</li>
+</ul>
 <h2 id="v1.1.0-2026-08-05-dxcc-live-view-new-dxcc-auto-call">v1.1.0 — 2026-08-05 — DXCC Live View + New-DXCC Auto-Call</h2>
 <ul>
 <li>Promoted the NFR-085/086/087 slice to <strong>v1.1.0</strong> (pyproject 1.1.0, tagged <code>v1.1.0</code>): JTDX ADIF auto-sync + LOG 7-day window (NFR-085), the in-cockpit DXCC live view with cache-until-QSO-write stats (NFR-086), and the new-DXCC highlight + safety-armed auto-call toggle (NFR-087). Also shipped: the full-screen QSO Log overlay and operator-callsign de-identification across README/SDD/website. GitHub release notes enumerate the v1.0.0 → v1.1.0 diff.</li>

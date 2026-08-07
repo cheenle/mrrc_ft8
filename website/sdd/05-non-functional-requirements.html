@@ -511,6 +511,11 @@
 <td>New-DXCC auto-call</td>
 <td>Decode messages carry <code>is_new_dxcc</code>; with setting <code>auto_call_new_dxcc</code> enabled the server auto-QSOs the first new-DXCC CQ when idle (safety-armed, no lease, never interrupts a QSO)</td>
 </tr>
+<tr>
+<td>NFR-088</td>
+<td>Propagation-driven band hunt</td>
+<td>With setting <code>auto_band_hunt</code> enabled and <code>MRRC_FT8_BAND_HUNT_URL</code> configured, the server polls an external <code>/api/band_hunt</code> endpoint (HTTP-only cross-repo boundary) for FT8 bands that nearby grids (within radius_km of our grid) are actively hearing; when idle it tunes the rig to the top band that still has unworked DXCC entities, then auto-call (NFR-087) closes the QSO. Guards: idle-only, min-dwell cooldown, never tunes during TX, endpoint failure skips the round</td>
+</tr>
 </tbody>
 </table>
     </main>
