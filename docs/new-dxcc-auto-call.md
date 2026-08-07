@@ -2,7 +2,7 @@
 
 > 本文档完整阐述 MRRC-FT8 的"新 DXCC 自动呼叫"（auto-call）功能：从空中信号解码，
 > 到实体判定、自动应答、QSO 完成、落库刷新的全链路机制、配置、安全设计与运维观察点。
-> 适用版本：SDD V1.3（2026-08-07，含 UC-003/UC-004 频率纪律修复）。
+> 适用版本：SDD V1.5（2026-08-08，含 UC-003/UC-004 频率纪律、AD-008 串口守卫、band-hunt 实体名归一化）。
 
 ---
 
@@ -30,43 +30,7 @@
 
 ## 2. 端到端链路总览
 
-```
-             ┌────────────── 12 kHz int16 单声道（铁律）──────────────┐
-   FT-710 ──►│ capture_proc 子进程 → UtcRing(绝对序号) → DSP Worker  │
-             └────────────────────────┬───────────────────────────────┘
-                                      │ 每 15 s slot 一批解码
-                                      ▼
-                        orchestrator.on_decode（main.py）
-        ┌───────────────────────────┬───────────────────────────────┐
-        │ 1. DXCC cache 刷新        │ 2. decode_message_view        │
-        │    （dxcc_dirty 时同步重建，│     is_new_dxcc = lookup(call)│
-        │     ~0.2 s，至多每 slot 一次）│      ∈ 实体 ∧ ∉ worked      │
-        └───────────────────────────┴───────────────┬───────────────┘
-                                                    ▼
-        3. auto_call_candidate 决策（纯函数，每 slot 至多命中第一个）
-             开关开 ∧ 空闲 ∧ 无选择 ∧ is_new_dxcc ∧ is_cq ∧ 非自身回波
-                                                    │
-                                                    ▼
-        4. _auto_call：safety.arm()（互锁门）→ sequencer.reply_to()
-              tx_phase = 1 − slot%2；tx_frequency = 伙伴解码频率（UC-003）
-              失败/互锁打开 → 记日志跳过，下一 slot 重试；audit 落 auto_call
-                                                    │
-                                                    ▼
-        5. TX 链路：TxDriver（时隙奇偶泵 + I9 决策窗口 + fit guard）
-              sequencer.next_tx_message() → dsp_encode（48 kHz 波形）
-              → safety.transmit（PTT 门 + watchdog + 聚合预算）
-                                                    │
-                                                    ▼
-        6. sequencer QSO 状态机（NFR-055：1 发 + 至多 3 重传）
-              REPLYING → REPORT → ROGER_REPORT → ROGERS → SIGNOFF/DONE
-                                                    │
-                                                    ▼
-        7. 落库：_ensure_log → on_qso → qso_log.enqueue
-              → record_qso（qso 表 source='live'）→ dxcc_dirty = True
-                                                    │
-                                                    ▼
-        8. 下一个 slot：DXCC cache 重建 → 该实体进 worked → 不再触发
-```
+![图 1 端到端链路总览：从空中解码到 worked 集刷新](../images/auto-call-pipeline.svg)
 
 ---
 
@@ -83,6 +47,8 @@
 - 每 15 s slot，`orchestrator` 把整槽音频送 Worker 解码（WSJT-X 3.0.2 Improved，
   profiles 0–4，A8 门控），产出 `DecodeResult`（slot_id / snr / dt / frequency /
   text 等），经 `on_decode` 进入业务层。
+
+![图 2 信号采集与解码链：进程边界与采样率铁律](../images/capture-decode.svg)
 
 ### 3.2 DXCC 实体判定
 
@@ -102,6 +68,8 @@
   `worked_dxcc` 来自 `dxcc_summary` 全量统计（qso 表非 void 记录 × cty 查表，
   同实体同波段计一次，DXCC Challenge 语义）；cache 未建时保守为 `False`（不误触发）。
 
+![图 3 DXCC 实体判定：cty.dat 三规则 lookup 与 worked 集比较](../images/dxcc-lookup.svg)
+
 ### 3.3 决策门（`auto_call_candidate` 纯函数）
 
 每 slot 按解码消息顺序检查，**至多命中第一个**候选：
@@ -117,6 +85,8 @@ return (
 )
 ```
 
+![图 4 决策门 auto_call_candidate：六条件 AND，每 slot 至多命中第一个](../images/decision-gate.svg)
+
 ### 3.4 触发与安全门（`_auto_call`）
 
 - **不需要控制租约**（系统级、无人值守，NFR-087）；但发射必须过 `safety.arm()`——
@@ -129,6 +99,8 @@ return (
     1500 Hz，见 §7 复盘）；
 - audit 落库：`audit_event`（actor=`system`, operation=`auto_call`, target=呼号,
   detail=`snr=… new_dxcc`）。
+
+![图 5 触发与安全门：safety.arm 互锁矩阵与 skip/重试](../images/arm-interlock.svg)
 
 ### 3.5 应答发射（TX 链路）
 
@@ -143,17 +115,13 @@ return (
 - 安全：`transmit()` 前复核权限链（faults / armed / PTT 状态 / 聚合 TX 预算）；
   PTT 经 rigctld（串口唯一 owner）；watchdog 与 STOP 可随时取消。
 
+![图 6 应答发射 TX 链：TxDriver 时隙泵 → safety.transmit → rigctld](../images/tx-chain.svg)
+
 ### 3.6 QSO 状态机（sequencer）
 
 应答侧流程（我们是应答者）：
 
-```
-REPLYING      Tx1: <dx> <my> <my-grid>          （先发我们的呼号+网格）
-REPORT        Tx2: <dx> <my> -snr               （对方报告到达后）
-ROGER_REPORT  Tx3: <dx> <my> R-snr
-ROGERS        Tx4: <dx> <my> RR73               （对方 R 报告到达后）
-SIGNOFF/DONE  Tx5: <dx> <my> 73 → 落库          （对方 RR73/73 到达后）
-```
+![图 7 QSO 状态机（应答侧）：REPLYING → DONE 与中断出口](../images/qso-states.svg)
 
 - 每条消息 1 发 + 至多 3 重传（NFR-055）；伙伴有相关进展消息则重传预算重置。
 - 伙伴转呼他人 → anti-QRM 自动停（`PARTNER_LOST`）；预算耗尽 → `RETRY_EXHAUSTED`
@@ -172,16 +140,21 @@ SIGNOFF/DONE  Tx5: <dx> <my> 73 → 落库          （对方 RR73/73 到达后�
   至多每 slot 一次）→ 该实体进入 worked → 不会再触发（P1 修复：cache 刷新独立于
   band-hunt 开关，auto-call 不再重复呼叫刚通联的台）。
 
+![图 8 落库与 worked 集刷新：dxcc_dirty 闭环](../images/persist-worked.svg)
+
 ### 3.8 关联功能：自动波段狩猎（band_hunt）
 
 - `auto_band_hunt` 开启后，band-hunter 轮询外部 `/api/band_hunt`（pskreporter 侧，
   HTTP 是唯一跨库边界），`rank_bands`/`decide_switch` 纯函数按"未通联实体数"
   排序，空闲时经 rig 调谐切频 → 把波段切到新 DXCC 最密集的地方 → 自动呼叫闭环
   自然接续。双闸门：设置开关 + 冷却（默认 1200 s）。
+- **实体名归一化**（V1.5，2026-08-08）：pskreporter 用普通名（`Germany`/`Malaysia`/`Turkey`），cty.dat 规范名是（`Fed. Rep. of Germany`/`West Malaysia`/`Asiatic Turkey`）——`rank_bands` 直接比对会失配，已通联实体被误判 new（现场：反复切 15 m 追 Germany，而 qso 表已有 64 条 DL/DK）。`_CTY_NAME_ALIASES` + `_canonical_entity_name()` 归一化后用于 worked 判定；`new_entities` 保留原名显示；未知名称原样通过不误伤。auto-call 的 `is_new_dxcc` 不受影响（两侧都用 `cty.lookup`，本就一致）。
 - **CQ 空闲频点**（UC-004，2026-08-07）：`FrequencyOccupancy` 记录最近 120 s 解码
   频率（含自身回波），`pick_cq_frequency` 在 1500±300 Hz 螺旋扫描第一个与所有
   占用中心距 ≥30 Hz 的整数频点；全占用回退 1500。手动 CQ 与 cq_loop 每次
   CQ/re-CQ 重选。
+
+![图 9 band-hunt 闭环：双闸门 → 轮询 → 归一化 → 排序切频 → 自动呼叫](../images/band-hunt-loop.svg)
 
 ---
 
@@ -194,6 +167,7 @@ SIGNOFF/DONE  Tx5: <dx> <my> 73 → 落库          （对方 RR73/73 到达后�
 | `MRRC_FT8_BAND_HUNT_URL` | 环境变量 | 空 = 关闭 | pskreporter `/api/band_hunt` 地址 |
 | `MRRC_FT8_BAND_HUNT_COOLDOWN` | 环境变量 | 1200 s | 切波段冷却 |
 | `MRRC_FT8_LOG_LEVEL` | 环境变量 | DEBUG（restart.sh） | 观察 auto_call 日志 |
+| MRRC_FT8_SKIP_SERIAL_GUARD | 环境变量 | 未设置（守卫生效） | 应急跳过 restart.sh 串口占用守卫（AD-008） |
 
 > 注意：开关在 `setting_meta` 表；**服务端开关从未开启时功能完全静默**（历史
 > 教训：2026-08-05 现场 root cause 之一）。开启后可在 `/state` 快照与
@@ -252,13 +226,19 @@ TX 仍需人工 re-arm，符合 no-recovery-auto-resumes-TX）。
    绝不被自动呼叫打断（AD-012 单 QSO 自动化）。
 6. **频率纪律**（2026-08-07）：应答发在伙伴解码频率（split），避免离频呼叫不被
    对方自动序列配对；CQ 避开占用频点。
-7. **不碰 CAT 串口**：唯一 owner 是 rigctld（AD-008）。
+7. **不碰 CAT 串口**：唯一 owner 是 rigctld（AD-008）。部署期由 restart.sh serial_guard() 强制：启动 rigctld 前 lsof 检测串口持有者，非 rigctld 进程持有即拒绝启动并列出持有者（fail-fast）；MRRC_FT8_SKIP_SERIAL_GUARD=1 应急跳过。
+
+![图 10 安全不变量：单点 TX 门、STOP 优先、不自动恢复](../images/safety-gate.svg)
 
 ---
 
-## 7. 现场案例复盘（TN8GD，2026-08-07）
+## 7. 现场案例复盘（2026-08-07）
 
-**背景**：TN8GD（尼日尔，新 DXCC）在 20 m 活跃，多流 pileup。
+**背景**：2026-08-07 现场连续暴露三个根因：TN8GD 自动呼叫的频率纪律、CAT 串口争抢、band-hunt 实体名失配。以下按时间复盘。
+
+### 7.1 TN8GD 频率纪律（UC-003/UC-004）
+
+![图 11 TN8GD 频率根因：应答必须发在伙伴解码频率](../images/tn8gd-frequency.svg)
 
 | 时间（本地） | 事件 |
 |---|---|
@@ -277,6 +257,18 @@ tx_frequency=…)`），`TxDriver` 编码读 `sequencer.tx_frequency`；auto-cal
 select / reply 全链路透传 `freq`；旧客户端缺 freq 回退 1500。同批完成 UC-004
 （CQ 选空闲频点）。
 
+### 7.2 CAT 串口争抢与 serial_guard（AD-008，V1.4）
+
+18:01 一台手动 nohup 的旧 mrrc_ft710 `server.py`（MacPorts Python）直接 open `/dev/cu.usbserial-0121DB3A0`，与 rigctld 共持 → 字节争抢 → 18:00–22:20 rig 轮询 ~90% 超时（`wrong reply`/`Rig busy` 数千条），band_hunt 切频 5 次失败；停掉残留进程（PID 56041）立即恢复。修复：`restart.sh serial_guard()`（见 §6 不变量 7）；旧项目 `switch.sh/stop.sh` 同步加固（大小写不敏感 `pgrep -if`、串口持有者兜底）。
+
+![图 12 CAT 串口争抢与 serial_guard 守卫](../images/serial-guard.svg)
+
+### 7.3 band-hunt 实体名失配与归一化（V1.5）
+
+12 h 复盘——band_hunt 反复切 15 m 追 "Germany"，但 Germany 早已通联（qso 表 64 条 DL/DK）；根因：worked 过滤直接拿 pskreporter 普通名对 cty 规范名失配（42 个实测实体名中仅 3 个不一致）；修复 `_CTY_NAME_ALIASES` + `_canonical_entity_name()`；auto-call 的 `is_new_dxcc` 不受影响。
+
+![图 13 实体名归一化：pskreporter → cty 规范名](../images/entity-normalize.svg)
+
 ---
 
 ## 8. 已知限制与后续
@@ -291,3 +283,4 @@ select / reply 全链路透传 `freq`；旧客户端缺 freq 回退 1500。同�
   re-CQ），不做连续多目标追猎。
 - **数据源**：`cty.dat` 是仓库内静态副本；实体划分更新需手动替换文件 + 重启
   （cache 懒加载单例）。
+- **实体名别名表**：`_CTY_NAME_ALIASES` 目前只覆盖 3 个已知失配（Germany/Malaysia/Turkey）；pskreporter 若引入新的不一致名称需人工扩充别名表。
