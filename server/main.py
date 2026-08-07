@@ -411,6 +411,11 @@ def create_server(
         slot_rms: dict[int, float] = {}
         capture_bounces = 0
         MAX_CAPTURE_BOUNCES = 3
+        # B1: 重启后复验窗口——重启后仍热+零解码说明退化检测误判
+        # （波段上本无 FT8 内容，如夜间 40m 强语音台），自动清除 AUDIO fault。
+        VERIFY_SLOTS = 2                  # 重启后观察的 slot 数
+        VERIFY_RMS_THRESHOLD = 1_000.0    # 与 CaptureHealthMonitor 一致
+        _restart_verify = {"slots_left": 0, "hot_silent": 0}
 
         async def recover_capture(rms: float) -> None:
             """Latch AUDIO and reopen the capture stream in monitor state.
@@ -420,6 +425,14 @@ def create_server(
             freshly opened stream is always clean (2026-08-02 field
             findings).  TX stays disarmed until the operator clears the
             fault — no recovery auto-resumes TX (§12).
+
+            After the restart, a short re-verification window runs: if the
+            fresh stream still shows hot-but-zero-decode slots, the episode
+            was a false positive (the band simply carries no FT8 content,
+            e.g. strong phone traffic on 40 m at night — 2026-08-05 field
+            finding) and the AUDIO fault is cleared automatically.  The
+            operator still re-arms TX manually, so no-recovery-auto-resumes
+            TX is preserved.
             """
 
             nonlocal capture_bounces
@@ -439,10 +452,66 @@ def create_server(
                     MAX_CAPTURE_BOUNCES,
                 )
                 await asyncio.to_thread(capture.restart)
+                _restart_verify["slots_left"] = VERIFY_SLOTS
+                _restart_verify["hot_silent"] = 0
             else:
                 log.critical(
                     "capture bounce limit reached; manual intervention required"
                 )
+
+        # ── 方案 A: 跨波段主动重启 capture（FT-710 UAC 波段切换退化防护）──
+        # 现场观察 (2026-08-05): FT-710 切换波段后 USB 音频流时间链错位,
+        # 表现为流"热但零解码", 60 s 后触发退化检测 → AUDIO fault + TX 锁。
+        # 与其等退化, 不如在波段切换完成时主动重开 capture（重开永远干净）。
+        # 发射中不重启（PTT 期间 UAC 流状态未知）——推迟到 RX 恢复后补执行。
+        _last_restart_band: str | None = None   # 上次主动重启时的波段基准
+        _deferred_band: str | None = None       # 发射中跨波段, 待补执行的重启
+
+        async def _proactive_capture_restart(band_now: str, source: str) -> None:
+            """Band changed since the last proactive restart: reopen capture.
+
+            Idempotent per band: the same band restarts at most once until
+            the radio leaves it.  First call only establishes the baseline
+            (server startup must not restart an already-clean stream).
+            """
+            nonlocal _last_restart_band, _deferred_band
+            if capture is None or not band_now:
+                return
+            if _last_restart_band is None:
+                _last_restart_band = band_now  # baseline only
+                return
+            # 补执行被推迟的重启（发射期间跨波段）
+            if _deferred_band and not safety.ptt_on and band_now == _deferred_band:
+                log.info(
+                    "deferred capture restart for %s now executing (%s)",
+                    _deferred_band, source,
+                )
+                try:
+                    await asyncio.to_thread(capture.restart)
+                except Exception:
+                    log.exception("deferred capture restart failed")
+                _last_restart_band = _deferred_band
+                _deferred_band = None
+                return
+            if band_now == _last_restart_band:
+                return
+            if safety.ptt_on:
+                _deferred_band = band_now
+                log.info(
+                    "band switch to %s during TX — capture restart deferred (%s)",
+                    band_now, source,
+                )
+                return
+            log.info(
+                "band switch to %s — restarting capture proactively (%s)",
+                band_now, source,
+            )
+            try:
+                await asyncio.to_thread(capture.restart)
+            except Exception:
+                log.exception("proactive capture restart failed")
+            _last_restart_band = band_now
+            _deferred_band = None
 
         def read_slot_logged(slot_id: int) -> bytes | None:
             data = slot_ring.read_slot(slot_id)
@@ -479,7 +548,46 @@ def create_server(
                     capture_bounces = 0  # healthy session: reset self-heal budget
                 if capture_health.observe(rms, len(slot_decode.messages)):
                     asyncio.get_running_loop().create_task(recover_capture(rms))
+                # B1 复验窗口: 退化重启后的新流仍热+零解码 → 误判
+                if _restart_verify["slots_left"] > 0:
+                    _restart_verify["slots_left"] -= 1
+                    if slot_decode.messages:
+                        # 真退化已自愈（重启修好了流）——fault 保留由操作员确认
+                        _restart_verify["slots_left"] = 0
+                        _restart_verify["hot_silent"] = 0
+                    elif rms > VERIFY_RMS_THRESHOLD:
+                        _restart_verify["hot_silent"] += 1
+                    if (
+                        _restart_verify["slots_left"] == 0
+                        and _restart_verify["hot_silent"] >= VERIFY_SLOTS
+                    ):
+                        # 重启后新流依旧热+零解码: 退化检测误判（波段无 FT8
+                        # 内容, 如夜间 40m 强语音台）。自动清除 AUDIO fault——
+                        # TX 仍需操作员手动重新 arm, 不违反 no-recovery 约束。
+                        log.warning(
+                            "capture restarted but still hot+silent — "
+                            "false-positive AUDIO fault (no FT8 content on band?); "
+                            "clearing fault automatically"
+                        )
+                        safety.clear_fault(Interlock.AUDIO)
+                        _restart_verify["hot_silent"] = 0
             from .engine.dxcc import get_cty_database
+
+            # P1 (2026-08-05): is_new_dxcc 判定必须用最新 worked 集。
+            # 修复前 cache 仅在启动/band_hunt 时刷新, QSO 写库后 (dxcc_dirty)
+            # 若 band_hunt 关闭则永不刷新 → 刚通联的实体仍被判为 new,
+            # auto-call 会重复呼叫同一站。同步重建仅在 dirty 时发生
+            # （dxcc_summary 索引化后 ~0.2s, 每 15s slot 至多一次）。
+            if state.dxcc_cache is None or state.repository.dxcc_dirty:
+                from .engine.dxcc import dxcc_summary
+
+                try:
+                    state.dxcc_cache = dxcc_summary(
+                        state.repository, get_cty_database()
+                    )
+                    state.repository.dxcc_dirty = False
+                except Exception:
+                    log.exception("dxcc cache refresh failed (kept stale cache)")
 
             # is_new_dxcc: entity worked-entity check against the DXCC cache
             # (pre-filled at startup; conservative False while unbuilt).
@@ -686,7 +794,19 @@ def create_server(
             while True:
                 await asyncio.sleep(config.band_hunt_interval_s)
                 try:
-                    if repository.get_setting("auto_band_hunt") is not True:
+                    # P1: cache 刷新独立于 auto_band_hunt 开关——auto-call
+                    # 也依赖最新 worked 集, 不能等 band_hunt 开启才刷新。
+                    await _fresh_dxcc_cache(state)
+                    if state.dxcc_cache is None:
+                        log.debug("band_hunt: worked set unknown — skip")
+                        continue  # worked set unknown — never switch blindly
+                    auto_on = repository.get_setting("auto_band_hunt") is True
+                    log.debug(
+                        "band_hunt tick: auto=%s seq=%s selected=%s armed=%s",
+                        auto_on, state.sequencer.state,
+                        state.selected is not None, state.safety.armed,
+                    )
+                    if not auto_on:
                         continue
                     # Same idle gate as auto-call: no active QSO, no pending
                     # manual selection.  A CQ loop holds a non-IDLE sequencer.
@@ -694,10 +814,8 @@ def create_server(
                         state.sequencer.state is not QSOState.IDLE
                         or state.selected is not None
                     ):
+                        log.debug("band_hunt: not idle — skip")
                         continue
-                    await _fresh_dxcc_cache(state)
-                    if state.dxcc_cache is None:
-                        continue  # worked set unknown — never switch blindly
                     payload = await fetch_opportunities(
                         config.band_hunt_url,
                         {
@@ -707,9 +825,14 @@ def create_server(
                         },
                     )
                     if payload is None:
+                        log.debug("band_hunt: fetch failed/None — skip")
                         continue
                     worked = {e.name for e in state.dxcc_cache.entities}
                     ranked = rank_bands(payload, worked)
+                    log.debug(
+                        "band_hunt: ranked %s",
+                        [(b["band"], len(b["new_entities"])) for b in ranked[:4]],
+                    )
                     now = time.monotonic()
                     target = decide_switch(
                         ranked,
@@ -728,6 +851,10 @@ def create_server(
                         continue
                     await state.rig.set_frequency(target)
                     state.radio_freq_hz = target
+                    # 方案 A: band_hunt 切频后主动重开 capture（此处保证非发射）
+                    await _proactive_capture_restart(
+                        band_from_freq_hz(target), "band_hunt"
+                    )
                     await asyncio.to_thread(
                         repository.record_audit,
                         actor="system",
@@ -758,11 +885,16 @@ def create_server(
                 await asyncio.sleep(RIG_POLL_S)
                 try:
                     freq_hz = await state.rig.get_frequency()
-                    if freq_hz != state.radio_freq_hz:
-                        state.radio_freq_hz = freq_hz
-                        state.state_broadcast.publish(_snapshot(state, None))
                 except Exception:
                     log.debug("rig frequency poll failed", exc_info=True)
+                    continue
+                band_now = band_from_freq_hz(freq_hz)
+                if freq_hz != state.radio_freq_hz:
+                    state.radio_freq_hz = freq_hz
+                    state.state_broadcast.publish(_snapshot(state, None))
+                # 方案 A: 手动/外部切波段后主动重开 capture, 避免 UAC 流退化
+                if capture is not None:
+                    await _proactive_capture_restart(band_now, "rig_poll")
 
         tasks.append(asyncio.create_task(rig_poll()))
         try:

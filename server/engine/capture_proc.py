@@ -142,14 +142,22 @@ class CaptureProcess:
 
     @property
     def healthy(self) -> bool:
-        """Child alive and producing blocks within the stall timeout."""
+        """Child alive and producing blocks within the stall timeout.
 
-        process = self._process
-        return (
-            process is not None
-            and process.is_alive()
-            and self._monotonic() - self._last_block <= self._stall_timeout
-        )
+        Locked against ``restart()``: an unlocked read could sample the
+        teardown→spawn intermediate state (``_process is None`` for a few
+        ms) and make the watchdog double-restart right behind a caller's
+        own ``restart()`` (field finding 2026-08-05: proactive band-switch
+        restart was immediately followed by a watchdog restart).
+        """
+
+        with self._lock:
+            process = self._process
+            return (
+                process is not None
+                and process.is_alive()
+                and self._monotonic() - self._last_block <= self._stall_timeout
+            )
 
     def start(self) -> None:
         """Spawn the first child and begin consuming frames."""
