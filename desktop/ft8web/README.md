@@ -53,6 +53,20 @@ cd ../..
 The client is then served at `<server-origin>/desktop/` (e.g.
 `https://radio.vlsc.net:9988/desktop/`). The mobile PWA stays at `/static/`.
 
+## Operation
+
+- **Login** with the station password, then select a band (40/20/15/10 m).
+- **Band Activity**: single-click a decode row **selects** it (never transmits —
+  server §15.6); **double-click** replies (the mobile-PWA convention). The
+  `Ans` button replies to the selected station; `CQ` starts a CQ call; `STOP`
+  always works (no lease needed).
+- **Control lease**: CQ/Ans/band-change acquire the lease implicitly; the
+  client heartbeats every 5 s while holding it (server §15.4, TTL 15 s — do not
+  raise the interval, or the dead-man STOP fires mid-transmission).
+- TX messages appear in the Active QSO panel from the server's `last_tx`
+  snapshot; the server sequencer runs the whole QSO (grid → report → RR73 → 73)
+  and logs it — the client only sends intents.
+
 ## Server settings this client exposes
 
 The Settings modal reads and writes these server keys via `/api/v1/settings`:

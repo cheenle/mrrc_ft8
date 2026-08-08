@@ -45,8 +45,9 @@ venv/bin/python -m pytest tests/
 | `server/main.py` 自动呼叫 | decode 消息带 `is_new_dxcc`（实体已通联判定）；开关 `auto_call_new_dxcc` 开启后服务端对第一个新 DXCC CQ 自动通联（`auto_call_candidate` 纯函数 + `safety.arm` + `sequencer.reply_to`，不打断当前 QSO） |
 | `server/engine/band_hunter.py` | NFR-088 波段猎人：轮询外部 `/api/band_hunt`（HTTP 唯一跨库边界，pskreporter 侧），`rank_bands`/`decide_switch` 纯函数过滤已通联实体并排序（pskreporter 实体名→cty 规范名归一化：Germany/Malaysia/Turkey 别名）；`MRRC_FT8_BAND_HUNT_URL`（默认空=关闭）+ 设置 `auto_band_hunt` 双闸门；空闲时经现有 rig 调谐路径切频，再由自动呼叫闭环 |
 | `server/engine/` | 编排器（UTC 时隙）、音频 RX/TX、rig（rigctld）、sequencer、TX 链路（dsp_encode 编码、tx_driver 时隙奇偶泵 + I9 决策窗口/fit guard + TX 频率跟随 sequencer 伙伴偏移、tx_frequency 占用环/CQ 空闲频点、cq_loop 自动 CQ 循环、qso_log 落库助手）、waterfall（3 kHz 频谱）、ADIF；音频采集运行在独立子进程（capture_proc，进程边界隔离 CoreAudio 会话退化）；UtcRing 按绝对序号 `X % capacity` 寻址 |
-| `server/web/` | FastAPI REST/WS + 移动 PWA 静态资源（含 `band.js` 波段选择） |
-| `deploy/` | Caddyfile（模板+live 实例）、Caddy root LaunchDaemon、systemd unit、macOS LaunchAgent（密码哈希经 `python -m server.main --hash-password` bootstrap）；`restart.sh` 串口占用守卫（AD-008：rigctld 启动前检测非 rigctld 持有者，冲突 fail-fast，`MRRC_FT8_SKIP_SERIAL_GUARD=1` 应急跳过） |
+| `server/web/` | FastAPI REST/WS + 移动 PWA 静态资源（含 `band.js` 波段选择）；`server/main.py` 另挂载 `/desktop` → `desktop/ft8web/dist`（`os.path.isdir` 守卫，dist 缺失时服务器照常启动） |
+| `desktop/ft8web/` | 桌面客户端（ft8web 壳 + 服务器大脑，GPL v3 派生）：React 19 + Vite + Tailwind；**浏览器零 DSP/音频/PTT** — 解码/waterfall/收发/日志全部走服务器 REST + 三路 WS（`/api/v1`、`/ws/v1/{state,decodes,waterfall}`）；适配层 `mrrcClient.ts`/`mrrcStreams.ts`/`useServerFT8.ts`（隐式控制租约 + 5 s 心跳对齐 §15.4）；登录门 + `last_tx` 快照显示发出的消息。`dist/` 与 `node_modules/` gitignore — **电台部署须本地 `npm run build`**（见其 README）。单击解码行=select（永不发射）、双击=回复（移动 PWA 惯例） |
+| `deploy/` | Caddyfile（模板+live 实例）、Caddy root LaunchDaemon、systemd unit、macOS LaunchAgent（密码哈希经 `python -m server.main --hash-password` bootstrap）；`restart.sh` 串口占用守卫（AD-008：rigctld 启动前检测非 rigctld 持有者，冲突 fail-fast，`MRRC_FT8_SKIP_SERIAL_GUARD=1` 应急跳过）；注意 `restart.sh` 会杀掉所有 `rigctld` 进程（`pgrep -x rigctld`），含旧 MRRC 项目共用机器的 rigctld |
 | `acceptance/` | 硬件验收脚本（FT-710 real-radio：preflight/monitor/`--tx`，不进 pytest） |
 | `wsjtx-3.0.2/` | vendor 参考源码（只读，禁止修改；gitignore，仅本地构建/校验用，不入库） |
 | `tests/` | pytest；ft8sim/ft4sim 合成信号回归 |
@@ -84,5 +85,5 @@ vendor byte-identical，并另行验证完整 vendor tree digest。FFTW plan cac
 
 - Python：asyncio；硬件 I/O 一律 `asyncio.to_thread`；类型标注；Google 风格 docstring。
 - Fortran shim：普通 subroutine + `bind(C)` 命名；不改 wsjtx 原有源码逻辑。
-- 前端：无构建步骤的 vanilla JS，`static/` 下模块化；`index.html` 无内联 JS 逻辑。
+- 前端：无构建步骤的 vanilla JS，`static/` 下模块化；`index.html` 无内联 JS 逻辑。**例外**：桌面客户端 `desktop/ft8web/` 是 Vite + React 构建（`npm run build` → gitignore 的 `dist/`），不可改为 vanilla JS。
 - 每次代码变更同步 SDD 对应章节 + `SDD/14-version-history.md`（见 sdd-guardian skill）。
