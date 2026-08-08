@@ -1266,15 +1266,9 @@ export default function App() {
         </div>
       </footer>
 
-      {/* Logbook Viewer Section */}
+      {/* Logbook Viewer Section (Task 11: server-backed, read-only) */}
       <div className="w-full mt-3">
-         <LogBookViewer
-            maxEntries={maxLogEntries}
-            wavelogEnabled={false}
-            wavelogUrl={''}
-            wavelogApiKey={''}
-            wavelogStationProfileId={''}
-         />
+         <LogBookViewer maxEntries={maxLogEntries} />
       </div>
 
       {showSettings && (
