@@ -670,6 +670,32 @@ export default function App() {
     }
   }, [ensureLease]);
 
+  // Double-click a decode row = reply directly. Single-click (select) never
+  // transmits (§15.6); this gives the mobile-PWA "double-click to answer"
+  // convention. Mirrors handleAns but takes the row so the reply targets the
+  // exact station that was double-clicked.
+  const handleReplyRow = useCallback(async (row: FT8DecodedMessage) => {
+    const candidate = rowToCandidate(row);
+    if (!candidate) return;
+    setTargetCall(candidate.call);
+    setSelectedCandidate(candidate);
+    if (!(await ensureLease())) {
+      setTxNotice('Control is held by another session');
+      return;
+    }
+    const res = await mrrc.reply(candidate);
+    if (!res.ok) {
+      setTxNotice(res.reason === 'lease_required'
+        ? 'Control is held by another session'
+        : `Reply rejected: ${res.reason ?? res.status}`);
+      return;
+    }
+    const scheduled = res.body?.scheduled_tx as { utc?: string; deferred?: boolean } | undefined;
+    if (scheduled?.deferred && scheduled.utc) {
+      setTxNotice(`Reply armed → TX at ${scheduled.utc.slice(0, 2)}:${scheduled.utc.slice(2, 4)}:${scheduled.utc.slice(4, 6)} UTC`);
+    }
+  }, [ensureLease]);
+
   // Single CQ: the server sequencer runs the whole QSO from one CQ.
   const handleCq = useCallback(async () => {
     if (!(await ensureLease())) {
@@ -1049,6 +1075,7 @@ export default function App() {
                             })();
                         setTxPeriod(callerPeriod === 0 ? 1 : 0);
                       }}
+                      onDoubleClick={() => { void handleReplyRow(log); }}
                       className="grid grid-cols-[55px_40px_60px_1fr] gap-2 hover:bg-btn cursor-pointer p-1 rounded transition-colors group text-[11px] items-center"
                     >
                       <span className="text-zinc-500">{log.time}</span>
@@ -1121,6 +1148,7 @@ export default function App() {
                         if (callerPeriod !== null) setTxPeriod(callerPeriod === 0 ? 1 : 0);
                       }
                     }}
+                    onDoubleClick={() => { if (!log.isTx) void handleReplyRow(log); }}
                     className="grid grid-cols-[55px_40px_60px_1fr] gap-2 hover:bg-btn cursor-pointer p-1 rounded transition-colors group text-[11px] items-center"
                   >
                     <span className="text-zinc-500">{log.time}</span>
