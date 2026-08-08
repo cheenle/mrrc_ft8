@@ -33,3 +33,11 @@ artifacts/dsp-benchmark.json
 
 # Accidental recursive self-copy inside the skills dir (6+ GB of nested duplicates)
 .agents/skills/.agents/
+
+# Desktop client reference clone (pristine; do not commit)
+# Anchored to repo root: unanchored "FT8web/" would also ignore desktop/ft8web
+# on case-insensitive filesystems (git core.ignorecase).
+/FT8web/
+# Desktop client build artifacts
+desktop/ft8web/node_modules/
+desktop/ft8web/dist/
