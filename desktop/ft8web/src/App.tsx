@@ -482,7 +482,10 @@ export default function App() {
       // Compute the new top row
       const rowImg = ctx.createImageData(width, 1);
       for (let x = 0; x < width; x++) {
-        const val = bins[x] || 0;
+        // Ratio-map the server's bin count onto the canvas width (matches the
+        // mobile PWA at server/web/static/js/waterfall.js); the `|| 0` guards a
+        // NaN when the index falls outside a short bins array.
+        const val = bins[Math.floor((x / width) * bins.length)] || 0;
 
         const px = x * 4;
         // Smooth color palette: Black -> Blue -> Purple/Red -> Yellow/White
