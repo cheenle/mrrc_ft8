@@ -33,6 +33,9 @@
         .sdd-content hr { border: none; border-top: 1px solid var(--border); margin: 2rem 0; }
         .sdd-content a { color: var(--accent); }
         .sdd-content img { max-width: 100%; border-radius: 0.5rem; margin: 1rem 0; }
+        .doc-fig { margin: 1.5rem 0; padding: 1rem; background: var(--bg-tertiary); border: 1px solid var(--border); border-radius: 0.75rem; }
+        .doc-fig svg { width: 100%; height: auto; display: block; }
+        .doc-fig figcaption { margin-top: 0.75rem; font-size: 0.8125rem; color: var(--text-muted); text-align: center; line-height: 1.5; }
         @media (max-width: 900px) { .sdd-layout { flex-direction: column; padding: 0 1rem; } }
     </style>
 </head>
@@ -60,7 +63,7 @@
     <div class="sdd-content">
 <h1 id="新-dxcc-自动呼叫-端到端机制说明">新 DXCC 自动呼叫 —— 端到端机制说明</h1>
 <blockquote>
-<p>本文档完整阐述 MRRC-FT8 的”新 DXCC 自动呼叫”（auto-call）功能：从空中信号解码， 到实体判定、自动应答、QSO 完成、落库刷新的全链路机制、配置、安全设计与运维观察点。 适用版本：SDD V1.3（2026-08-07，含 UC-003/UC-004 频率纪律修复）。</p>
+<p>本文档完整阐述 MRRC-FT8 的”新 DXCC 自动呼叫”（auto-call）功能：从空中信号解码， 到实体判定、自动应答、QSO 完成、落库刷新的全链路机制、配置、安全设计与运维观察点。 适用版本：SDD V1.5（2026-08-08，含 UC-003/UC-004 频率纪律、AD-008 串口守卫、band-hunt 实体名归一化）。</p>
 </blockquote>
 <hr />
 <h2 id="功能定位">1. 功能定位</h2>
@@ -107,41 +110,110 @@
 </table>
 <hr />
 <h2 id="端到端链路总览">2. 端到端链路总览</h2>
-<pre><code>             ┌────────────── 12 kHz int16 单声道（铁律）──────────────┐
-   FT-710 ──►│ capture_proc 子进程 → UtcRing(绝对序号) → DSP Worker  │
-             └────────────────────────┬───────────────────────────────┘
-                                      │ 每 15 s slot 一批解码
-                                      ▼
-                        orchestrator.on_decode（main.py）
-        ┌───────────────────────────┬───────────────────────────────┐
-        │ 1. DXCC cache 刷新        │ 2. decode_message_view        │
-        │    （dxcc_dirty 时同步重建，│     is_new_dxcc = lookup(call)│
-        │     ~0.2 s，至多每 slot 一次）│      ∈ 实体 ∧ ∉ worked      │
-        └───────────────────────────┴───────────────┬───────────────┘
-                                                    ▼
-        3. auto_call_candidate 决策（纯函数，每 slot 至多命中第一个）
-             开关开 ∧ 空闲 ∧ 无选择 ∧ is_new_dxcc ∧ is_cq ∧ 非自身回波
-                                                    │
-                                                    ▼
-        4. _auto_call：safety.arm()（互锁门）→ sequencer.reply_to()
-              tx_phase = 1 − slot%2；tx_frequency = 伙伴解码频率（UC-003）
-              失败/互锁打开 → 记日志跳过，下一 slot 重试；audit 落 auto_call
-                                                    │
-                                                    ▼
-        5. TX 链路：TxDriver（时隙奇偶泵 + I9 决策窗口 + fit guard）
-              sequencer.next_tx_message() → dsp_encode（48 kHz 波形）
-              → safety.transmit（PTT 门 + watchdog + 聚合预算）
-                                                    │
-                                                    ▼
-        6. sequencer QSO 状态机（NFR-055：1 发 + 至多 3 重传）
-              REPLYING → REPORT → ROGER_REPORT → ROGERS → SIGNOFF/DONE
-                                                    │
-                                                    ▼
-        7. 落库：_ensure_log → on_qso → qso_log.enqueue
-              → record_qso（qso 表 source=&#39;live&#39;）→ dxcc_dirty = True
-                                                    │
-                                                    ▼
-        8. 下一个 slot：DXCC cache 重建 → 该实体进 worked → 不再触发</code></pre>
+<figure>
+<figure class="doc-fig"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 1250" role="img" aria-labelledby="f1title">
+  <title id="f1title">图 1 端到端链路总览：从空中解码到 worked 集刷新</title>
+  <defs>
+    <marker id="f1-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto">
+      <path d="M 0 0 L 10 5 L 0 10 z" style="fill:var(--accent,#22d3ee)"/>
+    </marker>
+    <marker id="f1-arrow-green" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto">
+      <path d="M 0 0 L 10 5 L 0 10 z" style="fill:#34d399"/>
+    </marker>
+  </defs>
+
+  <rect x="0" y="0" width="960" height="1250" rx="12" fill="var(--bg-tertiary,#10161e)"/>
+
+  <!-- stage 1: capture / decode (top wide box) -->
+  <rect x="130" y="52" width="700" height="84" rx="8" fill="var(--bg-secondary,#0d1117)" stroke-width="1.5" style="stroke:var(--accent,#22d3ee)"/>
+  <text x="480" y="85" text-anchor="middle" font-family="Inter, system-ui, -apple-system, sans-serif" font-size="12" style="fill:#f59e0b">12 kHz int16 单声道（铁律）</text>
+  <text x="480" y="112" text-anchor="middle" font-family="'JetBrains Mono', ui-monospace, monospace" font-size="13" style="fill:var(--text-primary,#ffffff)">FT-710 → capture_proc 子进程 → UtcRing(绝对序号) → DSP Worker</text>
+  <text x="894" y="90" text-anchor="middle" font-family="Inter, system-ui, -apple-system, sans-serif" font-size="11" style="fill:var(--text-muted,#5c6370)">每 15 s slot</text>
+  <text x="894" y="108" text-anchor="middle" font-family="Inter, system-ui, -apple-system, sans-serif" font-size="11" style="fill:var(--text-muted,#5c6370)">一批解码</text>
+
+  <path d="M 480 136 V 186" fill="none" stroke-width="1.5" style="stroke:var(--accent,#22d3ee)" marker-end="url(#f1-arrow)"/>
+
+  <!-- stage 2: on_decode -->
+  <rect x="130" y="186" width="700" height="56" rx="8" fill="var(--bg-secondary,#0d1117)" stroke-width="1.5" style="stroke:var(--accent,#22d3ee)"/>
+  <text x="480" y="219" text-anchor="middle" font-family="Inter, system-ui, -apple-system, sans-serif" font-size="13" font-weight="600" style="fill:var(--text-primary,#ffffff)">orchestrator.on_decode（main.py）</text>
+
+  <!-- branch to the two sub-boxes -->
+  <path d="M 480 242 V 268 M 300 268 H 660" fill="none" stroke-width="1.5" style="stroke:var(--accent,#22d3ee)"/>
+  <path d="M 300 268 V 294" fill="none" stroke-width="1.5" style="stroke:var(--accent,#22d3ee)" marker-end="url(#f1-arrow)"/>
+  <path d="M 660 268 V 294" fill="none" stroke-width="1.5" style="stroke:var(--accent,#22d3ee)" marker-end="url(#f1-arrow)"/>
+
+  <rect x="130" y="294" width="340" height="96" rx="8" fill="var(--bg-secondary,#0d1117)" stroke-width="1.5" stroke-opacity="0.7" style="stroke:var(--accent,#22d3ee)"/>
+  <text x="300" y="322" text-anchor="middle" font-family="Inter, system-ui, -apple-system, sans-serif" font-size="12.5" font-weight="600" style="fill:var(--text-primary,#ffffff)">1. DXCC cache 刷新</text>
+  <text x="300" y="345" text-anchor="middle" font-family="'JetBrains Mono', ui-monospace, monospace" font-size="12" style="fill:var(--text-secondary,#8899aa)">dxcc_dirty 时同步重建，~0.2 s</text>
+  <text x="300" y="368" text-anchor="middle" font-family="Inter, system-ui, -apple-system, sans-serif" font-size="12" style="fill:var(--text-secondary,#8899aa)">每 slot 至多一次</text>
+
+  <rect x="490" y="294" width="340" height="96" rx="8" fill="var(--bg-secondary,#0d1117)" stroke-width="1.5" stroke-opacity="0.7" style="stroke:var(--accent,#22d3ee)"/>
+  <text x="660" y="322" text-anchor="middle" font-family="'JetBrains Mono', ui-monospace, monospace" font-size="12.5" font-weight="600" style="fill:var(--text-primary,#ffffff)">2. decode_message_view</text>
+  <text x="660" y="345" text-anchor="middle" font-family="'JetBrains Mono', ui-monospace, monospace" font-size="12" style="fill:var(--text-secondary,#8899aa)">is_new_dxcc = lookup(call)</text>
+  <text x="660" y="368" text-anchor="middle" font-family="'JetBrains Mono', ui-monospace, monospace" font-size="12" style="fill:var(--text-secondary,#8899aa)">∈ 实体 ∧ ∉ worked</text>
+
+  <!-- merge back into the main chain -->
+  <path d="M 300 390 V 414 M 660 390 V 414 M 300 414 H 660" fill="none" stroke-width="1.5" style="stroke:var(--accent,#22d3ee)"/>
+  <path d="M 480 414 V 440" fill="none" stroke-width="1.5" style="stroke:var(--accent,#22d3ee)" marker-end="url(#f1-arrow)"/>
+
+  <!-- 3: candidate decision -->
+  <rect x="130" y="440" width="700" height="84" rx="8" fill="var(--bg-secondary,#0d1117)" stroke-width="1.5" style="stroke:var(--accent,#22d3ee)"/>
+  <circle cx="152" cy="482" r="12" fill="var(--bg-secondary,#0d1117)" stroke-width="1.5" style="stroke:var(--accent,#22d3ee)"/>
+  <text x="152" y="486.5" text-anchor="middle" font-family="Inter, system-ui, -apple-system, sans-serif" font-size="12" font-weight="600" style="fill:var(--text-primary,#ffffff)">3</text>
+  <text x="480" y="473" text-anchor="middle" font-family="Inter, system-ui, -apple-system, sans-serif" font-size="13" font-weight="600" style="fill:var(--text-primary,#ffffff)">auto_call_candidate 决策（纯函数）</text>
+  <text x="480" y="498" text-anchor="middle" font-family="'JetBrains Mono', ui-monospace, monospace" font-size="12.5" style="fill:var(--text-secondary,#8899aa)">开关开 ∧ 空闲 ∧ 无选择 ∧ is_new_dxcc ∧ is_cq ∧ ¬mine</text>
+
+  <path d="M 480 524 V 574" fill="none" stroke-width="1.5" style="stroke:var(--accent,#22d3ee)" marker-end="url(#f1-arrow)"/>
+
+  <!-- 4: arm + reply -->
+  <rect x="130" y="574" width="700" height="112" rx="8" fill="var(--bg-secondary,#0d1117)" stroke-width="1.5" style="stroke:var(--accent,#22d3ee)"/>
+  <circle cx="152" cy="630" r="12" fill="var(--bg-secondary,#0d1117)" stroke-width="1.5" style="stroke:var(--accent,#22d3ee)"/>
+  <text x="152" y="634.5" text-anchor="middle" font-family="Inter, system-ui, -apple-system, sans-serif" font-size="12" font-weight="600" style="fill:var(--text-primary,#ffffff)">4</text>
+  <text x="480" y="604" text-anchor="middle" font-family="Inter, system-ui, -apple-system, sans-serif" font-size="13" font-weight="600" style="fill:var(--text-primary,#ffffff)">_auto_call：safety.arm()（互锁门）→ sequencer.reply_to()</text>
+  <text x="480" y="632" text-anchor="middle" font-family="'JetBrains Mono', ui-monospace, monospace" font-size="12" style="fill:var(--text-secondary,#8899aa)">tx_phase = 1 − slot%2 · tx_frequency = 伙伴解码频率（UC-003）</text>
+  <text x="480" y="660" text-anchor="middle" font-family="Inter, system-ui, -apple-system, sans-serif" font-size="11.5" style="fill:#f59e0b">失败 → 记日志跳过，下一 slot 重试 · audit 落 auto_call</text>
+
+  <path d="M 480 686 V 736" fill="none" stroke-width="1.5" style="stroke:var(--accent,#22d3ee)" marker-end="url(#f1-arrow)"/>
+
+  <!-- 5: TX chain -->
+  <rect x="130" y="736" width="700" height="84" rx="8" fill="var(--bg-secondary,#0d1117)" stroke-width="1.5" style="stroke:var(--accent,#22d3ee)"/>
+  <circle cx="152" cy="778" r="12" fill="var(--bg-secondary,#0d1117)" stroke-width="1.5" style="stroke:var(--accent,#22d3ee)"/>
+  <text x="152" y="782.5" text-anchor="middle" font-family="Inter, system-ui, -apple-system, sans-serif" font-size="12" font-weight="600" style="fill:var(--text-primary,#ffffff)">5</text>
+  <text x="480" y="769" text-anchor="middle" font-family="Inter, system-ui, -apple-system, sans-serif" font-size="13" font-weight="600" style="fill:var(--text-primary,#ffffff)">TX 链路：TxDriver（奇偶泵 + I9 窗口 + fit guard）</text>
+  <text x="480" y="794" text-anchor="middle" font-family="'JetBrains Mono', ui-monospace, monospace" font-size="12" style="fill:var(--text-secondary,#8899aa)">next_tx_message() → dsp_encode 48 kHz → safety.transmit（PTT 门 + watchdog + 预算）</text>
+
+  <path d="M 480 820 V 870" fill="none" stroke-width="1.5" style="stroke:var(--accent,#22d3ee)" marker-end="url(#f1-arrow)"/>
+
+  <!-- 6: QSO state machine -->
+  <rect x="130" y="870" width="700" height="84" rx="8" fill="var(--bg-secondary,#0d1117)" stroke-width="1.5" style="stroke:var(--accent,#22d3ee)"/>
+  <circle cx="152" cy="912" r="12" fill="var(--bg-secondary,#0d1117)" stroke-width="1.5" style="stroke:var(--accent,#22d3ee)"/>
+  <text x="152" y="916.5" text-anchor="middle" font-family="Inter, system-ui, -apple-system, sans-serif" font-size="12" font-weight="600" style="fill:var(--text-primary,#ffffff)">6</text>
+  <text x="480" y="903" text-anchor="middle" font-family="Inter, system-ui, -apple-system, sans-serif" font-size="13" font-weight="600" style="fill:var(--text-primary,#ffffff)">sequencer QSO 状态机（NFR-055：1 发 + 3 重传）</text>
+  <text x="480" y="928" text-anchor="middle" font-family="'JetBrains Mono', ui-monospace, monospace" font-size="12.5" style="fill:var(--text-secondary,#8899aa)">REPLYING → REPORT → ROGER_REPORT → ROGERS → SIGNOFF/DONE</text>
+
+  <path d="M 480 954 V 1004" fill="none" stroke-width="1.5" style="stroke:var(--accent,#22d3ee)" marker-end="url(#f1-arrow)"/>
+
+  <!-- 7: persist (green) -->
+  <rect x="130" y="1004" width="700" height="84" rx="8" fill="var(--bg-secondary,#0d1117)" stroke-width="1.5" style="stroke:#34d399"/>
+  <circle cx="152" cy="1046" r="12" fill="var(--bg-secondary,#0d1117)" stroke-width="1.5" style="stroke:#34d399"/>
+  <text x="152" y="1050.5" text-anchor="middle" font-family="Inter, system-ui, -apple-system, sans-serif" font-size="12" font-weight="600" style="fill:var(--text-primary,#ffffff)">7</text>
+  <text x="480" y="1037" text-anchor="middle" font-family="Inter, system-ui, -apple-system, sans-serif" font-size="13" font-weight="600" style="fill:var(--text-primary,#ffffff)">落库：_ensure_log → on_qso → qso_log.enqueue → record_qso</text>
+  <text x="480" y="1062" text-anchor="middle" font-family="'JetBrains Mono', ui-monospace, monospace" font-size="12" style="fill:var(--text-secondary,#8899aa)">qso 表 source='live' · dxcc_dirty = True</text>
+
+  <path d="M 480 1088 V 1138" fill="none" stroke-width="1.5" style="stroke:var(--accent,#22d3ee)" marker-end="url(#f1-arrow)"/>
+
+  <!-- 8: next slot closes the loop -->
+  <rect x="130" y="1138" width="700" height="60" rx="8" fill="var(--bg-secondary,#0d1117)" stroke-width="1.5" style="stroke:var(--accent,#22d3ee)"/>
+  <circle cx="152" cy="1168" r="12" fill="var(--bg-secondary,#0d1117)" stroke-width="1.5" style="stroke:var(--accent,#22d3ee)"/>
+  <text x="152" y="1172.5" text-anchor="middle" font-family="Inter, system-ui, -apple-system, sans-serif" font-size="12" font-weight="600" style="fill:var(--text-primary,#ffffff)">8</text>
+  <text x="480" y="1173" text-anchor="middle" font-family="Inter, system-ui, -apple-system, sans-serif" font-size="13" font-weight="600" style="fill:var(--text-primary,#ffffff)">下一 slot：DXCC cache 重建 → 实体进 worked → 不再触发</text>
+
+  <!-- green dashed loop-back: worked set closes the loop -->
+  <path d="M 130 1168 H 66 V 482 H 130" fill="none" stroke-width="1.5" stroke-dasharray="6 4" style="stroke:#34d399" marker-end="url(#f1-arrow-green)"/>
+  <text transform="translate(56 825) rotate(-90)" text-anchor="middle" font-family="Inter, system-ui, -apple-system, sans-serif" font-size="12" style="fill:#34d399">worked 集闭环</text>
+</svg><figcaption>图 1 端到端链路总览：从空中解码到 worked 集刷新</figcaption></figure>
+<figcaption aria-hidden="true">图 1 端到端链路总览：从空中解码到 worked 集刷新</figcaption>
+</figure>
 <hr />
 <h2 id="环节详解">3. 环节详解</h2>
 <h3 id="信号采集与解码">3.1 信号采集与解码</h3>
@@ -150,6 +222,64 @@
 <li>解码器输入恒为 <strong>12 kHz int16 单声道</strong>（<code>server/core/binding.py</code> 强制，其他采样率 拒绝进入 DSP ABI）；TX 波形恒为 <strong>48 kHz</strong>。所有 DSP 调用经全局锁、只在独立 Worker 内执行（OpenMP 线程只在 Fortran 聚合结果，绝不回调 Python）。</li>
 <li>每 15 s slot，<code>orchestrator</code> 把整槽音频送 Worker 解码（WSJT-X 3.0.2 Improved， profiles 0–4，A8 门控），产出 <code>DecodeResult</code>（slot_id / snr / dt / frequency / text 等），经 <code>on_decode</code> 进入业务层。</li>
 </ul>
+<figure>
+<figure class="doc-fig"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 520" role="img" aria-labelledby="f2title">
+  <title id="f2title">图 2 信号采集与解码链：进程边界与采样率铁律</title>
+  <defs>
+    <marker id="f2-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto">
+      <path d="M 0 0 L 10 5 L 0 10 z" style="fill:var(--accent,#22d3ee)"/>
+    </marker>
+  </defs>
+
+  <rect x="0" y="0" width="960" height="520" rx="12" fill="var(--bg-tertiary,#10161e)"/>
+
+  <!-- process boundary (dashed) around capture_proc -->
+  <rect x="158" y="130" width="174" height="165" rx="8" fill="none" stroke-width="1.5" stroke-dasharray="6 4" stroke-opacity="0.7" style="stroke:var(--text-secondary,#8899aa)"/>
+  <text x="245" y="150" text-anchor="middle" font-family="Inter, system-ui, -apple-system, sans-serif" font-size="11" style="fill:var(--text-secondary,#8899aa)">进程边界</text>
+
+  <!-- chain boxes y=165..277 -->
+  <rect x="18" y="165" width="140" height="112" rx="8" fill="var(--bg-secondary,#0d1117)" stroke-width="1.5" style="stroke:var(--accent,#22d3ee)"/>
+  <text x="88" y="221" text-anchor="middle" font-family="'JetBrains Mono', ui-monospace, monospace" font-size="14" font-weight="600" style="fill:var(--text-primary,#ffffff)">FT-710</text>
+
+  <path d="M 158 221 H 164" fill="none" stroke-width="1.5" style="stroke:var(--accent,#22d3ee)" marker-end="url(#f2-arrow)"/>
+
+  <rect x="170" y="165" width="150" height="112" rx="8" fill="var(--bg-secondary,#0d1117)" stroke-width="1.5" style="stroke:var(--accent,#22d3ee)"/>
+  <text x="245" y="216" text-anchor="middle" font-family="'JetBrains Mono', ui-monospace, monospace" font-size="13" font-weight="600" style="fill:var(--text-primary,#ffffff)">capture_proc</text>
+  <text x="245" y="244" text-anchor="middle" font-family="Inter, system-ui, -apple-system, sans-serif" font-size="12" style="fill:var(--text-secondary,#8899aa)">子进程</text>
+
+  <path d="M 320 221 H 326" fill="none" stroke-width="1.5" style="stroke:var(--accent,#22d3ee)" marker-end="url(#f2-arrow)"/>
+
+  <rect x="332" y="165" width="140" height="112" rx="8" fill="var(--bg-secondary,#0d1117)" stroke-width="1.5" style="stroke:var(--accent,#22d3ee)"/>
+  <text x="402" y="216" text-anchor="middle" font-family="'JetBrains Mono', ui-monospace, monospace" font-size="13" font-weight="600" style="fill:var(--text-primary,#ffffff)">UtcRing</text>
+  <text x="402" y="244" text-anchor="middle" font-family="'JetBrains Mono', ui-monospace, monospace" font-size="11" style="fill:var(--text-secondary,#8899aa)">slot_id % capacity</text>
+
+  <path d="M 472 221 H 478" fill="none" stroke-width="1.5" style="stroke:var(--accent,#22d3ee)" marker-end="url(#f2-arrow)"/>
+
+  <rect x="484" y="165" width="150" height="112" rx="8" fill="var(--bg-secondary,#0d1117)" stroke-width="1.5" style="stroke:var(--accent,#22d3ee)"/>
+  <text x="559" y="216" text-anchor="middle" font-family="'JetBrains Mono', ui-monospace, monospace" font-size="13" font-weight="600" style="fill:var(--text-primary,#ffffff)">DSP Worker</text>
+  <text x="559" y="244" text-anchor="middle" font-family="Inter, system-ui, -apple-system, sans-serif" font-size="11.5" style="fill:var(--text-secondary,#8899aa)">全局锁 · 0–4 · A8 门控</text>
+
+  <path d="M 634 221 H 640" fill="none" stroke-width="1.5" style="stroke:var(--accent,#22d3ee)" marker-end="url(#f2-arrow)"/>
+
+  <rect x="646" y="165" width="140" height="112" rx="8" fill="var(--bg-secondary,#0d1117)" stroke-width="1.5" style="stroke:var(--accent,#22d3ee)"/>
+  <text x="716" y="216" text-anchor="middle" font-family="'JetBrains Mono', ui-monospace, monospace" font-size="12.5" font-weight="600" style="fill:var(--text-primary,#ffffff)">DecodeResult</text>
+  <text x="716" y="244" text-anchor="middle" font-family="'JetBrains Mono', ui-monospace, monospace" font-size="10.5" style="fill:var(--text-secondary,#8899aa)">slot_id / snr / dt /</text>
+  <text x="716" y="260" text-anchor="middle" font-family="'JetBrains Mono', ui-monospace, monospace" font-size="10.5" style="fill:var(--text-secondary,#8899aa)">frequency / text</text>
+
+  <path d="M 786 221 H 792" fill="none" stroke-width="1.5" style="stroke:var(--accent,#22d3ee)" marker-end="url(#f2-arrow)"/>
+
+  <rect x="798" y="165" width="140" height="112" rx="8" fill="var(--bg-secondary,#0d1117)" stroke-width="1.5" style="stroke:var(--accent,#22d3ee)"/>
+  <text x="868" y="216" text-anchor="middle" font-family="'JetBrains Mono', ui-monospace, monospace" font-size="13" font-weight="600" style="fill:var(--text-primary,#ffffff)">on_decode</text>
+  <text x="868" y="244" text-anchor="middle" font-family="'JetBrains Mono', ui-monospace, monospace" font-size="11" style="fill:var(--text-secondary,#8899aa)">(main.py)</text>
+
+  <!-- bottom annotations: sample-rate iron rules -->
+  <text x="480" y="350" text-anchor="middle" font-family="'JetBrains Mono', ui-monospace, monospace" font-size="13" style="fill:var(--accent,#22d3ee)">RX 恒 12 kHz int16 单声道（binding.py 强制）</text>
+  <text x="480" y="380" text-anchor="middle" font-family="'JetBrains Mono', ui-monospace, monospace" font-size="13" style="fill:var(--accent,#22d3ee)">TX 波形恒 48 kHz</text>
+  <text x="480" y="432" text-anchor="middle" font-family="Inter, system-ui, -apple-system, sans-serif" font-size="11.5" style="fill:var(--text-muted,#5c6370)">每 15 s slot，orchestrator 把整槽音频送 Worker 解码（WSJT-X 3.0.2 Improved）</text>
+  <text x="480" y="456" text-anchor="middle" font-family="Inter, system-ui, -apple-system, sans-serif" font-size="11.5" style="fill:var(--text-muted,#5c6370)">OpenMP 线程只在 Fortran 聚合结果，绝不回调 Python</text>
+</svg><figcaption>图 2 信号采集与解码链：进程边界与采样率铁律</figcaption></figure>
+<figcaption aria-hidden="true">图 2 信号采集与解码链：进程边界与采样率铁律</figcaption>
+</figure>
 <h3 id="dxcc-实体判定">3.2 DXCC 实体判定</h3>
 <ul>
 <li><p>实体库：仓库内 <code>cty.dat</code>（country-files ADIF 格式），由 <code>server/engine/dxcc.py</code> 的 <code>CtyDatabase</code> 解析：</p>
@@ -164,6 +294,80 @@
 view[&quot;is_new_dxcc&quot;] = bool(entity) and entity[0] not in worked_dxcc</code></pre>
 <p><code>worked_dxcc</code> 来自 <code>dxcc_summary</code> 全量统计（qso 表非 void 记录 × cty 查表， 同实体同波段计一次，DXCC Challenge 语义）；cache 未建时保守为 <code>False</code>（不误触发）。</p></li>
 </ul>
+<figure>
+<figure class="doc-fig"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 560" role="img" aria-labelledby="f3title">
+  <title id="f3title">图 3 DXCC 实体判定：cty.dat 三规则 lookup 与 worked 集比较</title>
+  <defs>
+    <marker id="f3-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto">
+      <path d="M 0 0 L 10 5 L 0 10 z" style="fill:var(--accent,#22d3ee)"/>
+    </marker>
+    <marker id="f3-arrow-green" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto">
+      <path d="M 0 0 L 10 5 L 0 10 z" style="fill:#34d399"/>
+    </marker>
+    <marker id="f3-arrow-gray" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto">
+      <path d="M 0 0 L 10 5 L 0 10 z" style="fill:var(--text-secondary,#8899aa)"/>
+    </marker>
+  </defs>
+
+  <rect x="0" y="0" width="960" height="560" rx="12" fill="var(--bg-tertiary,#10161e)"/>
+
+  <!-- LEFT: cty.dat → CtyDatabase -->
+  <rect x="40" y="70" width="400" height="56" rx="8" fill="var(--bg-secondary,#0d1117)" stroke-width="1.5" style="stroke:var(--accent,#22d3ee)"/>
+  <text x="60" y="94" font-family="'JetBrains Mono', ui-monospace, monospace" font-size="13" font-weight="600" style="fill:var(--text-primary,#ffffff)">cty.dat</text>
+  <text x="60" y="116" font-family="Inter, system-ui, -apple-system, sans-serif" font-size="11.5" style="fill:var(--text-secondary,#8899aa)">（country-files ADIF 格式，仓库内静态副本）</text>
+
+  <path d="M 240 126 V 150" fill="none" stroke-width="1.5" style="stroke:var(--accent,#22d3ee)" marker-end="url(#f3-arrow)"/>
+
+  <rect x="40" y="150" width="400" height="160" rx="8" fill="var(--bg-secondary,#0d1117)" stroke-width="1.5" style="stroke:var(--accent,#22d3ee)"/>
+  <text x="240" y="174" text-anchor="middle" font-family="'JetBrains Mono', ui-monospace, monospace" font-size="13" font-weight="600" style="fill:var(--text-primary,#ffffff)">CtyDatabase 解析</text>
+  <rect x="60" y="188" width="360" height="30" rx="6" fill="var(--bg-secondary,#0d1117)" stroke-width="1" style="stroke:var(--text-secondary,#8899aa)"/>
+  <text x="240" y="207" text-anchor="middle" font-family="'JetBrains Mono', ui-monospace, monospace" font-size="11.5" style="fill:var(--text-secondary,#8899aa)">=CALL 精确前缀优先</text>
+  <rect x="60" y="222" width="360" height="30" rx="6" fill="var(--bg-secondary,#0d1117)" stroke-width="1" style="stroke:var(--text-secondary,#8899aa)"/>
+  <text x="240" y="241" text-anchor="middle" font-family="'JetBrains Mono', ui-monospace, monospace" font-size="11.5" style="fill:var(--text-secondary,#8899aa)">(数字) 替换（如 (23)）加载时展开</text>
+  <rect x="60" y="256" width="360" height="30" rx="6" fill="var(--bg-secondary,#0d1117)" stroke-width="1" style="stroke:var(--text-secondary,#8899aa)"/>
+  <text x="240" y="275" text-anchor="middle" font-family="'JetBrains Mono', ui-monospace, monospace" font-size="11.5" style="fill:var(--text-secondary,#8899aa)">最长前缀匹配（TN → Niger）</text>
+
+  <path d="M 240 310 V 334" fill="none" stroke-width="1.5" style="stroke:var(--accent,#22d3ee)" marker-end="url(#f3-arrow)"/>
+
+  <rect x="40" y="334" width="400" height="56" rx="8" fill="var(--bg-secondary,#0d1117)" stroke-width="1.5" style="stroke:var(--accent,#22d3ee)"/>
+  <text x="240" y="362" text-anchor="middle" font-family="Inter, system-ui, -apple-system, sans-serif" font-size="12.5" style="fill:var(--text-primary,#ffffff)">lookup 已索引化：精确表 + 前缀 trie</text>
+  <text x="240" y="382" text-anchor="middle" font-family="Inter, system-ui, -apple-system, sans-serif" font-size="11.5" style="fill:var(--text-secondary,#8899aa)">单次亚微秒</text>
+
+  <!-- RIGHT: lookup flow -->
+  <rect x="520" y="70" width="400" height="50" rx="8" fill="var(--bg-secondary,#0d1117)" stroke-width="1.5" style="stroke:var(--accent,#22d3ee)"/>
+  <text x="720" y="100" text-anchor="middle" font-family="'JetBrains Mono', ui-monospace, monospace" font-size="13" style="fill:var(--text-primary,#ffffff)">lookup("TN8GD")</text>
+
+  <path d="M 720 120 V 146" fill="none" stroke-width="1.5" style="stroke:var(--accent,#22d3ee)" marker-end="url(#f3-arrow)"/>
+
+  <rect x="520" y="146" width="400" height="50" rx="8" fill="var(--bg-secondary,#0d1117)" stroke-width="1.5" style="stroke:var(--accent,#22d3ee)"/>
+  <text x="720" y="176" text-anchor="middle" font-family="'JetBrains Mono', ui-monospace, monospace" font-size="13" style="fill:var(--text-primary,#ffffff)">实体 = Niger</text>
+
+  <path d="M 720 196 V 222" fill="none" stroke-width="1.5" style="stroke:var(--accent,#22d3ee)" marker-end="url(#f3-arrow)"/>
+
+  <!-- diamond: in worked set? -->
+  <path d="M 720 232 L 760 268 L 720 304 L 680 268 Z" fill="var(--bg-secondary,#0d1117)" stroke-width="1.5" style="stroke:var(--accent,#22d3ee)"/>
+  <text x="720" y="272" text-anchor="middle" font-family="Inter, system-ui, -apple-system, sans-serif" font-size="11.5" style="fill:var(--text-primary,#ffffff)">∈ worked 集？</text>
+
+  <text x="720" y="330" text-anchor="middle" font-family="Inter, system-ui, -apple-system, sans-serif" font-size="10.5" style="fill:var(--text-muted,#5c6370)">worked 集 = dxcc_summary（qso 非 void 记录 × cty 查表）</text>
+
+  <path d="M 720 304 V 330" fill="none" stroke-width="1.5" style="stroke:var(--accent,#22d3ee)"/>
+  <path d="M 720 330 H 600 V 356" fill="none" stroke-width="1.5" style="stroke:var(--text-secondary,#8899aa)" marker-end="url(#f3-arrow-gray)"/>
+  <path d="M 720 330 H 840 V 356" fill="none" stroke-width="1.5" style="stroke:#34d399" marker-end="url(#f3-arrow-green)"/>
+
+  <rect x="520" y="356" width="160" height="56" rx="8" fill="var(--bg-secondary,#0d1117)" stroke-width="1.5" style="stroke:var(--text-secondary,#8899aa)"/>
+  <text x="600" y="380" text-anchor="middle" font-family="'JetBrains Mono', ui-monospace, monospace" font-size="12.5" style="fill:var(--text-secondary,#8899aa)">不触发</text>
+  <text x="600" y="400" text-anchor="middle" font-family="Inter, system-ui, -apple-system, sans-serif" font-size="11" style="fill:var(--text-muted,#5c6370)">（已通联）</text>
+
+  <rect x="760" y="356" width="160" height="56" rx="8" fill="var(--bg-secondary,#0d1117)" stroke-width="1.5" style="stroke:#34d399"/>
+  <text x="840" y="380" text-anchor="middle" font-family="'JetBrains Mono', ui-monospace, monospace" font-size="12" style="fill:#34d399">is_new_dxcc = true</text>
+  <text x="840" y="400" text-anchor="middle" font-family="Inter, system-ui, -apple-system, sans-serif" font-size="11" style="fill:var(--text-muted,#5c6370)">进入候选判定（图 4）</text>
+
+  <!-- amber note -->
+  <rect x="520" y="480" width="400" height="46" rx="8" fill="var(--bg-secondary,#0d1117)" stroke-width="1.5" style="stroke:#f59e0b"/>
+  <text x="720" y="507" text-anchor="middle" font-family="Inter, system-ui, -apple-system, sans-serif" font-size="12" style="fill:#f59e0b">cache 未建时保守为 False（不误触发）</text>
+</svg><figcaption>图 3 DXCC 实体判定：cty.dat 三规则 lookup 与 worked 集比较</figcaption></figure>
+<figcaption aria-hidden="true">图 3 DXCC 实体判定：cty.dat 三规则 lookup 与 worked 集比较</figcaption>
+</figure>
 <h3 id="决策门auto_call_candidate-纯函数">3.3 决策门（<code>auto_call_candidate</code> 纯函数）</h3>
 <p>每 slot 按解码消息顺序检查，<strong>至多命中第一个</strong>候选：</p>
 <pre class="python"><code>return (
@@ -174,6 +378,64 @@ view[&quot;is_new_dxcc&quot;] = bool(entity) and entity[0] not in worked_dxcc</c
     and bool(view.get(&quot;is_cq&quot;))
     and not view.get(&quot;mine&quot;)     # 自身发射回波（from_call == 本台）不触发
 )</code></pre>
+<figure>
+<figure class="doc-fig"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 500" role="img" aria-labelledby="f4title">
+  <title id="f4title">图 4 决策门 auto_call_candidate：六条件 AND，每 slot 至多命中第一个</title>
+  <defs>
+    <marker id="f4-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto">
+      <path d="M 0 0 L 10 5 L 0 10 z" style="fill:var(--accent,#22d3ee)"/>
+    </marker>
+  </defs>
+
+  <rect x="0" y="0" width="960" height="500" rx="12" fill="var(--bg-tertiary,#10161e)"/>
+
+  <!-- top annotation -->
+  <text x="480" y="34" text-anchor="middle" font-family="Inter, system-ui, -apple-system, sans-serif" font-size="12.5" style="fill:var(--text-muted,#5c6370)">每 slot 按解码消息顺序检查，至多命中第一个候选</text>
+
+  <!-- six condition chips -->
+  <g font-family="'JetBrains Mono', ui-monospace, monospace" font-size="12" style="fill:var(--text-secondary,#8899aa)">
+    <rect x="40" y="64"  width="580" height="44" rx="8" fill="var(--bg-secondary,#0d1117)" stroke-width="1.5" style="stroke:var(--text-secondary,#8899aa)"/>
+    <text x="330" y="90" text-anchor="middle">auto_call_enabled — setting_meta.auto_call_new_dxcc</text>
+
+    <rect x="40" y="120" width="580" height="44" rx="8" fill="var(--bg-secondary,#0d1117)" stroke-width="1.5" style="stroke:var(--text-secondary,#8899aa)"/>
+    <text x="330" y="146" text-anchor="middle">¬ has_selection — QSO 结束清 selected（P7）</text>
+
+    <rect x="40" y="176" width="580" height="44" rx="8" fill="var(--bg-secondary,#0d1117)" stroke-width="1.5" style="stroke:var(--text-secondary,#8899aa)"/>
+    <text x="330" y="202" text-anchor="middle">sequencer_state == IDLE — 无 QSO、无 CQ 循环</text>
+
+    <rect x="40" y="232" width="580" height="44" rx="8" fill="var(--bg-secondary,#0d1117)" stroke-width="1.5" style="stroke:var(--text-secondary,#8899aa)"/>
+    <text x="330" y="258" text-anchor="middle">is_new_dxcc</text>
+
+    <rect x="40" y="288" width="580" height="44" rx="8" fill="var(--bg-secondary,#0d1117)" stroke-width="1.5" style="stroke:var(--text-secondary,#8899aa)"/>
+    <text x="330" y="314" text-anchor="middle">is_cq</text>
+
+    <rect x="40" y="344" width="580" height="44" rx="8" fill="var(--bg-secondary,#0d1117)" stroke-width="1.5" style="stroke:var(--text-secondary,#8899aa)"/>
+    <text x="330" y="370" text-anchor="middle">¬ mine — 自身发射回波不触发</text>
+  </g>
+
+  <!-- connectors into the AND gate -->
+  <g stroke="var(--accent,#22d3ee)" stroke-width="1.5">
+    <path d="M 620 86   H 660" marker-end="url(#f4-arrow)"/>
+    <path d="M 620 142  H 660" marker-end="url(#f4-arrow)"/>
+    <path d="M 620 198  H 660" marker-end="url(#f4-arrow)"/>
+    <path d="M 620 254  H 660" marker-end="url(#f4-arrow)"/>
+    <path d="M 620 310  H 660" marker-end="url(#f4-arrow)"/>
+    <path d="M 620 366  H 660" marker-end="url(#f4-arrow)"/>
+  </g>
+
+  <!-- AND gate -->
+  <rect x="660" y="64" width="260" height="324" rx="8" fill="var(--bg-secondary,#0d1117)" stroke-width="1.5" style="stroke:var(--accent,#22d3ee)"/>
+  <text x="790" y="210" text-anchor="middle" font-family="Inter, system-ui, -apple-system, sans-serif" font-size="16" font-weight="600" style="fill:var(--accent,#22d3ee)">全部满足</text>
+  <text x="790" y="240" text-anchor="middle" font-family="'JetBrains Mono', ui-monospace, monospace" font-size="13" style="fill:var(--text-secondary,#8899aa)">AND</text>
+  <text x="790" y="330" text-anchor="middle" font-family="Inter, system-ui, -apple-system, sans-serif" font-size="11.5" style="fill:var(--text-muted,#5c6370)">六条件同时为真</text>
+
+  <path d="M 790 388 V 418" fill="none" stroke-width="1.5" style="stroke:var(--accent,#22d3ee)" marker-end="url(#f4-arrow)"/>
+
+  <rect x="560" y="418" width="460" height="52" rx="8" fill="var(--bg-secondary,#0d1117)" stroke-width="1.5" style="stroke:var(--accent,#22d3ee)"/>
+  <text x="790" y="449" text-anchor="middle" font-family="'JetBrains Mono', ui-monospace, monospace" font-size="13" style="fill:var(--text-primary,#ffffff)">命中本 slot 第一个候选 → _auto_call</text>
+</svg><figcaption>图 4 决策门 auto_call_candidate：六条件 AND，每 slot 至多命中第一个</figcaption></figure>
+<figcaption aria-hidden="true">图 4 决策门 auto_call_candidate：六条件 AND，每 slot 至多命中第一个</figcaption>
+</figure>
 <h3 id="触发与安全门_auto_call">3.4 触发与安全门（<code>_auto_call</code>）</h3>
 <ul>
 <li><strong>不需要控制租约</strong>（系统级、无人值守，NFR-087）；但发射必须过 <code>safety.arm()</code>—— 这是唯一的 TX 门。</li>
@@ -185,6 +447,82 @@ view[&quot;is_new_dxcc&quot;] = bool(entity) and entity[0] not in worked_dxcc</c
 </ul></li>
 <li>audit 落库：<code>audit_event</code>（actor=<code>system</code>, operation=<code>auto_call</code>, target=呼号, detail=<code>snr=… new_dxcc</code>）。</li>
 </ul>
+<figure>
+<figure class="doc-fig"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 560" role="img" aria-labelledby="f5title">
+  <title id="f5title">图 5 触发与安全门：safety.arm 互锁矩阵与 skip/重试</title>
+  <defs>
+    <marker id="f5-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto">
+      <path d="M 0 0 L 10 5 L 0 10 z" style="fill:var(--accent,#22d3ee)"/>
+    </marker>
+    <marker id="f5-arrow-amber" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto">
+      <path d="M 0 0 L 10 5 L 0 10 z" style="fill:#f59e0b"/>
+    </marker>
+    <marker id="f5-arrow-green" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto">
+      <path d="M 0 0 L 10 5 L 0 10 z" style="fill:#34d399"/>
+    </marker>
+  </defs>
+
+  <rect x="0" y="0" width="960" height="560" rx="12" fill="var(--bg-tertiary,#10161e)"/>
+
+  <!-- interlock chips row -->
+  <text x="480" y="28" text-anchor="middle" font-family="Inter, system-ui, -apple-system, sans-serif" font-size="12" style="fill:var(--text-muted,#5c6370)">互锁矩阵（任一 faulted → arm 拒绝、PTT-off）</text>
+  <g font-family="'JetBrains Mono', ui-monospace, monospace" font-size="13" font-weight="600" style="fill:var(--text-primary,#ffffff)">
+    <rect x="90"  y="44" width="120" height="44" rx="8" fill="var(--bg-secondary,#0d1117)" stroke-width="1.5" style="stroke:var(--text-secondary,#8899aa)"/>
+    <text x="150" y="70" text-anchor="middle">CAT</text>
+    <rect x="260" y="44" width="120" height="44" rx="8" fill="var(--bg-secondary,#0d1117)" stroke-width="1.5" style="stroke:var(--text-secondary,#8899aa)"/>
+    <text x="320" y="70" text-anchor="middle">audio</text>
+    <rect x="430" y="44" width="120" height="44" rx="8" fill="var(--bg-secondary,#0d1117)" stroke-width="1.5" style="stroke:var(--text-secondary,#8899aa)"/>
+    <text x="490" y="70" text-anchor="middle">DSP</text>
+    <rect x="600" y="44" width="120" height="44" rx="8" fill="var(--bg-secondary,#0d1117)" stroke-width="1.5" style="stroke:var(--text-secondary,#8899aa)"/>
+    <text x="660" y="70" text-anchor="middle">clock</text>
+  </g>
+
+  <!-- interlock bus down into arm gate -->
+  <path d="M 150 88 V 120 M 320 88 V 120 M 490 88 V 120 M 660 88 V 120" fill="none" stroke-width="1.5" style="stroke:var(--text-secondary,#8899aa)"/>
+  <path d="M 120 120 H 690" fill="none" stroke-width="1.5" style="stroke:var(--text-secondary,#8899aa)"/>
+  <path d="M 380 120 V 160 M 440 120 V 160 M 500 120 V 160 M 560 120 V 160" fill="none" stroke-width="1.5" style="stroke:var(--text-secondary,#8899aa)"/>
+
+  <!-- left input -->
+  <rect x="40" y="176" width="260" height="52" rx="8" fill="var(--bg-secondary,#0d1117)" stroke-width="1.5" style="stroke:var(--accent,#22d3ee)"/>
+  <text x="170" y="207" text-anchor="middle" font-family="'JetBrains Mono', ui-monospace, monospace" font-size="12" style="fill:var(--text-primary,#ffffff)">候选命中（图 4）→ _auto_call</text>
+  <path d="M 300 202 H 356" fill="none" stroke-width="1.5" style="stroke:var(--accent,#22d3ee)" marker-end="url(#f5-arrow)"/>
+
+  <!-- arm gate -->
+  <rect x="356" y="160" width="248" height="66" rx="8" fill="var(--bg-secondary,#0d1117)" stroke-width="1.5" style="stroke:var(--accent,#22d3ee)"/>
+  <text x="480" y="193" text-anchor="middle" font-family="'JetBrains Mono', ui-monospace, monospace" font-size="14" font-weight="600" style="fill:var(--text-primary,#ffffff)">safety.arm()</text>
+  <text x="480" y="214" text-anchor="middle" font-family="Inter, system-ui, -apple-system, sans-serif" font-size="11.5" style="fill:var(--text-muted,#5c6370)">唯一的 TX 门</text>
+
+  <!-- branch -->
+  <path d="M 480 226 V 262" fill="none" stroke-width="1.5" style="stroke:var(--accent,#22d3ee)"/>
+  <path d="M 480 262 H 220 V 300" fill="none" stroke-width="1.5" style="stroke:#f59e0b" marker-end="url(#f5-arrow-amber)"/>
+  <path d="M 480 262 H 740 V 300" fill="none" stroke-width="1.5" style="stroke:#34d399" marker-end="url(#f5-arrow-green)"/>
+
+  <!-- amber: faulted branch -->
+  <rect x="40" y="300" width="420" height="150" rx="8" fill="var(--bg-secondary,#0d1117)" stroke-width="1.5" style="stroke:#f59e0b"/>
+  <text x="250" y="328" text-anchor="middle" font-family="'JetBrains Mono', ui-monospace, monospace" font-size="12.5" font-weight="600" style="fill:#f59e0b">任一互锁 faulted → TxRefused</text>
+  <text x="250" y="354" text-anchor="middle" font-family="'JetBrains Mono', ui-monospace, monospace" font-size="11.5" style="fill:var(--text-secondary,#8899aa)">log: auto_call skipped: interlock open (&lt;call&gt;)</text>
+  <text x="250" y="396" text-anchor="middle" font-family="Inter, system-ui, -apple-system, sans-serif" font-size="12.5" style="fill:var(--text-primary,#ffffff)">跳过本 slot，下一 slot 重试</text>
+  <text x="250" y="424" text-anchor="middle" font-family="Inter, system-ui, -apple-system, sans-serif" font-size="11.5" style="fill:var(--text-muted,#5c6370)">不崩溃、不风暴</text>
+
+  <!-- green: success branch -->
+  <rect x="520" y="300" width="400" height="150" rx="8" fill="var(--bg-secondary,#0d1117)" stroke-width="1.5" style="stroke:#34d399"/>
+  <text x="720" y="326" text-anchor="middle" font-family="Inter, system-ui, -apple-system, sans-serif" font-size="12.5" font-weight="600" style="fill:var(--text-primary,#ffffff)">arm 成功 → 记录选中消息（call/grid/snr/slot）</text>
+  <text x="720" y="352" text-anchor="middle" font-family="'JetBrains Mono', ui-monospace, monospace" font-size="12" style="fill:var(--text-secondary,#8899aa)">sequencer.reply_to(...)</text>
+  <text x="720" y="378" text-anchor="middle" font-family="'JetBrains Mono', ui-monospace, monospace" font-size="11.5" style="fill:var(--text-secondary,#8899aa)">tx_phase = 0 if slot_id is None else 1 − (slot_id % 2)</text>
+  <text x="720" y="400" text-anchor="middle" font-family="'JetBrains Mono', ui-monospace, monospace" font-size="11.5" style="fill:var(--text-secondary,#8899aa)">tx_frequency = 伙伴解码频率（UC-003）</text>
+  <text x="720" y="426" text-anchor="middle" font-family="Inter, system-ui, -apple-system, sans-serif" font-size="11.5" style="fill:var(--text-muted,#5c6370)">旧行为写死 1500 Hz（见 §7 复盘）</text>
+
+  <!-- bottom: gray lease note + green audit box -->
+  <rect x="40" y="486" width="420" height="50" rx="8" fill="var(--bg-secondary,#0d1117)" stroke-width="1.5" style="stroke:var(--text-secondary,#8899aa)"/>
+  <text x="250" y="515" text-anchor="middle" font-family="Inter, system-ui, -apple-system, sans-serif" font-size="12" style="fill:var(--text-secondary,#8899aa)">系统级、无人值守：不需要控制租约（NFR-087）</text>
+
+  <path d="M 720 450 V 484" fill="none" stroke-width="1.5" style="stroke:#34d399" marker-end="url(#f5-arrow-green)"/>
+  <rect x="520" y="486" width="400" height="50" rx="8" fill="var(--bg-secondary,#0d1117)" stroke-width="1.5" style="stroke:#34d399"/>
+  <text x="720" y="508" text-anchor="middle" font-family="'JetBrains Mono', ui-monospace, monospace" font-size="11.5" style="fill:var(--text-secondary,#8899aa)">audit_event：actor=system · operation=auto_call</text>
+  <text x="720" y="526" text-anchor="middle" font-family="'JetBrains Mono', ui-monospace, monospace" font-size="11.5" style="fill:var(--text-secondary,#8899aa)">detail=snr=… new_dxcc · target=呼号</text>
+</svg><figcaption>图 5 触发与安全门：safety.arm 互锁矩阵与 skip/重试</figcaption></figure>
+<figcaption aria-hidden="true">图 5 触发与安全门：safety.arm 互锁矩阵与 skip/重试</figcaption>
+</figure>
 <h3 id="应答发射tx-链路">3.5 应答发射（TX 链路）</h3>
 <ul>
 <li><code>TxDriver</code>（<code>server/engine/tx_driver.py</code>）是时隙奇偶泵：只在 sequencer 的 <code>tx_phase</code> 对应的奇偶 slot 拉取至多一条消息，编码后交 <code>safety.transmit()</code>。</li>
@@ -192,13 +530,166 @@ view[&quot;is_new_dxcc&quot;] = bool(entity) and entity[0] not in worked_dxcc</c
 <li>频率：<code>encoder.encode(message, sequencer.tx_frequency, slot_id)</code>——应答用伙伴 解码频率（split 行为，对方接收机能配对）；CQ 用 <code>FrequencyOccupancy</code> 选出的 1500 附近空闲频点（UC-004，见 §3.8 注）。</li>
 <li>安全：<code>transmit()</code> 前复核权限链（faults / armed / PTT 状态 / 聚合 TX 预算）； PTT 经 rigctld（串口唯一 owner）；watchdog 与 STOP 可随时取消。</li>
 </ul>
+<figure>
+<figure class="doc-fig"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 540" role="img" aria-labelledby="f6title">
+  <title id="f6title">图 6 应答发射 TX 链：TxDriver 时隙泵 → safety.transmit → rigctld</title>
+  <defs>
+    <marker id="f6-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto">
+      <path d="M 0 0 L 10 5 L 0 10 z" style="fill:var(--accent,#22d3ee)"/>
+    </marker>
+    <marker id="f6-arrow-amber" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto">
+      <path d="M 0 0 L 10 5 L 0 10 z" style="fill:#f59e0b"/>
+    </marker>
+  </defs>
+
+  <rect x="0" y="0" width="960" height="540" rx="12" fill="var(--bg-tertiary,#10161e)"/>
+
+  <!-- chain boxes y=90..186 -->
+  <g text-anchor="middle">
+    <rect x="20" y="90" width="130" height="96" rx="8" fill="var(--bg-secondary,#0d1117)" stroke-width="1.5" style="stroke:var(--accent,#22d3ee)"/>
+    <text x="85" y="130" font-family="'JetBrains Mono', ui-monospace, monospace" font-size="13" font-weight="600" style="fill:var(--text-primary,#ffffff)">TxDriver</text>
+    <text x="85" y="156" font-family="Inter, system-ui, -apple-system, sans-serif" font-size="12" style="fill:var(--text-secondary,#8899aa)">时隙奇偶泵</text>
+
+    <rect x="162" y="90" width="110" height="96" rx="8" fill="var(--bg-secondary,#0d1117)" stroke-width="1.5" style="stroke:var(--accent,#22d3ee)"/>
+    <text x="217" y="130" font-family="Inter, system-ui, -apple-system, sans-serif" font-size="12" font-weight="600" style="fill:var(--text-primary,#ffffff)">I9 决策窗口</text>
+    <text x="217" y="156" font-family="'JetBrains Mono', ui-monospace, monospace" font-size="12" style="fill:var(--text-secondary,#8899aa)">5.0 s</text>
+
+    <rect x="284" y="90" width="110" height="96" rx="8" fill="var(--bg-secondary,#0d1117)" stroke-width="1.5" style="stroke:#f59e0b"/>
+    <text x="339" y="130" font-family="'JetBrains Mono', ui-monospace, monospace" font-size="12.5" font-weight="600" style="fill:#f59e0b">fit guard</text>
+    <text x="339" y="154" font-family="'JetBrains Mono', ui-monospace, monospace" font-size="10" style="fill:var(--text-secondary,#8899aa)">12.64 s</text>
+    <text x="339" y="172" font-family="'JetBrains Mono', ui-monospace, monospace" font-size="10" style="fill:var(--text-secondary,#8899aa)">≤ 15 s slot</text>
+
+    <rect x="406" y="90" width="130" height="96" rx="8" fill="var(--bg-secondary,#0d1117)" stroke-width="1.5" style="stroke:var(--accent,#22d3ee)"/>
+    <text x="471" y="130" font-family="'JetBrains Mono', ui-monospace, monospace" font-size="12.5" font-weight="600" style="fill:var(--text-primary,#ffffff)">dsp_encode</text>
+    <text x="471" y="156" font-family="Inter, system-ui, -apple-system, sans-serif" font-size="12" style="fill:var(--text-secondary,#8899aa)">48 kHz 波形</text>
+
+    <rect x="548" y="90" width="140" height="96" rx="8" fill="var(--bg-secondary,#0d1117)" stroke-width="1.5" style="stroke:var(--accent,#22d3ee)"/>
+    <text x="618" y="130" font-family="'JetBrains Mono', ui-monospace, monospace" font-size="12.5" font-weight="600" style="fill:var(--text-primary,#ffffff)">safety.transmit</text>
+    <text x="618" y="156" font-family="Inter, system-ui, -apple-system, sans-serif" font-size="11.5" style="fill:var(--text-secondary,#8899aa)">PTT 门 + watchdog</text>
+
+    <rect x="700" y="90" width="110" height="96" rx="8" fill="var(--bg-secondary,#0d1117)" stroke-width="1.5" style="stroke:var(--accent,#22d3ee)"/>
+    <text x="755" y="130" font-family="'JetBrains Mono', ui-monospace, monospace" font-size="13" font-weight="600" style="fill:var(--text-primary,#ffffff)">rigctld</text>
+    <text x="755" y="156" font-family="Inter, system-ui, -apple-system, sans-serif" font-size="11.5" style="fill:var(--text-secondary,#8899aa)">串口唯一 owner</text>
+
+    <rect x="822" y="90" width="110" height="96" rx="8" fill="var(--bg-secondary,#0d1117)" stroke-width="1.5" style="stroke:var(--accent,#22d3ee)"/>
+    <text x="877" y="130" font-family="'JetBrains Mono', ui-monospace, monospace" font-size="13" font-weight="600" style="fill:var(--text-primary,#ffffff)">FT-710</text>
+    <text x="877" y="156" font-family="'JetBrains Mono', ui-monospace, monospace" font-size="12" style="fill:var(--text-secondary,#8899aa)">PTT</text>
+  </g>
+
+  <!-- connectors -->
+  <g stroke-width="1.5" style="stroke:var(--accent,#22d3ee)">
+    <path d="M 150 138 H 158" marker-end="url(#f6-arrow)"/>
+    <path d="M 272 138 H 280" marker-end="url(#f6-arrow)"/>
+    <path d="M 394 138 H 402" marker-end="url(#f6-arrow)"/>
+    <path d="M 536 138 H 544" marker-end="url(#f6-arrow)"/>
+    <path d="M 688 138 H 696" marker-end="url(#f6-arrow)"/>
+    <path d="M 810 138 H 818" marker-end="url(#f6-arrow)"/>
+  </g>
+
+  <!-- fit guard amber defer branch -->
+  <path d="M 339 186 V 238" fill="none" stroke-width="1.5" stroke-dasharray="6 4" style="stroke:#f59e0b" marker-end="url(#f6-arrow-amber)"/>
+  <text x="339" y="262" text-anchor="middle" font-family="'JetBrains Mono', ui-monospace, monospace" font-size="11" style="fill:#f59e0b">错过 → deferring 下一 slot</text>
+
+  <!-- annotation panel -->
+  <rect x="40" y="300" width="880" height="210" rx="8" fill="var(--bg-secondary,#0d1117)" stroke-width="1" style="stroke:var(--border,rgba(255,255,255,0.06))"/>
+  <g font-family="Inter, system-ui, -apple-system, sans-serif" font-size="12.5" style="fill:var(--text-secondary,#8899aa)">
+    <text x="70" y="334">TxDriver：只在 sequencer 的 tx_phase 对应奇偶 slot 拉取至多一条，编码后交 safety.transmit()</text>
+    <text x="70" y="368">I9 决策窗口：sequencer 空闲时持续轮询到 5.0 s 截止，点击/自动呼叫一 arm 就发</text>
+    <text x="70" y="402">fit guard：12.64 s 波形 + 0.2 s 启动必须塞进 15 s slot，错过则顺延下一可用 slot</text>
+    <text x="70" y="436">dsp_encode：应答用伙伴解码频率（split，对方接收机能配对）；CQ 用 FrequencyOccupancy 空闲频点</text>
+    <text x="70" y="470">safety.transmit：复核 faults / armed / PTT 状态 / 聚合 TX 预算；watchdog 与 STOP 可随时取消</text>
+    <text x="70" y="496" style="fill:var(--text-muted,#5c6370)">PTT 经 rigctld（串口唯一 owner，AD-008）</text>
+  </g>
+</svg><figcaption>图 6 应答发射 TX 链：TxDriver 时隙泵 → safety.transmit → rigctld</figcaption></figure>
+<figcaption aria-hidden="true">图 6 应答发射 TX 链：TxDriver 时隙泵 → safety.transmit → rigctld</figcaption>
+</figure>
 <h3 id="qso-状态机sequencer">3.6 QSO 状态机（sequencer）</h3>
 <p>应答侧流程（我们是应答者）：</p>
-<pre><code>REPLYING      Tx1: &lt;dx&gt; &lt;my&gt; &lt;my-grid&gt;          （先发我们的呼号+网格）
-REPORT        Tx2: &lt;dx&gt; &lt;my&gt; -snr               （对方报告到达后）
-ROGER_REPORT  Tx3: &lt;dx&gt; &lt;my&gt; R-snr
-ROGERS        Tx4: &lt;dx&gt; &lt;my&gt; RR73               （对方 R 报告到达后）
-SIGNOFF/DONE  Tx5: &lt;dx&gt; &lt;my&gt; 73 → 落库          （对方 RR73/73 到达后）</code></pre>
+<figure>
+<figure class="doc-fig"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 680" role="img" aria-labelledby="f7title">
+  <title id="f7title">图 7 QSO 状态机（应答侧）：REPLYING → DONE 与中断出口</title>
+  <defs>
+    <marker id="f7-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto">
+      <path d="M 0 0 L 10 5 L 0 10 z" style="fill:var(--accent,#22d3ee)"/>
+    </marker>
+    <marker id="f7-arrow-amber" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto">
+      <path d="M 0 0 L 10 5 L 0 10 z" style="fill:#f59e0b"/>
+    </marker>
+    <marker id="f7-arrow-gray" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto">
+      <path d="M 0 0 L 10 5 L 0 10 z" style="fill:var(--text-secondary,#8899aa)"/>
+    </marker>
+  </defs>
+
+  <rect x="0" y="0" width="960" height="680" rx="12" fill="var(--bg-tertiary,#10161e)"/>
+
+  <!-- top annotation -->
+  <text x="480" y="40" text-anchor="middle" font-family="Inter, system-ui, -apple-system, sans-serif" font-size="12" style="fill:var(--text-muted,#5c6370)">应答侧（我们是应答者）· 每条消息 1 发 + 至多 3 重传（NFR-055）</text>
+
+  <!-- state ladder -->
+  <rect x="70" y="64" width="400" height="72" rx="8" fill="var(--bg-secondary,#0d1117)" stroke-width="1.5" style="stroke:var(--accent,#22d3ee)"/>
+  <text x="90" y="93" font-family="'JetBrains Mono', ui-monospace, monospace" font-size="13" font-weight="600" style="fill:var(--text-primary,#ffffff)">REPLYING</text>
+  <text x="450" y="93" text-anchor="end" font-family="'JetBrains Mono', ui-monospace, monospace" font-size="12" style="fill:var(--accent,#22d3ee)">Tx1</text>
+  <text x="90" y="116" font-family="'JetBrains Mono', ui-monospace, monospace" font-size="12.5" style="fill:var(--text-secondary,#8899aa)">&lt;dx&gt; &lt;my&gt; &lt;my-grid&gt;</text>
+  <text x="450" y="116" text-anchor="end" font-family="Inter, system-ui, -apple-system, sans-serif" font-size="11" style="fill:var(--text-muted,#5c6370)">（先发本台呼号+网格）</text>
+
+  <path d="M 270 136 V 184" fill="none" stroke-width="1.5" style="stroke:var(--accent,#22d3ee)" marker-end="url(#f7-arrow)"/>
+  <text x="284" y="164" font-family="Inter, system-ui, -apple-system, sans-serif" font-size="12" style="fill:var(--text-secondary,#8899aa)">对方报告到达</text>
+
+  <rect x="70" y="184" width="400" height="72" rx="8" fill="var(--bg-secondary,#0d1117)" stroke-width="1.5" style="stroke:var(--accent,#22d3ee)"/>
+  <text x="90" y="213" font-family="'JetBrains Mono', ui-monospace, monospace" font-size="13" font-weight="600" style="fill:var(--text-primary,#ffffff)">REPORT</text>
+  <text x="450" y="213" text-anchor="end" font-family="'JetBrains Mono', ui-monospace, monospace" font-size="12" style="fill:var(--accent,#22d3ee)">Tx2</text>
+  <text x="90" y="236" font-family="'JetBrains Mono', ui-monospace, monospace" font-size="12.5" style="fill:var(--text-secondary,#8899aa)">&lt;dx&gt; &lt;my&gt; -snr</text>
+
+  <path d="M 270 256 V 304" fill="none" stroke-width="1.5" style="stroke:var(--accent,#22d3ee)" marker-end="url(#f7-arrow)"/>
+
+  <rect x="70" y="304" width="400" height="72" rx="8" fill="var(--bg-secondary,#0d1117)" stroke-width="1.5" style="stroke:var(--accent,#22d3ee)"/>
+  <text x="90" y="333" font-family="'JetBrains Mono', ui-monospace, monospace" font-size="13" font-weight="600" style="fill:var(--text-primary,#ffffff)">ROGER_REPORT</text>
+  <text x="450" y="333" text-anchor="end" font-family="'JetBrains Mono', ui-monospace, monospace" font-size="12" style="fill:var(--accent,#22d3ee)">Tx3</text>
+  <text x="90" y="356" font-family="'JetBrains Mono', ui-monospace, monospace" font-size="12.5" style="fill:var(--text-secondary,#8899aa)">&lt;dx&gt; &lt;my&gt; R-snr</text>
+
+  <path d="M 270 376 V 424" fill="none" stroke-width="1.5" style="stroke:var(--accent,#22d3ee)" marker-end="url(#f7-arrow)"/>
+  <text x="284" y="404" font-family="Inter, system-ui, -apple-system, sans-serif" font-size="12" style="fill:var(--text-secondary,#8899aa)">对方 R 报告到达</text>
+
+  <rect x="70" y="424" width="400" height="72" rx="8" fill="var(--bg-secondary,#0d1117)" stroke-width="1.5" style="stroke:var(--accent,#22d3ee)"/>
+  <text x="90" y="453" font-family="'JetBrains Mono', ui-monospace, monospace" font-size="13" font-weight="600" style="fill:var(--text-primary,#ffffff)">ROGERS</text>
+  <text x="450" y="453" text-anchor="end" font-family="'JetBrains Mono', ui-monospace, monospace" font-size="12" style="fill:var(--accent,#22d3ee)">Tx4</text>
+  <text x="90" y="476" font-family="'JetBrains Mono', ui-monospace, monospace" font-size="12.5" style="fill:var(--text-secondary,#8899aa)">&lt;dx&gt; &lt;my&gt; RR73</text>
+
+  <path d="M 270 496 V 544" fill="none" stroke-width="1.5" style="stroke:var(--accent,#22d3ee)" marker-end="url(#f7-arrow)"/>
+  <text x="284" y="524" font-family="Inter, system-ui, -apple-system, sans-serif" font-size="12" style="fill:var(--text-secondary,#8899aa)">对方 RR73/73 到达</text>
+
+  <rect x="70" y="544" width="400" height="72" rx="8" fill="var(--bg-secondary,#0d1117)" stroke-width="1.5" style="stroke:#34d399"/>
+  <text x="90" y="573" font-family="'JetBrains Mono', ui-monospace, monospace" font-size="13" font-weight="600" style="fill:var(--text-primary,#ffffff)">SIGNOFF → DONE</text>
+  <text x="450" y="573" text-anchor="end" font-family="'JetBrains Mono', ui-monospace, monospace" font-size="12" style="fill:#34d399">Tx5</text>
+  <text x="90" y="596" font-family="'JetBrains Mono', ui-monospace, monospace" font-size="12.5" style="fill:var(--text-secondary,#8899aa)">&lt;dx&gt; &lt;my&gt; 73</text>
+  <text x="450" y="596" text-anchor="end" font-family="Inter, system-ui, -apple-system, sans-serif" font-size="12" style="fill:#34d399">→ 落库</text>
+
+  <!-- bottom-left annotation -->
+  <text x="70" y="648" font-family="Inter, system-ui, -apple-system, sans-serif" font-size="11.5" style="fill:var(--text-muted,#5c6370)">on_message 只处理 addressed-to-me；自身回波（mine）忽略</text>
+
+  <!-- abort spine: any active state may exit -->
+  <path d="M 505 100 V 460" fill="none" stroke-width="1.5" stroke-dasharray="5 4" stroke-opacity="0.8" style="stroke:#f59e0b"/>
+  <path d="M 505 202 H 560" fill="none" stroke-width="1.5" stroke-dasharray="5 4" style="stroke:#f59e0b" marker-end="url(#f7-arrow-amber)"/>
+  <path d="M 505 322 H 560" fill="none" stroke-width="1.5" stroke-dasharray="5 4" style="stroke:#f59e0b" marker-end="url(#f7-arrow-amber)"/>
+
+  <!-- amber exit boxes -->
+  <rect x="560" y="170" width="350" height="64" rx="8" fill="var(--bg-secondary,#0d1117)" stroke-width="1.5" style="stroke:#f59e0b"/>
+  <text x="580" y="196" font-family="'JetBrains Mono', ui-monospace, monospace" font-size="12.5" font-weight="600" style="fill:#f59e0b">PARTNER_LOST</text>
+  <text x="580" y="218" font-family="Inter, system-ui, -apple-system, sans-serif" font-size="12" style="fill:var(--text-secondary,#8899aa)">伙伴转呼他人 → anti-QRM 自动停</text>
+
+  <rect x="560" y="290" width="350" height="64" rx="8" fill="var(--bg-secondary,#0d1117)" stroke-width="1.5" style="stroke:#f59e0b"/>
+  <text x="580" y="316" font-family="'JetBrains Mono', ui-monospace, monospace" font-size="12.5" font-weight="600" style="fill:#f59e0b">RETRY_EXHAUSTED</text>
+  <text x="580" y="338" font-family="Inter, system-ui, -apple-system, sans-serif" font-size="12" style="fill:var(--text-secondary,#8899aa)">预算耗尽 → 停并保留伙伴上下文</text>
+
+  <!-- both exits flow into on_stop -->
+  <path d="M 910 202 H 928 V 446 H 910" fill="none" stroke-width="1.5" style="stroke:var(--text-secondary,#8899aa)" marker-end="url(#f7-arrow-gray)"/>
+  <path d="M 735 354 V 420" fill="none" stroke-width="1.5" style="stroke:var(--text-secondary,#8899aa)" marker-end="url(#f7-arrow-gray)"/>
+
+  <rect x="560" y="420" width="350" height="52" rx="8" fill="var(--bg-secondary,#0d1117)" stroke-width="1.5" style="stroke:var(--text-secondary,#8899aa)"/>
+  <text x="735" y="451" text-anchor="middle" font-family="Inter, system-ui, -apple-system, sans-serif" font-size="12.5" font-weight="600" style="fill:var(--text-primary,#ffffff)">on_stop：清除 selected（P7）</text>
+</svg><figcaption>图 7 QSO 状态机（应答侧）：REPLYING → DONE 与中断出口</figcaption></figure>
+<figcaption aria-hidden="true">图 7 QSO 状态机（应答侧）：REPLYING → DONE 与中断出口</figcaption>
+</figure>
 <ul>
 <li>每条消息 1 发 + 至多 3 重传（NFR-055）；伙伴有相关进展消息则重传预算重置。</li>
 <li>伙伴转呼他人 → anti-QRM 自动停（<code>PARTNER_LOST</code>）；预算耗尽 → <code>RETRY_EXHAUSTED</code> 停并保留伙伴上下文；两者都触发 <code>on_stop</code>（清除 selected，P7 修复）。</li>
@@ -210,11 +701,138 @@ SIGNOFF/DONE  Tx5: &lt;dx&gt; &lt;my&gt; 73 → 落库          （对方 RR73/7
 <li><code>record_qso</code>：qso 表新增行（<code>source='live'</code>、<code>status='completed'</code>、 my/dx call+grid、report 双方、started_utc、freq_hz、band）+ qso_event + <code>dxcc_dirty = True</code>。</li>
 <li>下一 slot 的 on_decode 先查 <code>dxcc_dirty</code>：为真则重建 <code>dxcc_summary</code>（~0.2 s， 至多每 slot 一次）→ 该实体进入 worked → 不会再触发（P1 修复：cache 刷新独立于 band-hunt 开关，auto-call 不再重复呼叫刚通联的台）。</li>
 </ul>
+<figure>
+<figure class="doc-fig"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 560" role="img" aria-labelledby="f8title">
+  <title id="f8title">图 8 落库与 worked 集刷新：dxcc_dirty 闭环</title>
+  <defs>
+    <marker id="f8-arrow-green" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto">
+      <path d="M 0 0 L 10 5 L 0 10 z" style="fill:#34d399"/>
+    </marker>
+    <marker id="f8-arrow-amber" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto">
+      <path d="M 0 0 L 10 5 L 0 10 z" style="fill:#f59e0b"/>
+    </marker>
+  </defs>
+
+  <rect x="0" y="0" width="960" height="560" rx="12" fill="var(--bg-tertiary,#10161e)"/>
+
+  <!-- main chain (green): persist path -->
+  <rect x="400" y="30" width="460" height="42" rx="8" fill="var(--bg-secondary,#0d1117)" stroke-width="1.5" style="stroke:#34d399"/>
+  <text x="630" y="56" text-anchor="middle" font-family="Inter, system-ui, -apple-system, sans-serif" font-size="13" font-weight="600" style="fill:var(--text-primary,#ffffff)">收到 <tspan font-family="'JetBrains Mono', ui-monospace, monospace">RR73/73</tspan></text>
+
+  <path d="M 630 72 V 98" fill="none" stroke-width="1.5" style="stroke:#34d399" marker-end="url(#f8-arrow-green)"/>
+
+  <rect x="400" y="98" width="460" height="42" rx="8" fill="var(--bg-secondary,#0d1117)" stroke-width="1.5" style="stroke:#34d399"/>
+  <text x="630" y="124" text-anchor="middle" font-family="Inter, system-ui, -apple-system, sans-serif" font-size="13" font-weight="600" style="fill:var(--text-primary,#ffffff)"><tspan font-family="'JetBrains Mono', ui-monospace, monospace">_ensure_log</tspan>（恰好一次）</text>
+
+  <path d="M 630 140 V 166" fill="none" stroke-width="1.5" style="stroke:#34d399" marker-end="url(#f8-arrow-green)"/>
+
+  <rect x="400" y="166" width="460" height="42" rx="8" fill="var(--bg-secondary,#0d1117)" stroke-width="1.5" style="stroke:#34d399"/>
+  <text x="630" y="192" text-anchor="middle" font-family="'JetBrains Mono', ui-monospace, monospace" font-size="13" font-weight="600" style="fill:var(--text-primary,#ffffff)">on_qso</text>
+
+  <path d="M 630 208 V 234" fill="none" stroke-width="1.5" style="stroke:#34d399" marker-end="url(#f8-arrow-green)"/>
+
+  <rect x="400" y="234" width="460" height="54" rx="8" fill="var(--bg-secondary,#0d1117)" stroke-width="1.5" style="stroke:#34d399"/>
+  <text x="630" y="256" text-anchor="middle" font-family="'JetBrains Mono', ui-monospace, monospace" font-size="13" font-weight="600" style="fill:var(--text-primary,#ffffff)">qso_log.enqueue</text>
+  <text x="630" y="277" text-anchor="middle" font-family="Inter, system-ui, -apple-system, sans-serif" font-size="11.5"><tspan style="fill:var(--text-muted,#5c6370)">注：</tspan><tspan font-family="'JetBrains Mono', ui-monospace, monospace" style="fill:var(--text-secondary,#8899aa)">asyncio.to_thread</tspan></text>
+
+  <path d="M 630 288 V 314" fill="none" stroke-width="1.5" style="stroke:#34d399" marker-end="url(#f8-arrow-green)"/>
+
+  <rect x="400" y="314" width="460" height="106" rx="8" fill="var(--bg-secondary,#0d1117)" stroke-width="1.5" style="stroke:#34d399"/>
+  <text x="630" y="337" text-anchor="middle" font-family="'JetBrains Mono', ui-monospace, monospace" font-size="13" font-weight="600" style="fill:var(--text-primary,#ffffff)">record_qso</text>
+  <text x="630" y="360" text-anchor="middle" font-family="'JetBrains Mono', ui-monospace, monospace" font-size="11.5" style="fill:var(--text-secondary,#8899aa)">qso 表 source='live' · status='completed'</text>
+  <text x="630" y="381" text-anchor="middle" font-family="'JetBrains Mono', ui-monospace, monospace" font-size="11.5" style="fill:var(--text-secondary,#8899aa)">my/dx call+grid · 双方 report · freq_hz/band</text>
+  <text x="630" y="402" text-anchor="middle" font-family="'JetBrains Mono', ui-monospace, monospace" font-size="11.5" style="fill:var(--text-secondary,#8899aa)">qso_event · <tspan style="fill:#34d399">dxcc_dirty = True</tspan></text>
+
+  <path d="M 630 420 V 446" fill="none" stroke-width="1.5" style="stroke:#34d399" marker-end="url(#f8-arrow-green)"/>
+
+  <!-- bottom: next slot rebuilds cache, worked set closes the loop -->
+  <rect x="400" y="446" width="460" height="84" rx="8" fill="var(--bg-secondary,#0d1117)" stroke-width="1.5" style="stroke:var(--accent,#22d3ee)"/>
+  <text x="630" y="470" text-anchor="middle" font-family="Inter, system-ui, -apple-system, sans-serif" font-size="12.5" font-weight="600" style="fill:var(--text-primary,#ffffff)">下一 slot：<tspan font-family="'JetBrains Mono', ui-monospace, monospace">on_decode</tspan> 查 <tspan font-family="'JetBrains Mono', ui-monospace, monospace">dxcc_dirty</tspan> → 重建 <tspan font-family="'JetBrains Mono', ui-monospace, monospace">dxcc_summary</tspan></text>
+  <text x="630" y="492" text-anchor="middle" font-family="Inter, system-ui, -apple-system, sans-serif" font-size="11.5" style="fill:var(--text-secondary,#8899aa)">（~0.2 s，每 slot 至多一次）</text>
+  <text x="630" y="514" text-anchor="middle" font-family="Inter, system-ui, -apple-system, sans-serif" font-size="12.5" style="fill:#34d399">实体 ∈ <tspan font-family="'JetBrains Mono', ui-monospace, monospace">worked</tspan> → 不再触发</text>
+
+  <!-- amber branch (fault path): crash recovery from pending jsonl -->
+  <path d="M 400 261 H 360" fill="none" stroke-width="1.5" style="stroke:#f59e0b" marker-end="url(#f8-arrow-amber)"/>
+  <rect x="60" y="221" width="300" height="80" rx="8" fill="var(--bg-secondary,#0d1117)" stroke-width="1.5" style="stroke:#f59e0b"/>
+  <text x="210" y="245" text-anchor="middle" font-family="Inter, system-ui, -apple-system, sans-serif" font-size="13" font-weight="600" style="fill:#f59e0b">进程崩溃</text>
+  <text x="210" y="267" text-anchor="middle" font-family="'JetBrains Mono', ui-monospace, monospace" font-size="12" style="fill:#f59e0b">data/qso-pending.jsonl</text>
+  <text x="210" y="289" text-anchor="middle" font-family="Inter, system-ui, -apple-system, sans-serif" font-size="11.5" style="fill:#f59e0b">待办恢复（不丢记录）</text>
+
+  <!-- green dashed loop-back to the top -->
+  <path d="M 860 488 H 916 V 51 H 860" fill="none" stroke-width="1.5" stroke-dasharray="6 4" style="stroke:#34d399" marker-end="url(#f8-arrow-green)"/>
+  <text transform="translate(940 270) rotate(-90)" text-anchor="middle" font-family="Inter, system-ui, -apple-system, sans-serif" font-size="12" style="fill:#34d399">P1 修复：cache 刷新独立于 band-hunt 开关</text>
+</svg><figcaption>图 8 落库与 worked 集刷新：dxcc_dirty 闭环</figcaption></figure>
+<figcaption aria-hidden="true">图 8 落库与 worked 集刷新：dxcc_dirty 闭环</figcaption>
+</figure>
 <h3 id="关联功能自动波段狩猎band_hunt">3.8 关联功能：自动波段狩猎（band_hunt）</h3>
 <ul>
 <li><code>auto_band_hunt</code> 开启后，band-hunter 轮询外部 <code>/api/band_hunt</code>（pskreporter 侧， HTTP 是唯一跨库边界），<code>rank_bands</code>/<code>decide_switch</code> 纯函数按”未通联实体数” 排序，空闲时经 rig 调谐切频 → 把波段切到新 DXCC 最密集的地方 → 自动呼叫闭环 自然接续。双闸门：设置开关 + 冷却（默认 1200 s）。</li>
+<li><strong>实体名归一化</strong>（V1.5，2026-08-08）：pskreporter 用普通名（<code>Germany</code>/<code>Malaysia</code>/<code>Turkey</code>），cty.dat 规范名是（<code>Fed. Rep. of Germany</code>/<code>West Malaysia</code>/<code>Asiatic Turkey</code>）——<code>rank_bands</code> 直接比对会失配，已通联实体被误判 new（现场：反复切 15 m 追 Germany，而 qso 表已有 64 条 DL/DK）。<code>_CTY_NAME_ALIASES</code> + <code>_canonical_entity_name()</code> 归一化后用于 worked 判定；<code>new_entities</code> 保留原名显示；未知名称原样通过不误伤。auto-call 的 <code>is_new_dxcc</code> 不受影响（两侧都用 <code>cty.lookup</code>，本就一致）。</li>
 <li><strong>CQ 空闲频点</strong>（UC-004，2026-08-07）：<code>FrequencyOccupancy</code> 记录最近 120 s 解码 频率（含自身回波），<code>pick_cq_frequency</code> 在 1500±300 Hz 螺旋扫描第一个与所有 占用中心距 ≥30 Hz 的整数频点；全占用回退 1500。手动 CQ 与 cq_loop 每次 CQ/re-CQ 重选。</li>
 </ul>
+<figure>
+<figure class="doc-fig"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 640" role="img" aria-labelledby="f9title">
+  <title id="f9title">图 9 band-hunt 闭环：双闸门 → 轮询 → 归一化 → 排序切频 → 自动呼叫</title>
+  <defs>
+    <marker id="f9-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto">
+      <path d="M 0 0 L 10 5 L 0 10 z" style="fill:var(--accent,#22d3ee)"/>
+    </marker>
+  </defs>
+
+  <rect x="0" y="0" width="960" height="640" rx="12" fill="var(--bg-tertiary,#10161e)"/>
+
+  <!-- loop boxes (clockwise) -->
+  <g text-anchor="middle">
+    <!-- 1: top -->
+    <rect x="360" y="70" width="240" height="72" rx="8" fill="var(--bg-secondary,#0d1117)" stroke-width="1.5" style="stroke:var(--accent,#22d3ee)"/>
+    <text x="480" y="100" font-family="Inter, system-ui, -apple-system, sans-serif" font-size="13" font-weight="600" style="fill:var(--text-primary,#ffffff)">① 双闸门</text>
+    <text x="480" y="124" font-family="'JetBrains Mono', ui-monospace, monospace" font-size="11" style="fill:var(--text-secondary,#8899aa)">auto_band_hunt ∧ 冷却 1200 s</text>
+
+    <!-- 2: top-right -->
+    <rect x="690" y="140" width="250" height="72" rx="8" fill="var(--bg-secondary,#0d1117)" stroke-width="1.5" style="stroke:var(--accent,#22d3ee)"/>
+    <text x="815" y="170" font-family="Inter, system-ui, -apple-system, sans-serif" font-size="13" font-weight="600" style="fill:var(--text-primary,#ffffff)">② 轮询 /api/band_hunt</text>
+    <text x="815" y="194" font-family="Inter, system-ui, -apple-system, sans-serif" font-size="11" style="fill:var(--text-secondary,#8899aa)">pskreporter · HTTP 唯一跨库边界</text>
+
+    <!-- 3: mid-right -->
+    <rect x="690" y="290" width="250" height="72" rx="8" fill="var(--bg-secondary,#0d1117)" stroke-width="1.5" style="stroke:#34d399"/>
+    <text x="815" y="320" font-family="Inter, system-ui, -apple-system, sans-serif" font-size="13" font-weight="600" style="fill:var(--text-primary,#ffffff)">③ 实体名归一化（V1.5）</text>
+    <text x="815" y="344" font-family="'JetBrains Mono', ui-monospace, monospace" font-size="11" style="fill:var(--text-secondary,#8899aa)">_CTY_NAME_ALIASES</text>
+
+    <!-- 4: bottom -->
+    <rect x="360" y="460" width="240" height="72" rx="8" fill="var(--bg-secondary,#0d1117)" stroke-width="1.5" style="stroke:var(--accent,#22d3ee)"/>
+    <text x="480" y="490" font-family="'JetBrains Mono', ui-monospace, monospace" font-size="13" font-weight="600" style="fill:var(--text-primary,#ffffff)">④ rank/decide_switch</text>
+    <text x="480" y="514" font-family="Inter, system-ui, -apple-system, sans-serif" font-size="11" style="fill:var(--text-secondary,#8899aa)">按未通联实体数降序</text>
+
+    <!-- 5: mid-left -->
+    <rect x="40" y="290" width="250" height="72" rx="8" fill="var(--bg-secondary,#0d1117)" stroke-width="1.5" style="stroke:var(--accent,#22d3ee)"/>
+    <text x="165" y="320" font-family="Inter, system-ui, -apple-system, sans-serif" font-size="13" font-weight="600" style="fill:var(--text-primary,#ffffff)">⑤ 空闲时 rig 调谐切频</text>
+    <text x="165" y="344" font-family="Inter, system-ui, -apple-system, sans-serif" font-size="11" style="fill:var(--text-secondary,#8899aa)">经 rigctld 切到目标波段</text>
+
+    <!-- 6: top-left -->
+    <rect x="40" y="140" width="250" height="72" rx="8" fill="var(--bg-secondary,#0d1117)" stroke-width="1.5" style="stroke:var(--accent,#22d3ee)"/>
+    <text x="165" y="170" font-family="Inter, system-ui, -apple-system, sans-serif" font-size="13" font-weight="600" style="fill:var(--text-primary,#ffffff)">⑥ 新波段解码</text>
+    <text x="165" y="194" font-family="Inter, system-ui, -apple-system, sans-serif" font-size="11" style="fill:var(--text-secondary,#8899aa)">auto-call 闭环自然接续</text>
+  </g>
+
+  <!-- clockwise arrows -->
+  <g fill="none" stroke-width="1.5" style="stroke:var(--accent,#22d3ee)">
+    <path d="M 600 106 H 660 V 140" marker-end="url(#f9-arrow)"/>
+    <path d="M 815 212 V 286" marker-end="url(#f9-arrow)"/>
+    <path d="M 815 362 C 815 430, 700 480, 604 494" marker-end="url(#f9-arrow)"/>
+    <path d="M 360 496 C 260 486, 170 430, 165 366" marker-end="url(#f9-arrow)"/>
+    <path d="M 165 290 V 216" marker-end="url(#f9-arrow)"/>
+    <path d="M 290 160 C 380 140, 420 120, 360 106" marker-end="url(#f9-arrow)"/>
+  </g>
+
+  <!-- center annotation -->
+  <text x="480" y="330" text-anchor="middle" font-family="Inter, system-ui, -apple-system, sans-serif" font-size="13" style="fill:var(--text-muted,#5c6370)">把波段切到新 DXCC 最密集的地方 → 自动呼叫闭环接续</text>
+
+  <!-- bottom note -->
+  <rect x="40" y="570" width="880" height="50" rx="8" fill="var(--bg-secondary,#0d1117)" stroke-width="1" style="stroke:var(--border,rgba(255,255,255,0.06))"/>
+  <text x="480" y="600" text-anchor="middle" font-family="'JetBrains Mono', ui-monospace, monospace" font-size="12" style="fill:var(--text-secondary,#8899aa)">CQ 空闲频点（UC-004）：占用环 120 s TTL · 1500±300 Hz 螺旋 · guard 30 Hz · 全占用回退 1500</text>
+</svg><figcaption>图 9 band-hunt 闭环：双闸门 → 轮询 → 归一化 → 排序切频 → 自动呼叫</figcaption></figure>
+<figcaption aria-hidden="true">图 9 band-hunt 闭环：双闸门 → 轮询 → 归一化 → 排序切频 → 自动呼叫</figcaption>
+</figure>
 <hr />
 <h2 id="配置与开关">4. 配置与开关</h2>
 <table>
@@ -262,6 +880,12 @@ SIGNOFF/DONE  Tx5: &lt;dx&gt; &lt;my&gt; 73 → 落库          （对方 RR73/7
 <td>环境变量</td>
 <td>DEBUG（restart.sh）</td>
 <td>观察 auto_call 日志</td>
+</tr>
+<tr>
+<td>MRRC_FT8_SKIP_SERIAL_GUARD</td>
+<td>环境变量</td>
+<td>未设置（守卫生效）</td>
+<td>应急跳过 restart.sh 串口占用守卫（AD-008）</td>
 </tr>
 </tbody>
 </table>
@@ -355,11 +979,147 @@ SELECT * FROM qso WHERE source = &#39;live&#39; ORDER BY id DESC LIMIT 10;</code
 <li><strong>STOP 优先</strong>：任何已认证会话可 STOP（无需租约），幂等、PTT-off 非阻塞。</li>
 <li><strong>不打断 QSO</strong>：auto_call_candidate 要求 IDLE + 无选择；进行中的 QSO/人工选择 绝不被自动呼叫打断（AD-012 单 QSO 自动化）。</li>
 <li><strong>频率纪律</strong>（2026-08-07）：应答发在伙伴解码频率（split），避免离频呼叫不被 对方自动序列配对；CQ 避开占用频点。</li>
-<li><strong>不碰 CAT 串口</strong>：唯一 owner 是 rigctld（AD-008）。</li>
+<li><strong>不碰 CAT 串口</strong>：唯一 owner 是 rigctld（AD-008）。部署期由 restart.sh serial_guard() 强制：启动 rigctld 前 lsof 检测串口持有者，非 rigctld 进程持有即拒绝启动并列出持有者（fail-fast）；MRRC_FT8_SKIP_SERIAL_GUARD=1 应急跳过。</li>
 </ol>
+<figure>
+<figure class="doc-fig"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 540" role="img" aria-labelledby="f10title">
+  <title id="f10title">图 10 安全不变量：单点 TX 门、STOP 优先、不自动恢复</title>
+  <defs>
+    <marker id="f10-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto">
+      <path d="M 0 0 L 10 5 L 0 10 z" style="fill:var(--accent,#22d3ee)"/>
+    </marker>
+    <marker id="f10-arrow-red" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto">
+      <path d="M 0 0 L 10 5 L 0 10 z" style="fill:#f87171"/>
+    </marker>
+  </defs>
+
+  <rect x="0" y="0" width="960" height="540" rx="12" fill="var(--bg-tertiary,#10161e)"/>
+
+  <!-- TX intent sources -->
+  <g text-anchor="middle">
+    <rect x="60" y="40" width="220" height="56" rx="8" fill="var(--bg-secondary,#0d1117)" stroke-width="1.5" style="stroke:var(--accent,#22d3ee)"/>
+    <text x="170" y="74" font-family="Inter, system-ui, -apple-system, sans-serif" font-size="13" style="fill:var(--text-primary,#ffffff)">Web UI / 人工操作</text>
+
+    <rect x="370" y="40" width="220" height="56" rx="8" fill="var(--bg-secondary,#0d1117)" stroke-width="1.5" style="stroke:var(--accent,#22d3ee)"/>
+    <text x="480" y="74" font-family="'JetBrains Mono', ui-monospace, monospace" font-size="12.5" style="fill:var(--text-primary,#ffffff)">auto-call（system）</text>
+
+    <rect x="680" y="40" width="220" height="56" rx="8" fill="var(--bg-secondary,#0d1117)" stroke-width="1.5" style="stroke:var(--accent,#22d3ee)"/>
+    <text x="790" y="74" font-family="Inter, system-ui, -apple-system, sans-serif" font-size="13" style="fill:var(--text-primary,#ffffff)">CQ 循环</text>
+  </g>
+
+  <!-- arrows into the single gate -->
+  <g fill="none" stroke-width="1.5" style="stroke:var(--accent,#22d3ee)">
+    <path d="M 170 96 L 420 166" marker-end="url(#f10-arrow)"/>
+    <path d="M 480 96 L 480 166" marker-end="url(#f10-arrow)"/>
+    <path d="M 790 96 L 540 166" marker-end="url(#f10-arrow)"/>
+  </g>
+
+  <!-- the single TX gate (red) -->
+  <rect x="320" y="170" width="300" height="120" rx="8" fill="var(--bg-secondary,#0d1117)" stroke-width="1.5" style="stroke:#f87171"/>
+  <text x="470" y="202" text-anchor="middle" font-family="'JetBrains Mono', ui-monospace, monospace" font-size="14" font-weight="600" style="fill:var(--text-primary,#ffffff)">SafetyController</text>
+  <text x="470" y="224" text-anchor="middle" font-family="Inter, system-ui, -apple-system, sans-serif" font-size="12" style="fill:var(--text-secondary,#8899aa)">唯一 TX 门（AD-007）</text>
+  <text x="470" y="248" text-anchor="middle" font-family="'JetBrains Mono', ui-monospace, monospace" font-size="10.5" style="fill:var(--text-secondary,#8899aa)">arm(): 互锁 CAT/audio/DSP/clock</text>
+  <text x="470" y="266" text-anchor="middle" font-family="'JetBrains Mono', ui-monospace, monospace" font-size="10" style="fill:var(--text-secondary,#8899aa)">transmit(): faults/armed/PTT/预算 + watchdog</text>
+
+  <path d="M 470 290 V 326" fill="none" stroke-width="1.5" style="stroke:var(--accent,#22d3ee)" marker-end="url(#f10-arrow)"/>
+
+  <!-- PTT → rigctld → FT-710 -->
+  <rect x="370" y="330" width="140" height="48" rx="8" fill="var(--bg-secondary,#0d1117)" stroke-width="1.5" style="stroke:var(--accent,#22d3ee)"/>
+  <text x="440" y="359" text-anchor="middle" font-family="'JetBrains Mono', ui-monospace, monospace" font-size="13" font-weight="600" style="fill:var(--text-primary,#ffffff)">PTT</text>
+
+  <path d="M 510 354 H 556" fill="none" stroke-width="1.5" style="stroke:var(--accent,#22d3ee)" marker-end="url(#f10-arrow)"/>
+
+  <rect x="560" y="330" width="150" height="48" rx="8" fill="var(--bg-secondary,#0d1117)" stroke-width="1.5" style="stroke:var(--accent,#22d3ee)"/>
+  <text x="635" y="359" text-anchor="middle" font-family="'JetBrains Mono', ui-monospace, monospace" font-size="13" font-weight="600" style="fill:var(--text-primary,#ffffff)">rigctld</text>
+
+  <path d="M 710 354 H 756" fill="none" stroke-width="1.5" style="stroke:var(--accent,#22d3ee)" marker-end="url(#f10-arrow)"/>
+
+  <rect x="760" y="330" width="150" height="48" rx="8" fill="var(--bg-secondary,#0d1117)" stroke-width="1.5" style="stroke:var(--accent,#22d3ee)"/>
+  <text x="835" y="359" text-anchor="middle" font-family="'JetBrains Mono', ui-monospace, monospace" font-size="13" font-weight="600" style="fill:var(--text-primary,#ffffff)">FT-710</text>
+
+  <!-- STOP box + arrow to PTT -->
+  <rect x="680" y="120" width="240" height="90" rx="8" fill="var(--bg-secondary,#0d1117)" stroke-width="1.5" style="stroke:#f87171"/>
+  <text x="800" y="150" text-anchor="middle" font-family="'JetBrains Mono', ui-monospace, monospace" font-size="14" font-weight="600" style="fill:#f87171">STOP</text>
+  <text x="800" y="174" text-anchor="middle" font-family="Inter, system-ui, -apple-system, sans-serif" font-size="11" style="fill:var(--text-secondary,#8899aa)">任何已认证会话（无需租约）</text>
+  <text x="800" y="194" text-anchor="middle" font-family="Inter, system-ui, -apple-system, sans-serif" font-size="11" style="fill:var(--text-secondary,#8899aa)">幂等 · PTT-off 非阻塞</text>
+
+  <path d="M 800 210 V 300 H 455 V 326" fill="none" stroke-width="1.5" stroke-dasharray="6 4" style="stroke:#f87171" marker-end="url(#f10-arrow-red)"/>
+
+  <!-- bottom amber note -->
+  <rect x="60" y="440" width="840" height="48" rx="8" fill="var(--bg-secondary,#0d1117)" stroke-width="1.5" style="stroke:#f59e0b"/>
+  <text x="480" y="468" text-anchor="middle" font-family="Inter, system-ui, -apple-system, sans-serif" font-size="12.5" style="fill:#f59e0b">fault 清除后仍需人工 re-arm —— no-recovery-auto-resumes-TX</text>
+</svg><figcaption>图 10 安全不变量：单点 TX 门、STOP 优先、不自动恢复</figcaption></figure>
+<figcaption aria-hidden="true">图 10 安全不变量：单点 TX 门、STOP 优先、不自动恢复</figcaption>
+</figure>
 <hr />
-<h2 id="现场案例复盘tn8gd2026-08-07">7. 现场案例复盘（TN8GD，2026-08-07）</h2>
-<p><strong>背景</strong>：TN8GD（尼日尔，新 DXCC）在 20 m 活跃，多流 pileup。</p>
+<h2 id="现场案例复盘2026-08-07">7. 现场案例复盘（2026-08-07）</h2>
+<p><strong>背景</strong>：2026-08-07 现场连续暴露三个根因：TN8GD 自动呼叫的频率纪律、CAT 串口争抢、band-hunt 实体名失配。以下按时间复盘。</p>
+<h3 id="tn8gd-频率纪律uc-003uc-004">7.1 TN8GD 频率纪律（UC-003/UC-004）</h3>
+<figure>
+<figure class="doc-fig"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 480" role="img" aria-labelledby="f11title">
+  <title id="f11title">图 11 TN8GD 频率根因：应答必须发在伙伴解码频率</title>
+
+  <rect x="0" y="0" width="960" height="480" rx="12" fill="var(--bg-tertiary,#10161e)"/>
+
+  <!-- Lane A: before fix -->
+  <rect x="40" y="52" width="880" height="150" rx="8" fill="var(--bg-secondary,#0d1117)" stroke-width="1.5" style="stroke:#f87171"/>
+  <text x="60" y="76" font-family="Inter, system-ui, -apple-system, sans-serif" font-size="12.5" font-weight="600" style="fill:#f87171">修复前（2026-08-07 现场）</text>
+
+  <!-- baseline -->
+  <line x1="70" y1="170" x2="910" y2="170" stroke-width="1" style="stroke:var(--border,rgba(255,255,255,0.06))"/>
+
+  <!-- CQ @843 (cyan peak) -->
+  <path d="M 242 170 L 287 92 L 332 170 Z" fill="none" stroke-width="1.5" style="stroke:var(--accent,#22d3ee)"/>
+  <text x="287" y="80" text-anchor="middle" font-family="'JetBrains Mono', ui-monospace, monospace" font-size="11.5" style="fill:var(--accent,#22d3ee)">TN8GD CQ</text>
+  <text x="287" y="96" text-anchor="middle" font-family="'JetBrains Mono', ui-monospace, monospace" font-size="10" style="fill:var(--accent,#22d3ee)">@843</text>
+
+  <!-- reply @1500 (red peak) + own echo (gray small) -->
+  <path d="M 435 170 L 480 96 L 525 170 Z" fill="none" stroke-width="1.5" style="stroke:#f87171"/>
+  <text x="480" y="80" text-anchor="middle" font-family="Inter, system-ui, -apple-system, sans-serif" font-size="11.5" font-weight="600" style="fill:#f87171">本台应答</text>
+  <text x="480" y="96" text-anchor="middle" font-family="'JetBrains Mono', ui-monospace, monospace" font-size="10" style="fill:#f87171">@1500</text>
+
+  <path d="M 458 170 L 480 150 L 502 170 Z" fill="var(--bg-secondary,#0d1117)" stroke-width="1" style="stroke:var(--text-secondary,#8899aa)"/>
+  <text x="480" y="192" text-anchor="middle" font-family="Inter, system-ui, -apple-system, sans-serif" font-size="10" style="fill:var(--text-muted,#5c6370)">自身回波 @1500</text>
+
+  <text x="700" y="168" text-anchor="middle" font-family="Inter, system-ui, -apple-system, sans-serif" font-size="11.5" style="fill:#f87171">✗ 未配对 — 重传 4 次无应答，RETRY_EXHAUSTED</text>
+
+  <!-- Lane B: after fix -->
+  <rect x="40" y="232" width="880" height="150" rx="8" fill="var(--bg-secondary,#0d1117)" stroke-width="1.5" style="stroke:#34d399"/>
+  <text x="60" y="256" font-family="Inter, system-ui, -apple-system, sans-serif" font-size="12.5" font-weight="600" style="fill:#34d399">UC-003 修复后</text>
+
+  <line x1="70" y1="350" x2="910" y2="350" stroke-width="1" style="stroke:var(--border,rgba(255,255,255,0.06))"/>
+
+  <!-- CQ @843 and reply @843 both (cyan + green) -->
+  <path d="M 235 350 L 282 274 L 329 350 Z" fill="none" stroke-width="1.5" style="stroke:var(--accent,#22d3ee)"/>
+  <path d="M 331 350 L 378 274 L 425 350 Z" fill="none" stroke-width="1.5" style="stroke:#34d399"/>
+  <text x="310" y="262" text-anchor="middle" font-family="'JetBrains Mono', ui-monospace, monospace" font-size="11.5" style="fill:var(--accent,#22d3ee)">CQ @843</text>
+  <text x="378" y="262" text-anchor="middle" font-family="'JetBrains Mono', ui-monospace, monospace" font-size="11.5" style="fill:#34d399">应答 @843</text>
+  <text x="378" y="378" text-anchor="middle" font-family="Inter, system-ui, -apple-system, sans-serif" font-size="11.5" style="fill:#34d399">✓ split 配对 — 对方接收机能配对</text>
+
+  <text x="700" y="300" text-anchor="middle" font-family="Inter, system-ui, -apple-system, sans-serif" font-size="13" font-weight="600" style="fill:#34d399">应答必须发在伙伴解码频率</text>
+
+  <!-- shared frequency axis -->
+  <line x1="40" y1="430" x2="920" y2="430" stroke-width="1.5" style="stroke:var(--text-secondary,#8899aa)"/>
+  <g font-family="'JetBrains Mono', ui-monospace, monospace" font-size="10.5">
+    <line x1="40" y1="430" x2="40" y2="436" style="stroke:var(--text-secondary,#8899aa)"/>
+    <text x="40" y="452" text-anchor="middle" style="fill:var(--text-secondary,#8899aa)">0</text>
+    <line x1="187" y1="430" x2="187" y2="436" style="stroke:var(--text-secondary,#8899aa)"/>
+    <text x="187" y="452" text-anchor="middle" style="fill:var(--text-secondary,#8899aa)">500</text>
+    <line x1="287" y1="430" x2="287" y2="436" style="stroke:var(--accent,#22d3ee)"/>
+    <text x="287" y="452" text-anchor="middle" style="fill:var(--accent,#22d3ee)">843</text>
+    <line x1="480" y1="430" x2="480" y2="436" style="stroke:#f59e0b"/>
+    <text x="480" y="452" text-anchor="middle" style="fill:#f59e0b">1500</text>
+    <line x1="627" y1="430" x2="627" y2="436" style="stroke:var(--text-secondary,#8899aa)"/>
+    <text x="627" y="452" text-anchor="middle" style="fill:var(--text-secondary,#8899aa)">2000</text>
+    <line x1="773" y1="430" x2="773" y2="436" style="stroke:var(--text-secondary,#8899aa)"/>
+    <text x="773" y="452" text-anchor="middle" style="fill:var(--text-secondary,#8899aa)">2500</text>
+    <line x1="920" y1="430" x2="920" y2="436" style="stroke:var(--text-secondary,#8899aa)"/>
+    <text x="920" y="452" text-anchor="middle" style="fill:var(--text-secondary,#8899aa)">3000</text>
+  </g>
+  <text x="480" y="472" text-anchor="middle" font-family="Inter, system-ui, -apple-system, sans-serif" font-size="10.5" style="fill:var(--text-muted,#5c6370)">TX 音频频率（Hz）— 旧行为写死 1500 Hz，与 TN8GD 的 CQ（f=843 Hz）离频</text>
+</svg><figcaption>图 11 TN8GD 频率根因：应答必须发在伙伴解码频率</figcaption></figure>
+<figcaption aria-hidden="true">图 11 TN8GD 频率根因：应答必须发在伙伴解码频率</figcaption>
+</figure>
 <table>
 <colgroup>
 <col style="width: 50%" />
@@ -396,6 +1156,141 @@ SELECT * FROM qso WHERE source = &#39;live&#39; ORDER BY id DESC LIMIT 10;</code
 </table>
 <p><strong>根因</strong>：TX 音频频率写死 1500 Hz，而 TN8GD 的 CQ 在 <strong>f=843 Hz</strong>——应答发在错误 音频偏移，对方自动化 DX 台未配对。对照：成功 QSO（BD6KDG@1600、UT5ZC@1401） 均因对方人工在自己频率上应答；UA4LDP 同样只有 1500 回波、同样未完成。</p>
 <p><strong>修复（UC-003）</strong>：<code>Sequencer.tx_frequency</code> 记录伙伴解码频率（<code>reply_to(…, tx_frequency=…)</code>），<code>TxDriver</code> 编码读 <code>sequencer.tx_frequency</code>；auto-call / select / reply 全链路透传 <code>freq</code>；旧客户端缺 freq 回退 1500。同批完成 UC-004 （CQ 选空闲频点）。</p>
+<h3 id="cat-串口争抢与-serial_guardad-008v1.4">7.2 CAT 串口争抢与 serial_guard（AD-008，V1.4）</h3>
+<p>18:01 一台手动 nohup 的旧 mrrc_ft710 <code>server.py</code>（MacPorts Python）直接 open <code>/dev/cu.usbserial-0121DB3A0</code>，与 rigctld 共持 → 字节争抢 → 18:00–22:20 rig 轮询 ~90% 超时（<code>wrong reply</code>/<code>Rig busy</code> 数千条），band_hunt 切频 5 次失败；停掉残留进程（PID 56041）立即恢复。修复：<code>restart.sh serial_guard()</code>（见 §6 不变量 7）；旧项目 <code>switch.sh/stop.sh</code> 同步加固（大小写不敏感 <code>pgrep -if</code>、串口持有者兜底）。</p>
+<figure>
+<figure class="doc-fig"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 500" role="img" aria-labelledby="f12title">
+  <title id="f12title">图 12 CAT 串口争抢与 serial_guard 守卫</title>
+  <defs>
+    <marker id="f12-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto">
+      <path d="M 0 0 L 10 5 L 0 10 z" style="fill:var(--accent,#22d3ee)"/>
+    </marker>
+    <marker id="f12-arrow-green" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto">
+      <path d="M 0 0 L 10 5 L 0 10 z" style="fill:#34d399"/>
+    </marker>
+    <marker id="f12-arrow-amber" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto">
+      <path d="M 0 0 L 10 5 L 0 10 z" style="fill:#f59e0b"/>
+    </marker>
+  </defs>
+
+  <rect x="0" y="0" width="960" height="500" rx="12" fill="var(--bg-tertiary,#10161e)"/>
+
+  <!-- serial device -->
+  <rect x="360" y="40" width="240" height="56" rx="8" fill="var(--bg-secondary,#0d1117)" stroke-width="1.5" style="stroke:var(--accent,#22d3ee)"/>
+  <text x="480" y="64" text-anchor="middle" font-family="Inter, system-ui, -apple-system, sans-serif" font-size="13" font-weight="600" style="fill:var(--text-primary,#ffffff)">FT-710 CAT 串口</text>
+  <text x="480" y="86" text-anchor="middle" font-family="'JetBrains Mono', ui-monospace, monospace" font-size="10.5" style="fill:var(--text-secondary,#8899aa)">/dev/cu.usbserial-0121DB3A0</text>
+
+  <!-- two holders -->
+  <rect x="80" y="150" width="220" height="56" rx="8" fill="var(--bg-secondary,#0d1117)" stroke-width="1.5" style="stroke:var(--accent,#22d3ee)"/>
+  <text x="190" y="174" text-anchor="middle" font-family="'JetBrains Mono', ui-monospace, monospace" font-size="13" font-weight="600" style="fill:var(--accent,#22d3ee)">rigctld</text>
+  <text x="190" y="194" text-anchor="middle" font-family="Inter, system-ui, -apple-system, sans-serif" font-size="11.5" style="fill:var(--text-secondary,#8899aa)">合法 owner（AD-008）</text>
+
+  <rect x="680" y="150" width="240" height="56" rx="8" fill="var(--bg-secondary,#0d1117)" stroke-width="1.5" style="stroke:#f87171"/>
+  <text x="800" y="174" text-anchor="middle" font-family="'JetBrains Mono', ui-monospace, monospace" font-size="12" font-weight="600" style="fill:#f87171">mrrc_ft710 server.py</text>
+  <text x="800" y="194" text-anchor="middle" font-family="Inter, system-ui, -apple-system, sans-serif" font-size="11.5" style="fill:var(--text-secondary,#8899aa)">残留进程（PID 56041）</text>
+
+  <!-- contention arrows -->
+  <path d="M 190 150 V 98" fill="none" stroke-width="1.5" style="stroke:#f87171" marker-end="url(#f12-arrow)"/>
+  <path d="M 800 150 V 98" fill="none" stroke-width="1.5" style="stroke:#f87171" marker-end="url(#f12-arrow)"/>
+  <text x="480" y="130" text-anchor="middle" font-family="Inter, system-ui, -apple-system, sans-serif" font-size="13" font-weight="600" style="fill:#f59e0b">⚡ 字节争抢</text>
+
+  <!-- consequence -->
+  <text x="480" y="240" text-anchor="middle" font-family="'JetBrains Mono', ui-monospace, monospace" font-size="11.5" style="fill:var(--text-secondary,#8899aa)">18:00–22:20 rig 轮询 ~90% 超时（4 h）· wrong reply / Rig busy 数千条</text>
+  <text x="480" y="262" text-anchor="middle" font-family="'JetBrains Mono', ui-monospace, monospace" font-size="11.5" style="fill:var(--text-secondary,#8899aa)">band_hunt 切频 5 次失败 · 停掉残留进程后立即恢复</text>
+
+  <!-- divider -->
+  <line x1="40" y1="288" x2="920" y2="288" stroke-width="1" stroke-dasharray="6 4" style="stroke:var(--border,rgba(255,255,255,0.06))"/>
+
+  <!-- fix area -->
+  <text x="480" y="310" text-anchor="middle" font-family="Inter, system-ui, -apple-system, sans-serif" font-size="12" font-weight="600" style="fill:#34d399">部署期守卫（V1.4 · AD-008）</text>
+
+  <rect x="80" y="326" width="320" height="64" rx="8" fill="var(--bg-secondary,#0d1117)" stroke-width="1.5" style="stroke:#34d399"/>
+  <text x="240" y="352" text-anchor="middle" font-family="'JetBrains Mono', ui-monospace, monospace" font-size="12.5" font-weight="600" style="fill:#34d399">restart.sh serial_guard()</text>
+  <text x="240" y="374" text-anchor="middle" font-family="'JetBrains Mono', ui-monospace, monospace" font-size="11" style="fill:var(--text-secondary,#8899aa)">lsof -t "$RIG_DEVICE" 检测持有者</text>
+
+  <path d="M 400 358 H 446" fill="none" stroke-width="1.5" style="stroke:#34d399" marker-end="url(#f12-arrow-green)"/>
+
+  <rect x="450" y="326" width="360" height="64" rx="8" fill="var(--bg-secondary,#0d1117)" stroke-width="1.5" style="stroke:#34d399"/>
+  <text x="630" y="352" text-anchor="middle" font-family="Inter, system-ui, -apple-system, sans-serif" font-size="12.5" font-weight="600" style="fill:#34d399">非 rigctld 持有 → fail-fast，拒绝启动</text>
+  <text x="630" y="374" text-anchor="middle" font-family="Inter, system-ui, -apple-system, sans-serif" font-size="11" style="fill:var(--text-secondary,#8899aa)">列出持有者（PID + command）</text>
+
+  <path d="M 630 390 V 412" fill="none" stroke-width="1.5" stroke-dasharray="6 4" style="stroke:#f59e0b" marker-end="url(#f12-arrow-amber)"/>
+
+  <rect x="450" y="412" width="360" height="46" rx="8" fill="var(--bg-secondary,#0d1117)" stroke-width="1.5" stroke-dasharray="5 4" style="stroke:#f59e0b"/>
+  <text x="630" y="440" text-anchor="middle" font-family="'JetBrains Mono', ui-monospace, monospace" font-size="11.5" style="fill:#f59e0b">MRRC_FT8_SKIP_SERIAL_GUARD=1 应急跳过</text>
+</svg><figcaption>图 12 CAT 串口争抢与 serial_guard 守卫</figcaption></figure>
+<figcaption aria-hidden="true">图 12 CAT 串口争抢与 serial_guard 守卫</figcaption>
+</figure>
+<h3 id="band-hunt-实体名失配与归一化v1.5">7.3 band-hunt 实体名失配与归一化（V1.5）</h3>
+<p>12 h 复盘——band_hunt 反复切 15 m 追 “Germany”，但 Germany 早已通联（qso 表 64 条 DL/DK）；根因：worked 过滤直接拿 pskreporter 普通名对 cty 规范名失配（42 个实测实体名中仅 3 个不一致）；修复 <code>_CTY_NAME_ALIASES</code> + <code>_canonical_entity_name()</code>；auto-call 的 <code>is_new_dxcc</code> 不受影响。</p>
+<figure>
+<figure class="doc-fig"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 440" role="img" aria-labelledby="f13title">
+  <title id="f13title">图 13 实体名归一化：pskreporter → cty 规范名</title>
+  <defs>
+    <marker id="f13-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto">
+      <path d="M 0 0 L 10 5 L 0 10 z" style="fill:var(--accent,#22d3ee)"/>
+    </marker>
+    <marker id="f13-arrow-green" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto">
+      <path d="M 0 0 L 10 5 L 0 10 z" style="fill:#34d399"/>
+    </marker>
+  </defs>
+
+  <rect x="0" y="0" width="960" height="440" rx="12" fill="var(--bg-tertiary,#10161e)"/>
+
+  <text x="480" y="32" text-anchor="middle" font-family="Inter, system-ui, -apple-system, sans-serif" font-size="12" style="fill:var(--text-muted,#5c6370)">rank_bands 的 worked 判定先过别名表归一化（V1.5）</text>
+
+  <!-- left column: pskreporter names -->
+  <g text-anchor="middle">
+    <rect x="60" y="60" width="200" height="44" rx="8" fill="var(--bg-secondary,#0d1117)" stroke-width="1.5" style="stroke:var(--text-secondary,#8899aa)"/>
+    <text x="160" y="87" font-family="'JetBrains Mono', ui-monospace, monospace" font-size="13" style="fill:var(--text-secondary,#8899aa)">Germany</text>
+    <rect x="60" y="130" width="200" height="44" rx="8" fill="var(--bg-secondary,#0d1117)" stroke-width="1.5" style="stroke:var(--text-secondary,#8899aa)"/>
+    <text x="160" y="157" font-family="'JetBrains Mono', ui-monospace, monospace" font-size="13" style="fill:var(--text-secondary,#8899aa)">Malaysia</text>
+    <rect x="60" y="200" width="200" height="44" rx="8" fill="var(--bg-secondary,#0d1117)" stroke-width="1.5" style="stroke:var(--text-secondary,#8899aa)"/>
+    <text x="160" y="227" font-family="'JetBrains Mono', ui-monospace, monospace" font-size="13" style="fill:var(--text-secondary,#8899aa)">Turkey</text>
+  </g>
+
+  <!-- middle column: alias table -->
+  <rect x="360" y="90" width="240" height="124" rx="8" fill="var(--bg-secondary,#0d1117)" stroke-width="1.5" style="stroke:var(--accent,#22d3ee)"/>
+  <text x="480" y="120" text-anchor="middle" font-family="'JetBrains Mono', ui-monospace, monospace" font-size="12.5" font-weight="600" style="fill:var(--accent,#22d3ee)">_CTY_NAME_ALIASES</text>
+  <text x="480" y="146" text-anchor="middle" font-family="'JetBrains Mono', ui-monospace, monospace" font-size="11.5" style="fill:var(--text-secondary,#8899aa)">_canonical_entity_name()</text>
+  <text x="480" y="172" text-anchor="middle" font-family="Inter, system-ui, -apple-system, sans-serif" font-size="11.5" style="fill:var(--text-secondary,#8899aa)">pskreporter 名 → cty 规范名</text>
+  <text x="480" y="196" text-anchor="middle" font-family="Inter, system-ui, -apple-system, sans-serif" font-size="11" style="fill:var(--text-muted,#5c6370)">未知名称原样返回</text>
+
+  <!-- left -> middle -->
+  <g fill="none" stroke-width="1.5" style="stroke:var(--accent,#22d3ee)">
+    <path d="M 260 82 L 358 112" marker-end="url(#f13-arrow)"/>
+    <path d="M 260 152 L 358 152" marker-end="url(#f13-arrow)"/>
+    <path d="M 260 222 L 358 192" marker-end="url(#f13-arrow)"/>
+  </g>
+
+  <!-- right column: cty canonical names -->
+  <g text-anchor="middle">
+    <rect x="660" y="60" width="260" height="44" rx="8" fill="var(--bg-secondary,#0d1117)" stroke-width="1.5" style="stroke:var(--accent,#22d3ee)"/>
+    <text x="790" y="87" font-family="'JetBrains Mono', ui-monospace, monospace" font-size="11.5" style="fill:var(--text-primary,#ffffff)">Fed. Rep. of Germany</text>
+    <rect x="660" y="130" width="260" height="44" rx="8" fill="var(--bg-secondary,#0d1117)" stroke-width="1.5" style="stroke:var(--accent,#22d3ee)"/>
+    <text x="790" y="157" font-family="'JetBrains Mono', ui-monospace, monospace" font-size="11.5" style="fill:var(--text-primary,#ffffff)">West Malaysia</text>
+    <rect x="660" y="200" width="260" height="44" rx="8" fill="var(--bg-secondary,#0d1117)" stroke-width="1.5" style="stroke:var(--accent,#22d3ee)"/>
+    <text x="790" y="227" font-family="'JetBrains Mono', ui-monospace, monospace" font-size="11.5" style="fill:var(--text-primary,#ffffff)">Asiatic Turkey</text>
+  </g>
+
+  <!-- middle -> right -->
+  <g fill="none" stroke-width="1.5" style="stroke:var(--accent,#22d3ee)">
+    <path d="M 600 112 L 658 82" marker-end="url(#f13-arrow)"/>
+    <path d="M 600 152 L 658 152" marker-end="url(#f13-arrow)"/>
+    <path d="M 600 192 L 658 222" marker-end="url(#f13-arrow)"/>
+  </g>
+
+  <!-- worked check -->
+  <path d="M 790 244 V 278" fill="none" stroke-width="1.5" style="stroke:#34d399" marker-end="url(#f13-arrow-green)"/>
+  <rect x="660" y="278" width="260" height="56" rx="8" fill="var(--bg-secondary,#0d1117)" stroke-width="1.5" style="stroke:#34d399"/>
+  <text x="790" y="302" text-anchor="middle" font-family="'JetBrains Mono', ui-monospace, monospace" font-size="12.5" font-weight="600" style="fill:#34d399">worked 判定 ✓</text>
+  <text x="790" y="322" text-anchor="middle" font-family="Inter, system-ui, -apple-system, sans-serif" font-size="11" style="fill:var(--text-secondary,#8899aa)">Germany 不再判 new（qso 表 64 条 DL/DK）</text>
+
+  <!-- bottom notes -->
+  <text x="480" y="382" text-anchor="middle" font-family="Inter, system-ui, -apple-system, sans-serif" font-size="11.5" style="fill:var(--text-muted,#5c6370)">42 个实测实体名中仅这 3 个不一致 · auto-call 的 is_new_dxcc 不受影响（两侧都用 cty.lookup）</text>
+</svg><figcaption>图 13 实体名归一化：pskreporter → cty 规范名</figcaption></figure>
+<figcaption aria-hidden="true">图 13 实体名归一化：pskreporter → cty 规范名</figcaption>
+</figure>
 <hr />
 <h2 id="已知限制与后续">8. 已知限制与后续</h2>
 <ul>
@@ -404,6 +1299,7 @@ SELECT * FROM qso WHERE source = &#39;live&#39; ORDER BY id DESC LIMIT 10;</code
 <li><strong>guard/窗口参数</strong>：<code>pick_cq_frequency</code> 的 guard=30 Hz、窗口 ±300 Hz、 占用 TTL 120 s 均为模块常量，可按现场拥挤度调整。</li>
 <li><strong>单一 QSO</strong>：AD-012 约束一次只跟一个台；QSO 完成后自动转回 idle（或 cq_loop re-CQ），不做连续多目标追猎。</li>
 <li><strong>数据源</strong>：<code>cty.dat</code> 是仓库内静态副本；实体划分更新需手动替换文件 + 重启 （cache 懒加载单例）。</li>
+<li><strong>实体名别名表</strong>：<code>_CTY_NAME_ALIASES</code> 目前只覆盖 3 个已知失配（Germany/Malaysia/Turkey）；pskreporter 若引入新的不一致名称需人工扩充别名表。</li>
 </ul>
     </div>
 </main>
