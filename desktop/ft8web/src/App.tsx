@@ -26,6 +26,7 @@ export interface FT8DecodedMessage {
   grid?: string;
   isCq?: boolean;
   slotId?: number;
+  isNewDxcc?: boolean;
 }
 
 // --- Server decode → row mapping (Task 7) ------------------------------------
@@ -52,7 +53,53 @@ function serverMessageToRow(m: ServerDecodeMessage, slotId: number): FT8DecodedM
     grid: m.grid || '',
     isCq: m.is_cq,
     slotId,
+    isNewDxcc: m.is_new_dxcc,
   };
+}
+
+// --- Server DXCC badges (Task 12) ------------------------------------------
+// The server owns all DXCC state: each decode carries `is_new_dxcc` (the
+// entity is not-yet-worked against the server's DXCC cache) and the snapshot
+// carries `station.worked_calls` — the sorted list of base callsigns already
+// in the log. N = new entity, W = worked entity, B4 = base callsign already
+// worked. No local cty.dat or worked-entities cache is involved.
+function DxccBadges({ call, isNewDxcc, workedCalls }: {
+  call: string | undefined;
+  isNewDxcc: boolean | undefined;
+  workedCalls: string[];
+}) {
+  if (!call) return null;
+  // Base callsign: strip any portable/other suffix (e.g. "VE3/N0TMP" → "VE3"),
+  // matching the mobile PWA's hide-already-worked filter (candidates.js).
+  const base = String(call).split('/')[0].toUpperCase();
+  return (
+    <>
+      {workedCalls.includes(base) && (
+        <span
+          className="text-[9px] font-mono font-bold px-1 rounded bg-amber-950/60 text-amber-400 border border-amber-800 ml-1"
+          title={`${base} already in log`}
+        >
+          B4
+        </span>
+      )}
+      {isNewDxcc === true && (
+        <span
+          className="text-[9px] font-mono font-bold px-1 rounded bg-green-950/60 text-green-400 border border-green-800 ml-1"
+          title="New DXCC entity"
+        >
+          N
+        </span>
+      )}
+      {isNewDxcc === false && (
+        <span
+          className="text-[9px] font-mono font-bold px-1 rounded bg-zinc-800/60 text-zinc-400 border border-zinc-700 ml-1"
+          title="DXCC entity already worked"
+        >
+          W
+        </span>
+      )}
+    </>
+  );
 }
 
 // Row → server candidate (Task 9): /operation/select|reply take the raw
@@ -154,40 +201,23 @@ export default function App() {
     });
   }, []);
 
-  const BAND_FREQS_FT8 = [
-    { label: '80m', mhz: '3.5', hz: 3573000 },
+  // The server's FT8 band table (server/engine/bands.py FT8_BANDS) — the rig is
+  // tuned via /radio/band; the mode is locked to FT8. FT4 and the extra bands
+  // were removed when the local DSP brain went away (Task 12).
+  const BAND_FREQS = [
     { label: '40m', mhz: '7.0', hz: 7074000 },
-    { label: '30m', mhz: '10.1', hz: 10136000 },
     { label: '20m', mhz: '14.0', hz: 14074000 },
-    { label: '17m', mhz: '18.1', hz: 18100000 },
     { label: '15m', mhz: '21.0', hz: 21074000 },
-    { label: '12m', mhz: '24.9', hz: 24915000 },
     { label: '10m', mhz: '28.0', hz: 28074000 },
-    { label: '6m', mhz: '50.3', hz: 50313000 },
-    { label: '2m', mhz: '144.1', hz: 144174000 },
-    { label: '70cm', mhz: '432.1', hz: 432174000 },
-    { label: '23cm', mhz: '1296.1', hz: 1296174000 }
   ];
 
-  const BAND_FREQS_FT4 = [
-    { label: '80m', mhz: '3.5', hz: 3575000 },
-    { label: '40m', mhz: '7.0', hz: 7047500 },
-    { label: '30m', mhz: '10.1', hz: 10140000 },
-    { label: '20m', mhz: '14.0', hz: 14080000 },
-    { label: '17m', mhz: '18.1', hz: 18104000 },
-    { label: '15m', mhz: '21.1', hz: 21140000 },
-    { label: '12m', mhz: '24.9', hz: 24919000 },
-    { label: '10m', mhz: '28.1', hz: 28180000 },
-    { label: '6m',  mhz: '50.3', hz: 50318000 },
-    { label: '2m',  mhz: '144.1', hz: 144170000 }
-  ];
-
+  // VFO frequency is read-only from the server snapshot (radio.freq_hz); the
+  // localStorage seed is just the pre-connection default (Task 10). The inline
+  // frequency editor was removed — band selection tunes the rig via the server.
   const [vfoFreq, setVfoFreq] = useState<number>(() => {
     const saved = localStorage.getItem('ft8_vfoFreq');
     return saved ? Number(saved) : 14074000;
   });
-  const [editingVfo, setEditingVfo] = useState(false);
-  const [vfoInputStr, setVfoInputStr] = useState('');
 
   useEffect(() => {
     localStorage.setItem('ft8_vfoFreq', vfoFreq.toString());
@@ -202,12 +232,8 @@ export default function App() {
     localStorage.setItem('ft8_txPeriod', txPeriod.toString());
   }, [txPeriod]);
 
-  const [mode, setMode] = useState<'FT8' | 'FT4'>(() =>
-    (localStorage.getItem('ft8_mode') as 'FT8' | 'FT4') || 'FT8'
-  );
-  useEffect(() => { localStorage.setItem('ft8_mode', mode); }, [mode]);
-
-  const BAND_FREQS = mode === 'FT4' ? BAND_FREQS_FT4 : BAND_FREQS_FT8;
+  // Mode is locked to FT8 (the server decodes FT8 sub-bands only); the FT4
+  // toggle was removed with the local brain (Task 12).
 
   // Global Audio State
   const [audioActive, setAudioActive] = useState(false);
@@ -276,28 +302,6 @@ export default function App() {
       return localStorage.getItem('ft8_skipTx1Grid') === 'true';
   });
 
-  const [dxccIgnoreMode, setDxccIgnoreMode] = useState<boolean>(() => {
-    return localStorage.getItem('ft8_dxccIgnoreMode') === 'true';
-  });
-
-  // Helper to determine band from VFO frequency
-  const getBandFromFreq = useCallback((freqInHz: number): string => {
-      const mhz = freqInHz / 1e6;
-      if (mhz >= 1.8 && mhz <= 2.0) return "160m";
-      if (mhz >= 3.5 && mhz <= 4.0) return "80m";
-      if (mhz >= 5.3 && mhz <= 5.4) return "60m";
-      if (mhz >= 7.0 && mhz <= 7.3) return "40m";
-      if (mhz >= 10.1 && mhz <= 10.2) return "30m";
-      if (mhz >= 14.0 && mhz <= 14.35) return "20m";
-      if (mhz >= 18.068 && mhz <= 18.168) return "17m";
-      if (mhz >= 21.0 && mhz <= 21.45) return "15m";
-      if (mhz >= 24.89 && mhz <= 24.99) return "12m";
-      if (mhz >= 28.0 && mhz <= 29.7) return "10m";
-      if (mhz >= 50.0 && mhz <= 54.0) return "6m";
-      return "";
-  }, []);
-
-
   const [maxLogEntries, setMaxLogEntries] = useState<number>(() => {
     const saved = localStorage.getItem('ft8_maxLogEntries');
     return saved ? Number(saved) : 50;
@@ -322,8 +326,7 @@ export default function App() {
       localStorage.setItem('ft8_finalMessageMode', finalMessageMode);
       localStorage.setItem('ft8_maxLogEntries', maxLogEntries.toString());
       localStorage.setItem('ft8_skipTx1Grid', String(skipTx1Grid));
-      localStorage.setItem('ft8_dxccIgnoreMode', String(dxccIgnoreMode));
-  }, [myCall, myGrid, txFreq, decodeDepth, maxRetries, finalMessageMode, maxLogEntries, skipTx1Grid, dxccIgnoreMode]);
+  }, [myCall, myGrid, txFreq, decodeDepth, maxRetries, finalMessageMode, maxLogEntries, skipTx1Grid]);
 
   // UI State
   const [showSettings, setShowSettings] = useState(false);
@@ -373,19 +376,16 @@ export default function App() {
     vfoFreqRef.current = vfoFreq;
   }, [vfoFreq]);
 
-  const selectBand = (hz: number) => {
-    setVfoFreq(hz);
-    setRxLog([]);
-    setQsoLog([]);
-  };
-
-  const commitVfoInput = () => {
-    setEditingVfo(false);
-    const mhz = parseFloat(vfoInputStr.replace(',', '.'));
-    if (!isNaN(mhz) && mhz >= 1 && mhz <= 450) {
-      selectBand(Math.round(mhz * 1_000_000));
+  // Band switch (Task 12): tune the rig through the server. The VFO readout and
+  // the active-band highlight follow the server snapshot (radio.freq_hz), so we
+  // don't set the frequency locally. Requires the control lease.
+  const selectBand = useCallback(async (hz: number) => {
+    if (!(await ensureLease())) {
+      setTxNotice('Control is held by another session');
+      return;
     }
-  };
+    await mrrc.radioBand(hz);
+  }, [ensureLease]);
 
   const formatFrequency = (hz: number) => {
     return hz.toLocaleString('en-US').replace(/,/g, '.') + ' Hz';
@@ -456,6 +456,7 @@ export default function App() {
             grid: m.grid || '',
             isCq: m.is_cq,
             slotId: batch.slot_id,
+            isNewDxcc: m.is_new_dxcc,
           });
         }
       }
@@ -504,9 +505,6 @@ export default function App() {
   useEffect(() => {
     myGridRef.current = myGrid;
   }, [myGrid]);
-
-  const modeRef = useRef<'FT8' | 'FT4'>(mode);
-  useEffect(() => { modeRef.current = mode; }, [mode]);
 
   useEffect(() => { isTransmittingRef.current = isTransmitting; }, [isTransmitting]);
 
@@ -719,7 +717,7 @@ export default function App() {
       const ms = now.getUTCMilliseconds();
       const totalSeconds = seconds + (ms / 1000);
 
-      const PERIOD = modeRef.current === 'FT4' ? 7.5 : 15;
+      const PERIOD = 15; // FT8 sync window (mode locked to FT8, Task 12)
       const secondsInWindow = totalSeconds % PERIOD;
 
       setWindowProgress((secondsInWindow / PERIOD) * 100);
@@ -826,38 +824,19 @@ export default function App() {
           </div>
         </div>
 
-        {/* --- RF Frequency Readout --- */}
+        {/* --- RF Frequency Readout (read-only, from snapshot.radio.freq_hz) --- */}
         <div className="flex flex-col items-center justify-center min-w-[180px]">
           <span className="text-[10px] uppercase tracking-widest text-text-muted mb-1">Radio VFO</span>
-          {editingVfo ? (
-            <input
-              type="text"
-              className="text-[26px] font-mono font-bold leading-none tracking-tight text-green-600 dark:text-[#4caf50] bg-transparent border-b border-[#4caf50] outline-none w-[180px] text-center"
-              value={vfoInputStr}
-              autoFocus
-              onChange={e => setVfoInputStr(e.target.value)}
-              onKeyDown={e => {
-                if (e.key === 'Enter') commitVfoInput();
-                if (e.key === 'Escape') setEditingVfo(false);
-              }}
-              onBlur={commitVfoInput}
-            />
-          ) : (
-            <span
-              className="text-[26px] font-mono font-bold leading-none tracking-tight cursor-pointer hover:opacity-70 transition-opacity text-green-600 dark:text-[#4caf50]"
-              title="Click to enter custom frequency (MHz)"
-              onClick={() => {
-                setVfoInputStr((vfoFreq / 1_000_000).toFixed(6));
-                setEditingVfo(true);
-              }}
-            >
-              {formatFrequency(vfoFreq)}
-            </span>
-          )}
+          <span
+            className="text-[26px] font-mono font-bold leading-none tracking-tight text-green-600 dark:text-[#4caf50]"
+            title="VFO frequency (server snapshot); select a band to tune the rig"
+          >
+            {formatFrequency(vfoFreq)}
+          </span>
         </div>
 
         <div className="flex flex-col items-center">
-          <span className="text-[10px] uppercase tracking-widest text-text-muted mb-1">{mode} Window ({mode === 'FT4' ? '7.5s' : '15s'} Sync)</span>
+          <span className="text-[10px] uppercase tracking-widest text-text-muted mb-1">FT8 Window (15s Sync)</span>
           <div className="w-32 md:w-48 h-1.5 bg-black rounded-full border border-border-subtle relative overflow-hidden">
              <div 
               className="absolute left-0 top-0 h-full bg-green-600 dark:bg-[#4caf50] transition-all duration-75 ease-linear shadow-[0_0_5px_rgba(76,175,80,0.5)]"
@@ -904,7 +883,7 @@ export default function App() {
             return (
               <button
                 key={band.label}
-                onClick={() => selectBand(band.hz)}
+                onClick={() => { void selectBand(band.hz); }}
                 className={`px-5 py-1.5 rounded-full text-[11px] uppercase tracking-wider font-bold transition-colors whitespace-nowrap shrink-0 ${
                   isActive 
                     ? 'bg-blue-600 text-white shadow-[0_0_8px_rgba(37,99,235,0.8)] border border-blue-400' 
@@ -917,26 +896,7 @@ export default function App() {
           })}
         </div>
         
-        {/* Mode Toggle */}
-        <button
-          onClick={() => {
-            const newMode = mode === 'FT8' ? 'FT4' : 'FT8';
-            const freqs = newMode === 'FT4' ? BAND_FREQS_FT4 : BAND_FREQS_FT8;
-            const currentBand = getBandFromFreq(vfoFreq);
-            const match = freqs.find(b => b.label === currentBand);
-            setMode(newMode);
-            if (match) selectBand(match.hz);
-          }}
-          className={`shrink-0 px-4 py-1.5 rounded text-[11px] font-mono uppercase font-bold border transition-colors ${
-            mode === 'FT8'
-              ? 'bg-[#0f1e30] text-blue-400 border-blue-800 hover:bg-[#162540]'
-              : 'bg-[#2a1505] text-orange-400 border-orange-800 hover:bg-[#3d2007]'
-          }`}
-        >
-          {mode}
-        </button>
-
-        {/* PTT Period Toggle */}
+        {/* PTT Period Toggle (FT8: :00 even, :15 odd) */}
         <button
           onClick={() => setTxPeriod(p => p === 0 ? 1 : 0)}
           className={`shrink-0 px-4 py-1.5 rounded text-[11px] font-mono uppercase font-bold border transition-colors ${
@@ -945,7 +905,7 @@ export default function App() {
               : 'bg-[#3d1f05] text-amber-500 border-amber-700 hover:bg-[#5a2e07]'
           }`}
         >
-          Tx: {txPeriod === 0 ? 'Even (:00)' : `Odd (${mode === 'FT4' ? ':07' : ':15'})`}
+          Tx: {txPeriod === 0 ? 'Even (:00)' : 'Odd (:15)'}
         </button>
       </div>
 
@@ -1004,7 +964,7 @@ export default function App() {
                           ? log.periodIndex
                           : (() => {
                               const seconds = parseInt(log.time.substring(4, 6), 10);
-                              const periodLen = mode === 'FT4' ? 7.5 : 15;
+                              const periodLen = 15; // FT8 (mode locked, Task 12)
                               return Math.floor(seconds / periodLen) % 2;
                             })();
                         setTxPeriod(callerPeriod === 0 ? 1 : 0);
@@ -1016,8 +976,7 @@ export default function App() {
                       <span className="text-blue-400">{log.freq}Hz</span>
                       <span className="text-text-main group-hover:text-text-highlight font-bold flex items-center flex-wrap">
                         {log.message}
-                        {/* B4/N/W DXCC badges removed with the local DXCC service (Task 6);
-                            Task 12 re-adds them from the server snapshot/decodes. */}
+                        <DxccBadges call={log.call} isNewDxcc={log.isNewDxcc} workedCalls={snapshot.station.worked_calls} />
                       </span>
                     </div>
                   );
@@ -1075,7 +1034,7 @@ export default function App() {
                           : log.time && log.time.length >= 6
                             ? (() => {
                                 const seconds = parseInt(log.time.substring(4, 6), 10);
-                                const periodLen = mode === 'FT4' ? 7.5 : 15;
+                                const periodLen = 15; // FT8 (mode locked, Task 12)
                                 return Math.floor(seconds / periodLen) % 2;
                               })()
                             : null;
@@ -1089,8 +1048,7 @@ export default function App() {
                     <span className="text-blue-400">{log.freq}Hz</span>
                     <span className={`group-hover:text-text-highlight ${textClass} flex items-center flex-wrap`}>
                       {log.message}
-                      {/* N/W DXCC badges removed with the local DXCC service (Task 6);
-                          Task 12 re-adds them from the server snapshot/decodes. */}
+                      <DxccBadges call={log.call} isNewDxcc={log.isNewDxcc} workedCalls={snapshot.station.worked_calls} />
                     </span>
                   </div>
                   );
@@ -1118,12 +1076,12 @@ export default function App() {
                className="w-full h-full block cursor-crosshair"
                onClick={handleWaterfallClick}
             />
-            {/* TX Frequency Overlay Bar (50 Hz for FT8, 83 Hz for FT4) */}
+            {/* TX Frequency Overlay Bar (50 Hz for FT8; mode locked, Task 12) */}
             <div
                className="absolute top-0 bottom-0 bg-red-500/35 border-x border-red-500/50 pointer-events-none transition-all duration-75"
                style={{
                  left: `${((txFreq - 200) / 2800) * 100}%`,
-                 width: `${((mode === 'FT4' ? 83.33 : 50) / 2800) * 100}%`,
+                 width: `${(50 / 2800) * 100}%`,
                  transform: 'translateX(-50%)'
                }}
             />
@@ -1365,19 +1323,6 @@ export default function App() {
                  </button>
               </div>
 
-              <div className="flex items-center justify-between pt-2">
-                 <div className="flex flex-col">
-                    <label className="text-[10px] uppercase tracking-widest text-text-muted">DXCC Ignore Mode</label>
-                    <span className="text-[9px] text-text-muted">Count DXCC/callsigns as worked per band, any mode</span>
-                 </div>
-                 <button
-                    onClick={() => setDxccIgnoreMode(!dxccIgnoreMode)}
-                    className={`bg-app border rounded px-3 py-1 text-xs font-mono focus:outline-none transition-colors ${dxccIgnoreMode ? 'border-[#4caf50] text-[#4caf50]' : 'border-border-input text-text-main'}`}
-                 >
-                    {dxccIgnoreMode ? 'Enabled' : 'Disabled'}
-                 </button>
-              </div>
-
               {/* Cloudlog/Wavelog, External Data Stream, PSKReporter and Audio Input/Output
                   settings removed with the local brain (Task 6); Task 13 re-adds a
                   server-driven settings section. */}
@@ -1443,8 +1388,8 @@ export default function App() {
 
               <div>
                 <h3 className="font-bold text-green-600 dark:text-[#4caf50] mb-1">3. Operations</h3>
-                <p>Select your band using the pill buttons and choose <strong>FT8</strong> or <strong>FT4</strong> mode. FT8 decodes at :00, :15, :30, :45; FT4 decodes at :00, :07, :15, :22, :30, :37, :45, :52.</p>
-                <p>Both modes rely strictly on synchronized UTC time — verify your system clock is accurate.</p>
+                <p>Select your band using the pill buttons (FT8 mode only; the server tunes the rig). FT8 decodes at :00, :15, :30, :45.</p>
+                <p>FT8 relies strictly on synchronized UTC time — verify your system clock is accurate.</p>
                 <p>Each decoded callsign shows a DXCC entity badge and an <strong>N</strong> (new) or <strong>W</strong> (worked) indicator for the current band and mode.</p>
                 <p>Enable TX and the FSM will automatically manage CQ, grid exchange, SNR report, and 73.</p>
               </div>
