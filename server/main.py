@@ -977,6 +977,14 @@ def create_server(
                 await send(msg)
             return await super().__call__(scope, receive, _send)
     app.mount("/static", _NoCacheStaticFiles(directory=_static_dir_v), name="static")
+
+    _desktop_dir_v = _desktop_dist_dir()
+    if os.path.isdir(_desktop_dir_v):
+        app.mount(
+            "/desktop",
+            _NoCacheStaticFiles(directory=_desktop_dir_v, html=True),
+            name="desktop",
+        )
     return app
 
 
@@ -984,6 +992,12 @@ def _static_dir() -> str:
     from pathlib import Path
 
     return str(Path(__file__).resolve().parent / "web" / "static")
+
+
+def _desktop_dist_dir() -> str:
+    from pathlib import Path
+
+    return str(Path(__file__).resolve().parent.parent / "desktop" / "ft8web" / "dist")
 
 
 def _record_last_tx(state: AppState, slot_id: int, message: str, freq_hz: float) -> None:

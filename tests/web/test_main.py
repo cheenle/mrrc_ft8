@@ -566,3 +566,11 @@ def test_auto_call_reply_defaults_frequency_without_decode_freq() -> None:
         }
     )
     assert captured["tx_frequency"] == 1500.0
+
+
+def test_desktop_mount_serves_client() -> None:
+    app = create_server(make_config(), start_dsp=False, start_audio=False)
+    with TestClient(app, base_url="https://testserver") as client:
+        response = client.get("/desktop/")
+        assert response.status_code == 200
+        assert "MRRC-FT8 Desktop" in response.text
