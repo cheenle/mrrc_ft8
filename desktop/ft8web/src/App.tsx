@@ -1,24 +1,14 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Activity, Settings, X, HelpCircle } from 'lucide-react';
-import { getCaptureWorkletUrl } from './AudioWorkletBlob';
-import { encodeFT8, encodeFT4 } from '@e04/ft8ts';
-import CatManager from './CatManager.js';
-import { UniversalSerialPort, WebSocketSerialPort } from './UniversalSerialPort';
-import FT8FSM, { QueuedCaller } from './FT8FSM';
 
 import { LogBookViewer } from './components/LogBookViewer';
 import { LoginView } from './components/LoginView';
 import { VersionInfo } from './components/VersionInfo';
 import { WhatsNewModal } from './components/WhatsNewModal';
 import { CHANGELOG, LATEST_UPDATE, type ChangelogEntry } from './changelog';
-import { logBook, QSO } from './LogBook';
-import { CloudLogService } from './services/CloudLogService';
-import { LogbookService } from './services/LogbookService';
-import { dxccService } from './services/DxccService';
-import { externalStream } from './services/ExternalStreamService';
-import { pskReporter, PSKReporterService } from './services/PSKReporterService';
 import { extractTransmitterCallsign } from './services/pskReporterSpot';
 import { mrrc } from './services/mrrcClient';
+import { useServerFT8 } from './services/useServerFT8';
 
 export interface FT8DecodedMessage {
   time: string;
@@ -29,51 +19,6 @@ export interface FT8DecodedMessage {
   isDivider?: boolean;
   isTx?: boolean;
   isIncoming?: boolean;
-}
-
-// --- Compound-callsign hash persistence ------------------------------------
-// The decode worker's HashCallBook resolves hashed (non-standard) callsigns, but
-// it lives only in worker memory and is lost on reload. We persist the compound
-// callsigns we encounter here (workers have no localStorage) and replay them into
-// a freshly-created worker so "<...>" resolves to the real call right away.
-const HASH_CALLS_KEY = 'ft8_hashcalls';
-const HASH_CALLS_MAX = 200;
-
-function loadPersistedHashCalls(): string[] {
-  try {
-    const raw = localStorage.getItem(HASH_CALLS_KEY);
-    const arr = raw ? JSON.parse(raw) : [];
-    return Array.isArray(arr) ? arr.filter((c: unknown): c is string => typeof c === 'string') : [];
-  } catch {
-    return [];
-  }
-}
-
-/** Persist compound (contains '/') callsigns for cross-session hash priming. */
-function rememberHashCalls(calls: string[]): void {
-  const compound = calls
-    .map(c => c.replace(/[<>]/g, '').trim().toUpperCase())
-    .filter(c => c.includes('/') && c.length >= 3 && !c.includes('...'));
-  if (compound.length === 0) return;
-  try {
-    const existing = loadPersistedHashCalls();
-    // Most-recent-first, de-duplicated, capped.
-    const merged = [...new Set([...compound, ...existing])].slice(0, HASH_CALLS_MAX);
-    if (merged.length !== existing.length || merged.some((c, i) => c !== existing[i])) {
-      localStorage.setItem(HASH_CALLS_KEY, JSON.stringify(merged));
-    }
-  } catch {
-    /* ignore quota/serialization errors */
-  }
-}
-
-/** Extract callsign-like tokens (including compound ones) from a decoded message. */
-function callsignTokens(message: string): string[] {
-  return message
-    .trim()
-    .split(/\s+/)
-    .map(t => t.replace(/[<>]/g, '').toUpperCase())
-    .filter(t => /[A-Z]/.test(t) && /\d/.test(t) && t !== 'RR73' && !t.includes('...'));
 }
 
 // --- Advisory clock-accuracy check (SNTP-style over HTTP) -------------------
@@ -201,21 +146,15 @@ export default function App() {
 
   // Global Audio State
   const [audioActive, setAudioActive] = useState(false);
-  const [audioLevel, setAudioLevel] = useState(0);
   const [utcTime, setUtcTime] = useState('00:00:00');
   const [windowProgress, setWindowProgress] = useState(0);
   const [clockVerdict, setClockVerdict] = useState<ClockVerdict>({ status: 'unknown', offsetMs: 0, message: 'Checking\u2026' });
-  
-  // Device Selection State
-  const [audioDevices, setAudioDevices] = useState<MediaDeviceInfo[]>([]);
-  const [selectedDeviceId, setSelectedDeviceId] = useState<string>(() => localStorage.getItem('ft8_audioInputId') || '');
-  const [audioOutputs, setAudioOutputs] = useState<MediaDeviceInfo[]>([]);
-  const [selectedOutputDeviceId, setSelectedOutputDeviceId] = useState<string>(() => localStorage.getItem('ft8_audioOutputId') || 'default');
 
-  useEffect(() => {
-    localStorage.setItem('ft8_audioInputId', selectedDeviceId);
-    localStorage.setItem('ft8_audioOutputId', selectedOutputDeviceId);
-  }, [selectedDeviceId, selectedOutputDeviceId]);
+  // Server connection (Task 5 hook). audioActive mirrors the server connection
+  // and doubles as the "connected" lamp (Task 10 replaces the VU/interlock area).
+  const handleLoggedOut = useCallback(() => { setLoggedIn(false); }, []);
+  const { connected } = useServerFT8({ onLoggedOut: handleLoggedOut });
+  useEffect(() => { setAudioActive(connected); }, [connected]);
 
   // Advisory clock-accuracy check: measures device-clock drift vs a trusted
   // network source and updates the status light. Never sets the system clock.
@@ -270,10 +209,6 @@ export default function App() {
       return localStorage.getItem('ft8_skipTx1Grid') === 'true';
   });
 
-  // Keep a Set of callsigns worked before on the current band & mode
-  const [workedCallsigns, setWorkedCallsigns] = useState<Set<string>>(new Set());
-  const [dxccReady, setDxccReady] = useState(false);
-  const [workedDxccEntities, setWorkedDxccEntities] = useState<Set<string>>(new Set());
   const [dxccIgnoreMode, setDxccIgnoreMode] = useState<boolean>(() => {
     return localStorage.getItem('ft8_dxccIgnoreMode') === 'true';
   });
@@ -295,209 +230,21 @@ export default function App() {
       return "";
   }, []);
 
-  const loadWorkedCallsigns = useCallback(async () => {
-    const currentBand = getBandFromFreq(vfoFreq);
-    const set = await LogbookService.getWorkedCallsigns(currentBand, mode, dxccIgnoreMode);
-    setWorkedCallsigns(set);
-  }, [vfoFreq, getBandFromFreq, mode, dxccIgnoreMode]);
-
-  useEffect(() => {
-    loadWorkedCallsigns();
-  }, [loadWorkedCallsigns]);
-
-  useEffect(() => {
-    const handleQsoChange = () => {
-      loadWorkedCallsigns();
-    };
-    window.addEventListener('qso-logged', handleQsoChange);
-    return () => {
-      window.removeEventListener('qso-logged', handleQsoChange);
-    };
-  }, [loadWorkedCallsigns]);
-
-  const backfillDxcc = async (): Promise<void> => {
-    const qsos = await logBook.getAllQSOs();
-    for (const qso of qsos) {
-      if (qso.dxcc === undefined) {
-        const entity = dxccService.lookup(qso.call);
-        if (entity) await logBook.updateQSO({ ...qso, dxcc: entity.adifCode }).catch(() => {});
-      }
-    }
-  };
-
-  const loadWorkedDxccEntities = useCallback(async () => {
-    if (!dxccService.loaded) return;
-    const currentBand = getBandFromFreq(vfoFreq);
-    const qsos = await logBook.getAllQSOs();
-    const worked = new Set<string>();
-    for (const qso of qsos) {
-      const qsoBand = (qso.band || '').trim().toUpperCase();
-      const qsoMode = (qso.mode || '').trim().toUpperCase();
-      if (qsoBand !== currentBand.toUpperCase()) continue;
-      if (!dxccIgnoreMode && qsoMode !== mode.toUpperCase()) continue;
-      const entity = dxccService.lookup(qso.call);
-      if (entity) worked.add(entity.primaryPrefix);
-    }
-    setWorkedDxccEntities(worked);
-  }, [vfoFreq, getBandFromFreq, mode, dxccIgnoreMode]);
-
-  useEffect(() => {
-    dxccService.load().then(async () => {
-      if (!dxccService.loaded) { setDxccReady(true); return; }
-      try {
-        await backfillDxcc();
-        await loadWorkedDxccEntities();
-      } catch (e) {
-        console.warn('[DXCC] Init failed:', e);
-      }
-      setDxccReady(true);
-    });
-  }, []);
-
-  useEffect(() => {
-    if (!dxccReady) return;
-    loadWorkedDxccEntities();
-  }, [loadWorkedDxccEntities, dxccReady]);
-
-  useEffect(() => {
-    if (!dxccReady) return;
-    window.addEventListener('qso-logged', loadWorkedDxccEntities);
-    return () => window.removeEventListener('qso-logged', loadWorkedDxccEntities);
-  }, [loadWorkedDxccEntities, dxccReady]);
-
-  const [catMode, setCatMode] = useState<'manual'|'kenwood'|'yaesu'|'old-yaesu'|'elecraft'|'qdx'|'icom'|'icom-ws'>(() => {
-    const saved = localStorage.getItem('ft8_catMode') as 'manual'|'kenwood'|'yaesu'|'old-yaesu'|'elecraft'|'qdx'|'icom'|'icom-ws';
-    const isAndroid = /Android/i.test(navigator.userAgent);
-    if (isAndroid && saved === 'qdx') {
-      return 'manual';
-    }
-    return saved || 'manual';
-  });
-  const [catBaudRate, setCatBaudRate] = useState<number>(() => {
-    const saved = localStorage.getItem('ft8_catBaudRate');
-    return saved ? Number(saved) : 38400;
-  });
-  const [icomAddress, setIcomAddress] = useState<string>(() => {
-    return localStorage.getItem('ft8_icomAddress') || '94';
-  });
-  const [civWsUrl, setCivWsUrl] = useState<string>(() => {
-    return localStorage.getItem('ft8_civWsUrl') || 'ws://192.168.1.1/ws-cat';
-  });
-  const [cp2105Channel, setCp2105Channel] = useState<0 | 1>(() => {
-    return (Number(localStorage.getItem('ft8_cp2105Channel')) || 0) as 0 | 1;
-  });
-  const [isDualPort, setIsDualPort] = useState<boolean>(false);
 
   const [maxLogEntries, setMaxLogEntries] = useState<number>(() => {
     const saved = localStorage.getItem('ft8_maxLogEntries');
     return saved ? Number(saved) : 50;
   });
 
-  const [wavelogEnabled, setWavelogEnabled] = useState<boolean>(() => {
-    return localStorage.getItem('ft8_wavelogEnabled') === 'true';
-  });
-  const [autoUploadCloudlog, setAutoUploadCloudlog] = useState<boolean>(() => {
-    const saved = localStorage.getItem('ft8_autoUploadCloudlog');
-    return saved !== null ? saved === 'true' : true;
-  });
-  const [wavelogUrl, setWavelogUrl] = useState<string>(() => {
-    return localStorage.getItem('ft8_wavelogUrl') || '';
-  });
-  const [wavelogApiKey, setWavelogApiKey] = useState<string>(() => {
-    return localStorage.getItem('ft8_wavelogApiKey') || '';
-  });
-  const [wavelogStationProfileId, setWavelogStationProfileId] = useState<string>(() => {
-    return localStorage.getItem('ft8_wavelogStationProfileId') || '';
-  });
-
-  const [streamEnabled, setStreamEnabled] = useState<boolean>(() => {
-    return localStorage.getItem('ft8_streamEnabled') === 'true';
-  });
-  const [streamUrl, setStreamUrl] = useState<string>(() => {
-    return localStorage.getItem('ft8_streamUrl') || 'ws://localhost:2442';
-  });
-  const [streamConnected, setStreamConnected] = useState<boolean>(false);
-  const streamUrlValid = (() => {
-    try {
-      const u = new URL(streamUrl);
-      return (u.protocol === 'ws:' || u.protocol === 'wss:') &&
-             (u.hostname === 'localhost' || u.hostname === '127.0.0.1');
-    } catch { return false; }
-  })();
-  useEffect(() => {
-    localStorage.setItem('ft8_streamEnabled', String(streamEnabled));
-    localStorage.setItem('ft8_streamUrl', streamUrl);
-    externalStream.configure(streamEnabled, streamUrlValid ? streamUrl : '');
-  }, [streamEnabled, streamUrl, streamUrlValid]);
-  useEffect(() => {
-    externalStream.onStateChange = setStreamConnected;
-    return () => { externalStream.onStateChange = () => {}; };
-  }, []);
-
-  // PSKReporter spotting — opt-in, off by default. Uses myCall/myGrid identity.
-  const [pskEnabled, setPskEnabled] = useState<boolean>(() => {
-    return localStorage.getItem('ft8_pskEnabled') === 'true';
-  });
-  const [pskSpotsSent, setPskSpotsSent] = useState<number>(0);
-  const pskIdentityValid = PSKReporterService.canReport(myCall, myGrid);
-  useEffect(() => {
-    localStorage.setItem('ft8_pskEnabled', String(pskEnabled));
-    pskReporter.configure(pskEnabled);
-  }, [pskEnabled]);
-  useEffect(() => {
-    pskReporter.onReport = setPskSpotsSent;
-    return () => { pskReporter.onReport = () => {}; };
-  }, []);
-
-  const [decodeStats, setDecodeStats] = useState<{ count: number, durationMs: number } | null>(null);
 
   const [theme, setTheme] = useState<'dark' | 'light'>(() => {
     return (localStorage.getItem('ft8_theme') as 'dark' | 'light') || 'dark';
   });
 
-  const [wakeLockEnabled, setWakeLockEnabled] = useState<boolean>(() => {
-    return localStorage.getItem('ft8_wakelock') === 'true';
-  });
-  
   useEffect(() => {
     localStorage.setItem('ft8_theme', theme);
     document.documentElement.setAttribute('data-theme', theme);
   }, [theme]);
-
-  useEffect(() => {
-    localStorage.setItem('ft8_wakelock', String(wakeLockEnabled));
-    let wakeLock: any = null;
-    let isMounted = true;
-    
-    const requestWakeLock = async () => {
-      try {
-        if ('wakeLock' in navigator && wakeLockEnabled) {
-          wakeLock = await (navigator as any).wakeLock.request('screen');
-        }
-      } catch (err) {
-        console.error('Wake Lock request failed:', err);
-      }
-    };
-
-    if (wakeLockEnabled) {
-      requestWakeLock();
-      
-      const handleVisibilityChange = () => {
-        if (wakeLock !== null && document.visibilityState === 'visible') {
-           requestWakeLock();
-        }
-      };
-      document.addEventListener('visibilitychange', handleVisibilityChange);
-      
-      return () => {
-        isMounted = false;
-        document.removeEventListener('visibilitychange', handleVisibilityChange);
-        if (wakeLock !== null) {
-          wakeLock.release().catch(console.error);
-        }
-      }
-    }
-  }, [wakeLockEnabled]);
 
   useEffect(() => {
       localStorage.setItem('ft8_myCall', myCall);
@@ -506,20 +253,10 @@ export default function App() {
       localStorage.setItem('ft8_decodeDepth', decodeDepth.toString());
       localStorage.setItem('ft8_maxRetries', maxRetries.toString());
       localStorage.setItem('ft8_finalMessageMode', finalMessageMode);
-      localStorage.setItem('ft8_catMode', catMode);
-      localStorage.setItem('ft8_catBaudRate', catBaudRate.toString());
-      localStorage.setItem('ft8_icomAddress', icomAddress);
-      localStorage.setItem('ft8_civWsUrl', civWsUrl);
-      localStorage.setItem('ft8_cp2105Channel', cp2105Channel.toString());
       localStorage.setItem('ft8_maxLogEntries', maxLogEntries.toString());
-      localStorage.setItem('ft8_wavelogEnabled', String(wavelogEnabled));
-      localStorage.setItem('ft8_autoUploadCloudlog', String(autoUploadCloudlog));
-      localStorage.setItem('ft8_wavelogUrl', wavelogUrl);
-      localStorage.setItem('ft8_wavelogApiKey', wavelogApiKey);
-      localStorage.setItem('ft8_wavelogStationProfileId', wavelogStationProfileId);
       localStorage.setItem('ft8_skipTx1Grid', String(skipTx1Grid));
       localStorage.setItem('ft8_dxccIgnoreMode', String(dxccIgnoreMode));
-  }, [myCall, myGrid, txFreq, decodeDepth, maxRetries, finalMessageMode, catMode, catBaudRate, icomAddress, civWsUrl, cp2105Channel, maxLogEntries, wavelogEnabled, autoUploadCloudlog, wavelogUrl, wavelogApiKey, wavelogStationProfileId, skipTx1Grid, dxccIgnoreMode]);
+  }, [myCall, myGrid, txFreq, decodeDepth, maxRetries, finalMessageMode, maxLogEntries, skipTx1Grid, dxccIgnoreMode]);
 
   // UI State
   const [showSettings, setShowSettings] = useState(false);
@@ -563,130 +300,16 @@ export default function App() {
     localStorage.setItem('ft8_lastSeenUpdate', LATEST_UPDATE);
     setWhatsNewEntries([]);
   }, []);
-  const [serialPort, setSerialPort] = useState<any>(null);
-  const [catTestResult, setCatTestResult] = useState<string | null>(null);
-  const [catConnected, setCatConnected] = useState<boolean>(false);
   const vfoFreqRef = useRef(14074000);
-  
+
   useEffect(() => {
     vfoFreqRef.current = vfoFreq;
   }, [vfoFreq]);
-
-  const catRef = useRef<CatManager | null>(null);
-
-  // Auto-connect to previously permitted serial port if any, or WebSocket for icom-ws
-  useEffect(() => {
-    if (catMode === 'icom-ws') {
-      if (civWsUrl) setSerialPort(new WebSocketSerialPort(civWsUrl));
-    } else if ('serial' in navigator && catMode !== 'manual') {
-      (navigator as any).serial.getPorts().then((ports: any[]) => {
-        if (ports.length > 0) {
-          setSerialPort(ports[0]);
-        }
-      }).catch(console.error);
-    }
-  }, []);
-
-  const initCatManager = async (port: any) => {
-    try {
-      const parsedAddr = parseInt(icomAddress, 16);
-      const cat = new CatManager({ 
-        mode: catMode, 
-        icomAddress: isNaN(parsedAddr) ? 0x94 : parsedAddr,
-        baudRate: catBaudRate
-      } as any);
-      await cat.connect(port);
-      catRef.current = cat;
-      setCatConnected(true);
-      return cat;
-    } catch (e: any) {
-      console.error("CAT Init error:", e);
-      setCatConnected(false);
-      throw e;
-    }
-  };
-
-  // Poll CAT frequency
-  useEffect(() => {
-    if (!serialPort || catMode === 'manual') {
-      if (catRef.current) {
-        catRef.current.disconnect().catch(err => console.error("Error disconnecting CAT:", err));
-        catRef.current = null;
-        setCatConnected(false);
-      }
-      return;
-    }
-
-    let interval: any;
-    let isActive = true;
-
-    const startPolling = () => {
-      interval = setInterval(() => {
-        if (catRef.current && isActive) {
-          catRef.current.getFrequency()
-            .then(freq => {
-              if (freq > 0 && isActive) setVfoFreq(freq);
-            })
-            .catch(() => {});
-        }
-      }, 2000);
-    };
-
-    const init = async () => {
-      // Disconnect current driver cleanly first
-      if (catRef.current) {
-        await catRef.current.disconnect().catch(() => {});
-        catRef.current = null;
-        setCatConnected(false);
-      }
-
-      if (!isActive) return;
-      try {
-        await initCatManager(serialPort);
-        if (isActive) {
-          startPolling();
-        }
-      } catch (err: any) {
-        if (isActive) {
-          setCatTestResult("Auto-init error: " + err.message);
-          setCatConnected(false);
-        }
-      }
-    };
-
-    init();
-
-    return () => {
-      isActive = false;
-      if (interval) clearInterval(interval);
-      if (catRef.current) {
-        const oldCat = catRef.current;
-        catRef.current = null;
-        setCatConnected(false);
-        oldCat.disconnect().catch(err => console.error("Error disconnecting on cleanup:", err));
-      }
-    };
-  }, [serialPort, catMode, catBaudRate, icomAddress, civWsUrl]);
-
-  // When the user changes the CP2105 channel while a dual-port device is already
-  // selected, swap to a new wrapper using the same USB device — no picker shown.
-  useEffect(() => {
-    if (!isDualPort || !serialPort || !serialPort.withChannel) return;
-    const newPort = serialPort.withChannel(cp2105Channel);
-    if (catRef.current) {
-      catRef.current.disconnect().catch(() => {});
-      catRef.current = null;
-    }
-    setSerialPort(newPort);
-  }, [cp2105Channel]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const selectBand = (hz: number) => {
     setVfoFreq(hz);
     setRxLog([]);
     setQsoLog([]);
-    if (catRef.current && catMode !== 'manual') {
-      catRef.current.setFrequency(hz).catch(e => console.error("CAT Set Freq Error:", e));
-    }
   };
 
   const commitVfoInput = () => {
@@ -701,65 +324,6 @@ export default function App() {
     return hz.toLocaleString('en-US').replace(/,/g, '.') + ' Hz';
   };
 
-  const handleSelectSerialPort = async () => {
-    try {
-      const serialFilters = [
-        { usbVendorId: 0x10C4, vendorId: 4292 }, // Silicon Labs CP210x
-        { usbVendorId: 0x1A86, vendorId: 6790 }, // Qinheng CH34x
-        { usbVendorId: 0x0403, vendorId: 1027 }, // FTDI
-        { usbVendorId: 0x067B, vendorId: 1659 },  // Prolific PL2303
-        { usbVendorId: 0x0C26, vendorId: 3110 },  // Icom Inc. IC-7300 MKII
-        { usbVendorId: 0x0483, vendorId: 1155 }   // STMicroelectronics (QDX)
-      ];
-
-      const port = await UniversalSerialPort.requestPort({ filters: serialFilters, channelIndex: cp2105Channel });
-
-      // Cleanly disconnect old port before switching to a new selected port
-      if (catRef.current) {
-        await catRef.current.disconnect().catch(() => {});
-        catRef.current = null;
-      }
-
-      setIsDualPort(port.isDualPort ?? false);
-      setSerialPort(port);
-      setCatTestResult("Port selected successfully. Ready to test.");
-    } catch (e: any) {
-      console.error("Failed to select serial port:", e);
-      setCatTestResult(`Port selection failed: ${e.message || e}`);
-    }
-  };
-
-  const handleConnectCivWs = () => {
-    if (catRef.current) {
-      catRef.current.disconnect().catch(() => {});
-      catRef.current = null;
-    }
-    setSerialPort(new WebSocketSerialPort(civWsUrl));
-    setCatTestResult('Connecting to ' + civWsUrl + '...');
-  };
-
-  const handleTestCat = async () => {
-    if (!serialPort) {
-      setCatTestResult("Please select a serial port first.");
-      return;
-    }
-    
-    try {
-      setCatTestResult("Testing connection...");
-      let cat = catRef.current;
-      if (!cat) {
-        cat = await initCatManager(serialPort);
-      }
-      
-      const freq = await cat.getFrequency();
-      setCatTestResult(`Success! Freq: ${freq} Hz`);
-      setVfoFreq(freq);
-    } catch (e: any) {
-      console.error("CAT Test error:", e);
-      setCatTestResult("Error: " + e.message);
-    }
-  };
-  
   // App State
   const [rxLog, setRxLog] = useState<FT8DecodedMessage[]>([]);
   const [qsoLog, setQsoLog] = useState<FT8DecodedMessage[]>([]);
@@ -777,53 +341,17 @@ export default function App() {
     return saved !== null ? saved === 'true' : true;
   });
   const [fsmState, setFsmState] = useState<string>('IDLE');
-  const [fsmQueue, setFsmQueue] = useState<QueuedCaller[]>([]);
-  const fsmRef = useRef<FT8FSM | null>(null);
+  // fsmRef was removed with the local FSM (Task 6). fsmQueue stays for the footer
+  // render below and remains empty until Task 9/10 rewires it to the server.
+  const [fsmQueue, setFsmQueue] = useState<{ callsign: string; report?: string | null; distance?: number }[]>([]);
 
   useEffect(() => {
     localStorage.setItem('ft8_autoSequence', String(autoSequence));
   }, [autoSequence]);
 
-  const txFreqRef = useRef<number>(txFreq);
-  useEffect(() => {
-    txFreqRef.current = txFreq;
-  }, [txFreq]);
-
-  // Component unmount PTT cleanup
-  useEffect(() => {
-    return () => {
-      if (catRef.current && catMode !== 'manual') {
-        catRef.current.setTx(false).catch(() => {});
-      }
-    };
-  }, [catMode]);
-
-  // Cloudlog Syncing Hook
-  useEffect(() => {
-    const handleOnline = async () => {
-      if (wavelogEnabled) {
-        await CloudLogService.syncOfflineQueue({
-          wavelogEnabled,
-          wavelogUrl,
-          wavelogApiKey,
-          wavelogStationProfileId
-        });
-        // Trigger UI refresh
-        if (typeof (window as any).refreshQsoLogbookUi === 'function') {
-           (window as any).refreshQsoLogbookUi();
-        }
-      }
-    };
-    window.addEventListener('online', handleOnline);
-    return () => window.removeEventListener('online', handleOnline);
-  }, [wavelogEnabled, wavelogUrl, wavelogApiKey, wavelogStationProfileId]);
-
-  // Refs for Worker Access
+  // State mirrors retained for later tasks (Task 10 reads myCall/myGrid via refs).
   const myCallRef = useRef<string>(myCall);
   const myGridRef = useRef<string>(myGrid);
-  const targetCallRef = useRef<string>('');
-  const txPeriodRef = useRef<number>(txPeriod);
-  const autoSequenceRef = useRef<boolean>(autoSequence);
 
   useEffect(() => {
     myCallRef.current = myCall;
@@ -832,319 +360,15 @@ export default function App() {
   useEffect(() => {
     myGridRef.current = myGrid;
   }, [myGrid]);
-  
-  useEffect(() => {
-    targetCallRef.current = targetCall;
-  }, [targetCall]);
-
-  useEffect(() => {
-    txPeriodRef.current = txPeriod;
-  }, [txPeriod]);
 
   const modeRef = useRef<'FT8' | 'FT4'>(mode);
   useEffect(() => { modeRef.current = mode; }, [mode]);
 
   useEffect(() => { isTransmittingRef.current = isTransmitting; }, [isTransmitting]);
 
-  useEffect(() => {
-    autoSequenceRef.current = autoSequence;
-  }, [autoSequence]);
-
-  const wavelogEnabledRef = useRef<boolean>(wavelogEnabled);
-  const autoUploadCloudlogRef = useRef<boolean>(autoUploadCloudlog);
-  const wavelogUrlRef = useRef<string>(wavelogUrl);
-  const wavelogApiKeyRef = useRef<string>(wavelogApiKey);
-  const wavelogStationProfileIdRef = useRef<string>(wavelogStationProfileId);
-
-  useEffect(() => {
-    wavelogEnabledRef.current = wavelogEnabled;
-  }, [wavelogEnabled]);
-
-  useEffect(() => {
-    autoUploadCloudlogRef.current = autoUploadCloudlog;
-  }, [autoUploadCloudlog]);
-
-  useEffect(() => {
-    wavelogUrlRef.current = wavelogUrl;
-  }, [wavelogUrl]);
-
-  useEffect(() => {
-    wavelogApiKeyRef.current = wavelogApiKey;
-  }, [wavelogApiKey]);
-
-  useEffect(() => {
-    wavelogStationProfileIdRef.current = wavelogStationProfileId;
-  }, [wavelogStationProfileId]);
-
-  // Push a status snapshot to the external stream whenever rig/operator
-  // state changes (equivalent of the WSJT-X UDP Status message). The
-  // service caches the latest snapshot and replays it on (re)connect.
-  useEffect(() => {
-    externalStream.sendStatus({
-      dialFreqHz: vfoFreq,
-      mode,
-      myCall,
-      myGrid,
-      txFreqHz: txFreq,
-      txEnabled,
-      transmitting: isTransmitting,
-      dxCall: targetCall,
-    });
-  }, [vfoFreq, mode, myCall, myGrid, txFreq, txEnabled, isTransmitting, targetCall]);
-
-  // Core References
-
-  const mediaStreamRef = useRef<MediaStream | null>(null);
-  const sourceNodeRef = useRef<MediaStreamAudioSourceNode | null>(null);
-  const captureNodeRef = useRef<AudioWorkletNode | null>(null);
-  const txSourceNodeRef = useRef<AudioBufferSourceNode | null>(null);
-  const queuedTxMessageRef = useRef<string | null>(null);
-
-  const startTx = useCallback(async (message: string) => {
-    setIsTransmitting(true);
-    
-    // Add to QSO Log (only if not handled automatically by FSM)
-    if (!autoSequenceRef.current) {
-        setQsoLog(prev => {
-            const now = new Date();
-            const nowString = now.toISOString().substring(11, 19).replace(/:/g, '');
-            return [{
-                time: nowString,
-                snr: 0,
-                freq: txFreqRef.current,
-                message: "-> " + message,
-                isTx: true
-            }, ...prev].slice(0, 100);
-        });
-    }
-
-    let audioFreq = txFreqRef.current;
-    if (catRef.current && catMode !== 'manual') {
-        try {
-            console.log(`[CAT TX] Keying transceiver with waterfall freq ${txFreqRef.current} Hz`);
-            const retFreq = await catRef.current.setTx(true, txFreqRef.current);
-            if (typeof retFreq === 'number') {
-                audioFreq = retFreq;
-                console.log(`[CAT TX] "Fake Split" center optimization active. Transmit audio modulated to ${audioFreq} Hz`);
-            }
-        } catch (err: any) {
-            console.error("[CAT TX] PTT keying failed:", err);
-        }
-    }
-
-    const ctx = audioCtxRef.current;
-    if (ctx && ctx.state !== 'suspended') {
-        if (typeof (ctx as any).setSinkId === 'function') {
-            (ctx as any).setSinkId(selectedOutputDeviceId).catch((e: any) => console.error("setSinkId fail:", e));
-        }
-        
-        try {
-            const audioData = modeRef.current === 'FT4'
-              ? encodeFT4(message, { sampleRate: ctx.sampleRate, baseFrequency: audioFreq })
-              : encodeFT8(message, { sampleRate: ctx.sampleRate, baseFrequency: audioFreq });
-            
-            const audioBuffer = ctx.createBuffer(1, audioData.length, ctx.sampleRate);
-            audioBuffer.copyToChannel(audioData, 0);
-            
-            const sourceNode = ctx.createBufferSource();
-            sourceNode.buffer = audioBuffer;
-            
-            const gain = ctx.createGain();
-            gain.gain.setValueAtTime(1, ctx.currentTime);
-            
-            sourceNode.connect(gain);
-            gain.connect(ctx.destination);
-            
-            sourceNode.start(ctx.currentTime);
-            txSourceNodeRef.current = sourceNode;
-            
-            sourceNode.onended = () => {
-                setIsTransmitting(false);
-                txSourceNodeRef.current = null;
-                if (catRef.current && catMode !== 'manual') {
-                    console.log("[CAT TX] Transmission complete, unkeying standard...");
-                    catRef.current.setTx(false).catch((err: any) => console.error("CAT setTx RX error:", err));
-                }
-            };
-        } catch (err) {
-            console.error("FT8 Encoding Error:", err);
-            setIsTransmitting(false);
-            if (catRef.current && catMode !== 'manual') {
-                catRef.current.setTx(false).catch(() => {});
-            }
-        }
-    } else {
-        setIsTransmitting(false);
-        if (catRef.current && catMode !== 'manual') {
-            catRef.current.setTx(false).catch(() => {});
-        }
-    }
-  }, [catMode, selectedOutputDeviceId]);
-
-  // Clean up any active TX
-  const stopTx = useCallback(() => {
-    queuedTxMessageRef.current = null;
-    if (txSourceNodeRef.current) {
-        try {
-            txSourceNodeRef.current.stop();
-        } catch (e) {}
-        try {
-            txSourceNodeRef.current.disconnect();
-        } catch (e) {}
-        txSourceNodeRef.current = null;
-    }
-    setIsTransmitting(false);
-    setIsTxQueued(false);
-    if (catRef.current && catMode !== 'manual') {
-        catRef.current.setTx(false).catch((err: any) => console.error("CAT setTx RX error:", err));
-    }
-  }, [catMode]);
-
-  // Monitor txEnabled toggle for stopping TX
-  useEffect(() => {
-    if (!txEnabled && (isTransmitting || isTxQueued)) {
-        stopTx();
-    }
-  }, [txEnabled, isTransmitting, isTxQueued, stopTx]);
-  const audioCtxRef = useRef<AudioContext | null>(null);
-  const analyserRef = useRef<AnalyserNode | null>(null);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
-  const rxBufferRef = useRef<Float32Array>(new Float32Array(0));
-  const workerRef = useRef<Worker | null>(null);
   const lastDrawTimeRef = useRef<number>(0);
   const waterfallRowsRef = useRef<number>(0);
-  const pendingMarkersRef = useRef<{ atRow: number; label: string }[]>([]);
-
-  const getDevices = async () => {
-    try {
-        const devices = await navigator.mediaDevices.enumerateDevices();
-        const inputs = devices.filter(d => d.kind === 'audioinput');
-        const outputs = devices.filter(d => d.kind === 'audiooutput');
-        setAudioDevices(inputs);
-        setAudioOutputs(outputs);
-        if (inputs.length > 0) {
-            setSelectedDeviceId(prev => {
-                if (prev && inputs.some(a => a.deviceId === prev)) return prev;
-                return inputs[0].deviceId;
-            });
-        }
-        if (outputs.length > 0) {
-            setSelectedOutputDeviceId(prev => {
-                if (prev && outputs.some(a => a.deviceId === prev)) return prev;
-                return 'default';
-            });
-        }
-    } catch (err) {
-        console.error("Error enumerating devices", err);
-    }
-  };
-
-  // Initialize Web Worker and Devices
-  useEffect(() => {
-    getDevices();
-    navigator.mediaDevices.addEventListener('devicechange', getDevices);
-
-    const worker = new Worker(new URL('./ft8-worker.ts', import.meta.url), { type: 'module' });
-    // Prime the worker's HashCallBook with our own call plus previously-seen
-    // compound calls so hashed callsigns resolve immediately after a reload.
-    const primeCalls = [...new Set([myCallRef.current, ...loadPersistedHashCalls()].filter(Boolean))];
-    if (primeCalls.length > 0) {
-      worker.postMessage({ type: 'INIT_HASHES', calls: primeCalls });
-    }
-    worker.onmessage = (e) => {
-      if (e.data.type === 'DECODED') {
-        if (e.data.durationMs !== undefined) {
-            setDecodeStats({ count: e.data.count, durationMs: e.data.durationMs });
-        }
-        
-        const payload = (e.data.payload || []).map((msg: FT8DecodedMessage) => ({ ...msg }));
-        const _now = new Date();
-        const _totalSec = _now.getUTCSeconds() + _now.getUTCMilliseconds() / 1000;
-        const decPeriodIndex = Math.floor(_totalSec / (modeRef.current === 'FT4' ? 7.5 : 15)) % 2;
-        payload.forEach((msg: FT8DecodedMessage) => { msg.periodIndex = decPeriodIndex; });
-
-        // Persist any compound callsigns seen so they resolve after a reload.
-        if (payload.length > 0) {
-          rememberHashCalls(payload.flatMap((msg: FT8DecodedMessage) => callsignTokens(msg.message)));
-        }
-
-        externalStream.sendDecodes(payload, vfoFreqRef.current, modeRef.current);
-        pskReporter.reportDecodes(payload, vfoFreqRef.current, modeRef.current, {
-          myCall: myCallRef.current,
-          myGrid: myGridRef.current,
-        });
-
-        if (payload.length > 0) {
-            setRxLog(prev => {
-                const timeString = payload[0].time;
-                const formattedTime = timeString.length === 6 
-                    ? `${timeString.substring(0,2)}:${timeString.substring(2,4)}:${timeString.substring(4,6)}` 
-                    : timeString;
-                const divider: FT8DecodedMessage = {
-                    time: timeString,
-                    snr: 0,
-                    freq: 0,
-                    message: `-------- ${formattedTime} UTC --------`,
-                    isDivider: true
-                };
-                const newLog = [divider, ...payload, ...prev];
-                
-                // Keep only the last 4 periods (i.e., up to 4 dividers)
-                let dividerCount = 0;
-                const filteredLog: FT8DecodedMessage[] = [];
-                for (const item of newLog) {
-                    if (item.isDivider) {
-                        dividerCount++;
-                    }
-                    if (dividerCount > 4) {
-                        break;
-                    }
-                    filteredLog.push(item);
-                }
-                return filteredLog;
-            });
-        }
-        
-        if (autoSequenceRef.current && fsmRef.current) {
-            fsmRef.current.onPeriodDecodeReady(payload, decPeriodIndex);
-        } else if (payload.length > 0) {
-            // Route to QSO Log based on rules
-            const incomingQsoMessages = payload.filter((msg: FT8DecodedMessage) => {
-                const myCall = (myCallRef.current || '').replace(/[<>]/g, '').toUpperCase();
-                const targetCall = (targetCallRef.current || '').replace(/[<>]/g, '').toUpperCase();
-
-                // Whole-token, bracket/case-insensitive comparison (a raw substring
-                // test false-matches e.g. OK1CDJ inside OK1CDJX or a grid like JO70).
-                const cleanParts = msg.message.trim().split(/\s+/).map(p => p.replace(/[<>]/g, '').toUpperCase());
-
-                if (myCall && cleanParts.some(p => p === myCall)) return true;
-
-                if (targetCall) {
-                    // Target is the transmitter (2nd token), or CQ/QRZ ... <target>.
-                    if (cleanParts.length >= 2 && cleanParts[1] === targetCall) return true;
-                    if (cleanParts.length >= 3 && (cleanParts[0] === 'CQ' || cleanParts[0] === 'QRZ') && cleanParts[2] === targetCall) return true;
-                }
-
-                return false;
-            }).map((msg: FT8DecodedMessage) => ({ ...msg, message: "<- " + msg.message, isIncoming: true }));
-            
-            if (incomingQsoMessages.length > 0) {
-                setQsoLog(prev => {
-                    const newLog = [...incomingQsoMessages.reverse(), ...prev];
-                    return newLog.slice(0, 100);
-                });
-            }
-        }
-      } else if (e.data.type === 'ERROR') {
-        console.error("FT8 Decode Worker Error:", e.data.error);
-      }
-    };
-    workerRef.current = worker;
-    return () => {
-      navigator.mediaDevices.removeEventListener('devicechange', getDevices);
-      worker.terminate();
-    };
-  }, []);
 
   const drawWaterfall = useCallback((time: number) => {
     // TX Freeze Logic: completely freeze waterfall if Transmitting
@@ -1154,42 +378,31 @@ export default function App() {
     if (time - lastDrawTimeRef.current < 100) return;
     lastDrawTimeRef.current = time;
 
-    if (!analyserRef.current || !canvasRef.current) return;
-    
     const canvas = canvasRef.current;
+    if (!canvas) return;
     const ctx = canvas.getContext('2d', { willReadFrequently: true });
     if (!ctx) return;
-    
-    const analyser = analyserRef.current;
-    const audioCtx = audioCtxRef.current;
-    if (!audioCtx) return;
 
-    const dataArray = new Uint8Array(analyser.frequencyBinCount);
-    analyser.getByteFrequencyData(dataArray);
-    
     const width = canvas.width;
     const height = canvas.height;
-    
-    // Zoom waterfall to exactly 200 to 3000 Hz.
-    const sampleRate = audioCtx.sampleRate;
-    const binSize = sampleRate / analyser.fftSize;
-    const minBinIndex = Math.floor(200 / binSize);
-    const maxBinIndex = Math.floor(3000 / binSize);
-    const binSpan = maxBinIndex - minBinIndex;
-    
+
+    // STUBBED (Task 8): the AnalyserNode pipeline was removed with the local
+    // audio brain. This will be rewired to drain server WF01 frames; for now we
+    // keep the canvas row-scroll + palette mapping and feed it a zeroed row.
+    const dataArray = new Uint8Array(width);
+
     // Shift current canvas image vertically downwards by 1px
     ctx.drawImage(canvas, 0, 0, width, height - 1, 0, 1, width, height - 1);
-    
+
     // Compute the new top row
     const rowImg = ctx.createImageData(width, 1);
     for (let x = 0; x < width; x++) {
-      const binIndex = minBinIndex + Math.floor((x / width) * binSpan);
-      const val = dataArray[binIndex] || 0;
-      
+      const val = dataArray[x] || 0;
+
       const px = x * 4;
       // Smooth color palette: Black -> Blue -> Purple/Red -> Yellow/White
       let r = 0, g = 0, b = 0;
-      
+
       if (val < 50) {
         b = val * 2;
       } else if (val < 100) {
@@ -1203,486 +416,63 @@ export default function App() {
         g = (val - 180) * 3;
         b = (val - 220) * 5 > 0 ? (val - 220) * 5 : 0;
       }
-      
-      rowImg.data[px + 0] = Math.min(255, Math.max(0, r)); 
-      rowImg.data[px + 1] = Math.min(255, Math.max(0, g));   
-      rowImg.data[px + 2] = Math.min(255, Math.max(0, b));                             
-      rowImg.data[px + 3] = 255;                            
+
+      rowImg.data[px + 0] = Math.min(255, Math.max(0, r));
+      rowImg.data[px + 1] = Math.min(255, Math.max(0, g));
+      rowImg.data[px + 2] = Math.min(255, Math.max(0, b));
+      rowImg.data[px + 3] = 255;
     }
-    
+
     ctx.putImageData(rowImg, 0, 0);
 
     // Advance the row counter (naturally pauses during TX since drawWaterfall returns early)
     waterfallRowsRef.current += 1;
-    const totalRows = waterfallRowsRef.current;
-
-    // Prune markers that have scrolled off the bottom of the canvas
-    pendingMarkersRef.current = pendingMarkersRef.current.filter(
-      m => totalRows - m.atRow < height
-    );
-
-    // Draw each queued period marker at its correct canvas Y position
-    for (const marker of pendingMarkersRef.current) {
-      const y = totalRows - marker.atRow;
-      ctx.fillStyle = 'rgba(255, 215, 0, 0.4)';
-      ctx.fillRect(0, y, width, 1);
-      // Draw the timestamp label once, just below the line, when it first enters the canvas
-      if (y <= 1) {
-        ctx.fillStyle = 'rgba(255, 215, 0, 0.9)';
-        ctx.font = '10px "JetBrains Mono", monospace';
-        ctx.fillText(marker.label, 4, y + 12);
-      }
-    }
   }, [mode]);
 
-  const toggleAudio = async (forcedDeviceId?: string) => {
-    const targetDeviceId = typeof forcedDeviceId === 'string' ? forcedDeviceId : selectedDeviceId;
-    
-    // De-activate path
-    if (audioActive && typeof forcedDeviceId === 'undefined') {
-        if (mediaStreamRef.current) {
-            mediaStreamRef.current.getTracks().forEach(t => t.stop());
-            mediaStreamRef.current = null;
-        }
-        if (audioCtxRef.current) {
-            try {
-                await audioCtxRef.current.close();
-            } catch (e) {
-                console.error('[Audio] Error closing context on stop:', e);
-            }
-            audioCtxRef.current = null;
-        }
-        sourceNodeRef.current = null;
-        analyserRef.current = null;
-        captureNodeRef.current = null;
-        setAudioActive(false);
-        setAudioLevel(0);
-        return;
-    }
+  // Local audio capture was removed with the DSP brain (Task 6). audioActive
+  // now mirrors the server connection; this button is a status lamp until
+  // Task 10 rewires the connection UI.
+  const toggleAudio = useCallback(async () => {
+    // Audio input is managed on the station; nothing to toggle here.
+  }, []);
 
-    try {
-      // If there's an active context and we are forcing a change, tear it down first!
-      if (audioCtxRef.current && typeof forcedDeviceId === 'string') {
-        console.log('[Audio] Tearing down old AudioContext before switching devices...');
-        if (mediaStreamRef.current) {
-            mediaStreamRef.current.getTracks().forEach(t => t.stop());
-            mediaStreamRef.current = null;
-        }
-        try {
-            await audioCtxRef.current.close();
-        } catch (e) {
-            console.error('[Audio] Error closing context for switch:', e);
-        }
-        audioCtxRef.current = null;
-        sourceNodeRef.current = null;
-        analyserRef.current = null;
-        captureNodeRef.current = null;
-        // Tiny 250ms sleep to allow the Android OS audio hardware thread to completely free/recycle the input handles.
-        await new Promise(resolve => setTimeout(resolve, 250));
-      }
+  // TX Orchestrator — stubbed in Task 6. The local audio TX path was removed;
+  // Task 9 rewires the CQ/Ans buttons to drive TX via server operations.
+  const transmitMessage = useCallback(async (_message: string) => {
+    // TX is managed by the server sequencer; nothing to do locally yet.
+  }, []);
 
-      // 1. First get the MediaStream from getUserMedia BEFORE creating/resuming AudioContext.
-      // This is crucial on Android because if the user selects a non-existent or locked device,
-      // creating/resuming the context first can get WebAudio out-of-sync or stuck in a broken state.
-      let stream: MediaStream;
-      try {
-        // Try strict targetDeviceId exact mode first if specified.
-        // DO NOT pass electronic DSP constraints (echoCancellation, etc.) here to prevent Android driver / HAL crash on raw USB adapters.
-        stream = await navigator.mediaDevices.getUserMedia({ 
-          audio: targetDeviceId ? { deviceId: { exact: targetDeviceId } } : true
-        });
-        console.log('[Audio] Successfully acquired media stream with exact constraint:', targetDeviceId);
-      } catch (err: any) {
-        console.warn('[Audio] getUserMedia strict constraints failed, attempting fallback to ideal deviceId constraint:', err);
-        try {
-          // Retry using "ideal" constraint without voice-processing DSP constraints to avoid USB driver rejections.
-          stream = await navigator.mediaDevices.getUserMedia({ 
-            audio: targetDeviceId ? { deviceId: { ideal: targetDeviceId } } : true
-          });
-          console.log('[Audio] Successfully acquired stream using ideal constraint:', targetDeviceId);
-        } catch (err2) {
-          console.error('[Audio] getUserMedia of target device failed, falling back to default input with DSP safety. Error:', err2);
-          // Standard ultimate default fallback - request simply any audio input but explicitly disable mobile phone line DSP voice processing filters for FT8.
-          stream = await navigator.mediaDevices.getUserMedia({ 
-            audio: {
-              echoCancellation: false,
-              noiseSuppression: false,
-              autoGainControl: false,
-            } 
-          });
-          console.log('[Audio] Acquired default system microphone with DSP filters turned off');
-        }
-      }
-
-      mediaStreamRef.current = stream;
-
-      // 2. Now instantiate/resume the AudioContext
-      let ctx = audioCtxRef.current;
-      if (!ctx) {
-          const AudioContextCtor = window.AudioContext || (window as any).webkitAudioContext;
-          // FT8 strongly prefers 12KHz. We request it, but must be resilient if OS overrides it.
-          ctx = new AudioContextCtor({ sampleRate: 12000 });
-          audioCtxRef.current = ctx;
-      }
-
-      if (ctx.state === 'suspended') {
-          await ctx.resume();
-      }
-
-      if (typeof (ctx as any).setSinkId === 'function' && selectedOutputDeviceId) {
-          (ctx as any).setSinkId(selectedOutputDeviceId).catch((e: any) => console.error("setSinkId fail:", e));
-      }
-      
-      const source = ctx.createMediaStreamSource(stream);
-      sourceNodeRef.current = source;
-      
-      // Waterfall visualizer pipeline
-      if (!analyserRef.current) {
-          const analyser = ctx.createAnalyser();
-          analyser.fftSize = 4096;
-          analyser.smoothingTimeConstant = 0.0;
-          analyser.minDecibels = -110;
-          analyser.maxDecibels = -30;
-          analyserRef.current = analyser;
-      }
-      source.connect(analyserRef.current);
-      
-      // Accumulator pipeline via Worklet
-      if (!captureNodeRef.current) {
-          const workletUrl = getCaptureWorkletUrl();
-          await ctx.audioWorklet.addModule(workletUrl);
-          const captureNode = new AudioWorkletNode(ctx, 'capture-processor');
-          
-          captureNode.port.onmessage = (e) => {
-              const chunk = e.data as Float32Array;
-              // Calculate RMS level for VU meter
-              let sumSquares = 0;
-              for(let i=0; i<chunk.length; i++) sumSquares += chunk[i] * chunk[i];
-              const rms = Math.sqrt(sumSquares / chunk.length);
-              setAudioLevel(Math.min(100, rms * 1500)); 
-              
-              // Only accumulate if we are in the 0.0 - 13.0s recording window
-              const now = new Date();
-              const secondsInWindow = (now.getUTCSeconds() + now.getUTCMilliseconds() / 1000) % 15;
-              
-              if (secondsInWindow < 13.0) {
-                  const newBuffer = new Float32Array(rxBufferRef.current.length + chunk.length);
-                  newBuffer.set(rxBufferRef.current, 0);
-                  newBuffer.set(chunk, rxBufferRef.current.length);
-                  rxBufferRef.current = newBuffer;
-              }
-          };
-          captureNode.connect(ctx.destination); 
-          captureNodeRef.current = captureNode;
-      }
-      
-      source.connect(captureNodeRef.current);
-      
-      setAudioActive(true);
-      getDevices(); // Refresh devices now that permissions may be granted
-    } catch (e) {
-      console.error("Audio Context Init Failed:", e);
-      alert("Failed to initialize audio or access microphone. Check browser permissions.");
-    }
-  };
-
-  const handleDeviceChange = async (e: React.ChangeEvent<HTMLSelectElement>) => {
-      const newId = e.target.value;
-      setSelectedDeviceId(newId);
-      
-      if (!audioActive) return;
-
-      console.log(`[Audio] Initiating input device shift to: ${newId}`);
-
-      try {
-          await toggleAudio(newId);
-          console.log('[Audio] Successfully completed device switch.');
-      } catch (err: any) {
-          console.error('[Audio] Failed to switch audio input device:', err);
-          alert(`Failed to switch audio device: ${err.message || 'Device Busy'}`);
-          setAudioActive(false);
-      }
-  };
-
-  const handleOutputDeviceChange = async (e: React.ChangeEvent<HTMLSelectElement>) => {
-      const newId = e.target.value;
-      setSelectedOutputDeviceId(newId);
-      if (audioCtxRef.current && typeof (audioCtxRef.current as any).setSinkId === 'function') {
-          try {
-              await (audioCtxRef.current as any).setSinkId(newId);
-          } catch (err) {
-              console.error("Failed to set output device:", err);
-          }
-      }
-  };
-
-  // TX Orchestrator
-  const transmitMessage = useCallback(async (message: string) => {
-    if (!audioCtxRef.current || isTransmitting || isTxQueued || !txEnabled) return;
-    
-    // Guarantee audio is alive before queuing
-    if (audioCtxRef.current.state === 'suspended') {
-        await audioCtxRef.current.resume();
-    }
-    
-    queuedTxMessageRef.current = message;
-    setIsTxQueued(true);
-  }, [isTransmitting, isTxQueued, txEnabled]);
-
-  // Sync FSM parameters
-  useEffect(() => {
-    if (!fsmRef.current) {
-      const fsm = new FT8FSM({
-        myCall,
-        myGrid,
-        myPeriod: txPeriod,
-        maxRetries,
-        finalMessageMode,
-        directReportCall: skipTx1Grid,
-        isTxEnabled: txEnabled,
-      });
-
-      fsm.onStateChange = (state, target, queue) => {
-        setFsmState(state);
-        setFsmQueue([...queue]);
-        setTargetCall(target || '');
-      };
-
-      fsm.onTransmit = (msg) => {
-        // Direct queue setting to bypass stale closures
-        queuedTxMessageRef.current = msg;
-        setIsTxQueued(true);
-      };
-
-      fsm.onAppendQsoLog = (msg, isTx, isDivider) => {
-        setQsoLog(prev => {
-          const now = new Date();
-          const nowString = now.toISOString().substring(11, 19).replace(/:/g, '');
-          const item: FT8DecodedMessage = {
-            time: nowString,
-            snr: isTx ? 0 : -10,
-            freq: txFreqRef.current,
-            message: msg,
-            isTx,
-            isDivider
-          };
-          return [item, ...prev].slice(0, 100);
-        });
-      };
-
-      fsm.onLogQSO = async (qsoData) => {
-        try {
-            const now = new Date();
-            const pad = (n: number) => n.toString().padStart(2, '0');
-            const dateStr = `${now.getUTCFullYear()}${pad(now.getUTCMonth() + 1)}${pad(now.getUTCDate())}`;
-            const timeStr = `${pad(now.getUTCHours())}${pad(now.getUTCMinutes())}${pad(now.getUTCSeconds())}`;
-            
-            // Helper to determine band from VFO frequency
-            const getBandFromFreq = (freqInHz: number): string => {
-                const mhz = freqInHz / 1e6;
-                if (mhz >= 1.8 && mhz <= 2.0) return "160m";
-                if (mhz >= 3.5 && mhz <= 4.0) return "80m";
-                if (mhz >= 5.3 && mhz <= 5.4) return "60m";
-                if (mhz >= 7.0 && mhz <= 7.3) return "40m";
-                if (mhz >= 10.1 && mhz <= 10.2) return "30m";
-                if (mhz >= 14.0 && mhz <= 14.35) return "20m";
-                if (mhz >= 18.068 && mhz <= 18.168) return "17m";
-                if (mhz >= 21.0 && mhz <= 21.45) return "15m";
-                if (mhz >= 24.89 && mhz <= 24.99) return "12m";
-                if (mhz >= 28.0 && mhz <= 29.7) return "10m";
-                if (mhz >= 50.0 && mhz <= 54.0) return "6m";
-                return "";
-            };
-
-            const currentVfo = vfoFreqRef.current;
-
-            const dxccEntity = dxccService.lookup(qsoData.call);
-            const qsoRecord: QSO = {
-                call: qsoData.call,
-                qso_date: dateStr,
-                time_on: timeStr,
-                band: getBandFromFreq(currentVfo),
-                freq: currentVfo / 1e6,
-                mode: modeRef.current,
-                submode: "",
-                rst_sent: qsoData.rst_sent || "",
-                rst_rcvd: qsoData.rst_rcvd || "",
-                gridsquare: qsoData.grid || "",
-                timestamp: now.getTime(),
-                synced: false,
-                dxcc: dxccEntity?.adifCode,
-            };
-
-            externalStream.sendQsoLogged({
-                call: qsoRecord.call,
-                grid: qsoRecord.gridsquare,
-                rstSent: qsoRecord.rst_sent,
-                rstRcvd: qsoRecord.rst_rcvd,
-                dialFreqHz: currentVfo,
-                mode: qsoRecord.mode,
-                band: qsoRecord.band,
-            });
-
-            const id = await logBook.logQSO(qsoRecord);
-            qsoRecord.id = id;
-
-            // Dispatch global event to trigger worked calls Set updates instantly
-            window.dispatchEvent(new Event('qso-logged'));
-
-            // Trigger global refresh for UI immediately so it appears on screen without delay
-            if (typeof (window as any).refreshQsoLogbookUi === 'function') {
-                (window as any).refreshQsoLogbookUi();
-            }
-
-            // Push to cloud instantly if enabled (unless the user disabled automatic upload)
-            if (wavelogEnabledRef.current && autoUploadCloudlogRef.current && navigator.onLine) {
-                 try {
-                     const success = await CloudLogService.pushSingleQSO(qsoRecord, {
-                         wavelogEnabled: wavelogEnabledRef.current,
-                         wavelogUrl: wavelogUrlRef.current,
-                         wavelogApiKey: wavelogApiKeyRef.current,
-                         wavelogStationProfileId: wavelogStationProfileIdRef.current
-                     });
-                     if (success) {
-                         await logBook.updateQSO({ ...qsoRecord, synced: true });
-                         
-                         window.dispatchEvent(new Event('qso-logged'));
-                         
-                         // Refresh UI again to update the synced cloud status icon on screen
-                         if (typeof (window as any).refreshQsoLogbookUi === 'function') {
-                             (window as any).refreshQsoLogbookUi();
-                         }
-                     }
-                 } catch (cloudErr) {
-                     console.error("Failed to push QSO dynamically to Wavelog", cloudErr);
-                 }
-            }
-        } catch (err) {
-            console.error("Failed to save QSO automatically", err);
-        }
-      };
-
-      fsmRef.current = fsm;
-      setFsmState('IDLE');
-    } else {
-      fsmRef.current.myCall = myCall;
-      fsmRef.current.myGrid = myGrid;
-      fsmRef.current.myPeriod = txPeriod;
-      fsmRef.current.maxRetries = maxRetries;
-      fsmRef.current.finalMessageMode = finalMessageMode;
-      fsmRef.current.directReportCall = skipTx1Grid;
-      fsmRef.current.isTxEnabled = txEnabled;
-    }
-  }, [myCall, myGrid, txPeriod, maxRetries, finalMessageMode, skipTx1Grid, txEnabled]);
-
-  // Teach the decode worker our own callsign so incoming replies addressed to a
-  // hash of our (possibly compound) call resolve to us instead of "<...>".
-  useEffect(() => {
-    if (workerRef.current && myCall) {
-      workerRef.current.postMessage({ type: 'INIT_HASHES', calls: [myCall] });
-      if (myCall.includes('/')) rememberHashCalls([myCall]);
-    }
-  }, [myCall]);
-
-  // Auto-reset state machine if PTT is disabled
-  useEffect(() => {
-    if (!txEnabled && fsmRef.current) {
-      fsmRef.current.resetToIdle();
-    }
-  }, [txEnabled]);
-
-  // Sync Interval Management & Animation Frame
+  // Sync Interval Management & Animation Frame — UTC clock, slot window progress,
+  // and the waterfall only. The decode trigger, queued-TX start, FSM drive, and
+  // period markers were removed with the local brain (Task 6).
   useEffect(() => {
     let animationFrameId: number;
-    let periodState = {
-       lastPeriod: -1,
-       decodedThisPeriod: false,
-    };
-    
+
     const loop = (time: number) => {
       animationFrameId = requestAnimationFrame(loop);
-      
+
       const now = new Date();
       const seconds = now.getUTCSeconds();
       const ms = now.getUTCMilliseconds();
       const totalSeconds = seconds + (ms / 1000);
-      
-      const PERIOD = modeRef.current === 'FT4' ? 7.5 : 15;
-      const RECORD_AT = modeRef.current === 'FT4' ? 6.0 : 13.0;
 
-      const currentPeriod = Math.floor(totalSeconds / PERIOD);
+      const PERIOD = modeRef.current === 'FT4' ? 7.5 : 15;
       const secondsInWindow = totalSeconds % PERIOD;
 
       setWindowProgress((secondsInWindow / PERIOD) * 100);
       setUtcTime(now.toISOString().substring(11, 19));
 
-      // Epoch boundary: period start mark
-      if (currentPeriod !== periodState.lastPeriod && periodState.lastPeriod !== -1) {
-        periodState.lastPeriod = currentPeriod;
-        periodState.decodedThisPeriod = false;
-
-        // Queue a waterfall period marker at the current canvas row
-        pendingMarkersRef.current.push({
-          atRow: waterfallRowsRef.current,
-          label: now.toISOString().substring(11, 19) + ' UTC',
-        });
-
-        // Drive FSM at slot transition
-        if (autoSequence && fsmRef.current) {
-          fsmRef.current.onPeriodStart(currentPeriod);
-        }
-
-        // Start TX exactly at period start if queued and matches selected period
-        if (queuedTxMessageRef.current && txEnabled && currentPeriod % 2 === txPeriodRef.current) {
-            const message = queuedTxMessageRef.current;
-            queuedTxMessageRef.current = null;
-            setIsTxQueued(false);
-            startTx(message);
-        }
-
-        // Clear RX buffer for the new recording period
-        rxBufferRef.current = new Float32Array(0);
-      } else if (currentPeriod !== periodState.lastPeriod) {
-        // Init first run
-        periodState.lastPeriod = currentPeriod;
-      }
-
-      // Decode trigger
-      if (secondsInWindow >= RECORD_AT && !periodState.decodedThisPeriod) {
-        periodState.decodedThisPeriod = true;
-        const audioData = rxBufferRef.current;
-
-        if (audioActive && audioCtxRef.current && audioData.length > 0) {
-            if (workerRef.current) {
-                const periodStartTotalSec = Math.floor(totalSeconds / PERIOD) * PERIOD;
-                const periodStartWholeSec = Math.floor(periodStartTotalSec);
-                const periodStartMs = Math.round((periodStartTotalSec - periodStartWholeSec) * 1000);
-                const periodStart = new Date(now.getTime());
-                periodStart.setUTCSeconds(periodStartWholeSec, periodStartMs);
-                const nowString = periodStart.toISOString().substring(11, 19).replace(/:/g, '');
-
-                workerRef.current.postMessage({
-                    audioData,
-                    sampleRate: audioCtxRef.current.sampleRate,
-                    nowString,
-                    decodeDepth,
-                    mode: modeRef.current
-                });
-            }
-        }
-      }
-
       if (audioActive) {
-          drawWaterfall(time);
+        drawWaterfall(time);
       }
     };
-    
+
     animationFrameId = requestAnimationFrame(loop);
-    
+
     return () => {
-        cancelAnimationFrame(animationFrameId);
+      cancelAnimationFrame(animationFrameId);
     };
-  }, [audioActive, drawWaterfall, decodeDepth, txEnabled, txFreq, selectedOutputDeviceId, autoSequence]);
+  }, [audioActive, drawWaterfall]);
 
   const handleWaterfallClick = (e: React.MouseEvent<HTMLElement, MouseEvent>) => {
     if (!canvasRef.current) return;
@@ -1740,19 +530,8 @@ export default function App() {
             </div>
           </div>
 
-          {/* VU Meter Payload */}
-          <div className="flex flex-col min-w-[140px]">
-            <span className="text-[10px] uppercase tracking-widest text-text-muted mb-1">Input Level (VU)</span>
-            <div className="h-4 bg-black rounded-sm border border-border-subtle relative overflow-hidden">
-              <div 
-                className="absolute left-0 top-0 h-full bg-gradient-to-r from-green-500 via-yellow-400 to-red-500 opacity-80 transition-all duration-75 ease-linear"
-                style={{ width: `${audioLevel}%` }}
-              />
-              <div className="absolute inset-0 grid grid-cols-10 gap-px px-0.5">
-                {[...Array(10)].map((_, i) => <div key={i} className="border-r border-black/50 h-full" />)}
-              </div>
-            </div>
-          </div>
+          {/* VU meter removed with the local audio brain (Task 6); Task 10
+              replaces it with the server AUDIO interlock lamp. */}
         </div>
 
         {/* --- RF Frequency Readout --- */}
@@ -1773,11 +552,7 @@ export default function App() {
             />
           ) : (
             <span
-              className={`text-[26px] font-mono font-bold leading-none tracking-tight cursor-pointer hover:opacity-70 transition-opacity ${
-                catMode !== 'manual' && !catConnected
-                  ? 'text-red-500 shadow-[0_0_8px_rgba(239,68,68,0.3)]'
-                  : 'text-green-600 dark:text-[#4caf50]'
-              }`}
+              className="text-[26px] font-mono font-bold leading-none tracking-tight cursor-pointer hover:opacity-70 transition-opacity text-green-600 dark:text-[#4caf50]"
               title="Click to enter custom frequency (MHz)"
               onClick={() => {
                 setVfoInputStr((vfoFreq / 1_000_000).toFixed(6));
@@ -1892,13 +667,8 @@ export default function App() {
           <div className="bg-panel border border-border-subtle rounded-lg flex flex-col h-[300px] max-h-[300px] shrink-0 overflow-hidden">
             <div className="bg-header border-b border-border-subtle px-3 py-2 flex justify-between items-center rounded-t-lg shrink-0">
               <h3 className="text-[11px] font-bold text-text-muted tracking-widest uppercase flex items-center gap-2">
-                <Activity size={14} className="text-green-600 dark:text-[#4caf50]"/> 
+                <Activity size={14} className="text-green-600 dark:text-[#4caf50]"/>
                 Band Activity
-                {decodeStats && (
-                  <span className={`normal-case tracking-normal ${decodeStats.durationMs > 1500 ? "text-orange-400" : "text-zinc-500"}`}>
-                    ({decodeStats.count} stations in {decodeStats.durationMs}ms)
-                  </span>
-                )}
               </h3>
               <button
                 onClick={() => setRxLog([])}
@@ -1930,44 +700,15 @@ export default function App() {
                     );
                   }
 
-                  const callsign = extractTransmitterCallsign(log.message);
-                  const isWorked = callsign ? workedCallsigns.has(callsign.toUpperCase()) : false;
-
                   return (
-                    <div 
+                    <div
                       key={i}
                       onClick={() => {
                         const call = extractTransmitterCallsign(log.message);
                         if (call) {
                           setTargetCall(call);
-                          if (fsmRef.current) {
-                            const isSameStation = fsmRef.current.targetCall === call;
-                            fsmRef.current.targetCall = call;
-                            const gridMatch = log.message.match(/\b[A-Z]{2}[0-9]{2}\b/);
-                            if (gridMatch && gridMatch[0] !== 'RR73') {
-                              fsmRef.current.targetGrid = gridMatch[0];
-                            } else if (!isSameStation) {
-                              fsmRef.current.targetGrid = null;
-                            }
-                            if (autoSequence) {
-                              // Seed the report we'll send from the SNR at which we decoded this
-                              // station, so a report-first reply (skipTx1Grid) sends the measured
-                              // value rather than the '-12' fallback.
-                              const snr = log.snr !== undefined ? Math.round(log.snr) : -12;
-                              fsmRef.current.targetReport = snr >= 0
-                                ? `+${String(snr).padStart(2, '0')}`
-                                : `-${String(Math.abs(snr)).padStart(2, '0')}`;
-                              const msgContent = log.message.trim().split(/\s+/).slice(2).join(' ').toUpperCase();
-                              const reportMatch = msgContent.match(/^R?([+-]\d+)$/);
-                              if (reportMatch) {
-                                fsmRef.current.myReceivedReport = reportMatch[1];
-                                fsmRef.current.updateState('SENDING_R_REPORT', call);
-                              } else {
-                                fsmRef.current.updateState('REPLY_SENDING', call);
-                              }
-                              setTxEnabled(true);
-                            }
-                          }
+                          // FSM target seeding removed with the local brain (Task 6);
+                          // Task 9 selects the station on the server.
                         }
 
                         // Auto-set TX period to the OPPOSITE of the caller's period
@@ -1980,32 +721,15 @@ export default function App() {
                             })();
                         setTxPeriod(callerPeriod === 0 ? 1 : 0);
                       }}
-                      className={`grid grid-cols-[55px_40px_60px_1fr] gap-2 hover:bg-btn cursor-pointer p-1 rounded transition-colors group text-[11px] items-center ${
-                        isWorked ? 'opacity-55 hover:opacity-100' : ''
-                      }`}
+                      className="grid grid-cols-[55px_40px_60px_1fr] gap-2 hover:bg-btn cursor-pointer p-1 rounded transition-colors group text-[11px] items-center"
                     >
                       <span className="text-zinc-500">{log.time}</span>
                       <span className={log.snr > -10 ? 'text-green-400' : 'text-red-400'}>{log.snr}</span>
                       <span className="text-blue-400">{log.freq}Hz</span>
                       <span className="text-text-main group-hover:text-text-highlight font-bold flex items-center flex-wrap">
                         {log.message}
-                        {isWorked && (
-                          <span
-                            className="ml-1.5 inline-flex items-center text-[7.5px] px-1 py-0.2 rounded font-mono font-bold uppercase bg-neutral-200 text-neutral-500 dark:bg-neutral-800 dark:text-neutral-400 border border-neutral-300 dark:border-neutral-700/60 leading-none select-none"
-                            title="Worked before on this band and mode (B4)"
-                          >
-                            B4
-                          </span>
-                        )}
-                        {dxccReady && callsign && (() => {
-                          const entity = dxccService.lookup(callsign);
-                          if (!entity) return null;
-                          const isNewDxcc = !workedDxccEntities.has(entity.primaryPrefix);
-                          return <>
-                            <span className="ml-1 inline-flex items-center text-[7.5px] px-1 py-0.2 rounded font-mono font-bold uppercase bg-neutral-200 text-neutral-500 dark:bg-neutral-800 dark:text-neutral-400 border border-neutral-300 dark:border-neutral-700/60 leading-none select-none" title={isNewDxcc ? "New DXCC entity" : "Worked DXCC entity"}>{isNewDxcc ? 'N' : 'W'}</span>
-                            <span className="ml-1 inline-flex items-center text-[7.5px] px-1 py-0.2 rounded font-mono uppercase bg-cyan-900/40 text-cyan-400 border border-cyan-700/40 leading-none select-none" title={entity.name}>{entity.primaryPrefix}</span>
-                          </>;
-                        })()}
+                        {/* B4/N/W DXCC badges removed with the local DXCC service (Task 6);
+                            Task 12 re-adds them from the server snapshot/decodes. */}
                       </span>
                     </div>
                   );
@@ -2053,39 +777,11 @@ export default function App() {
                   <div 
                     key={i}
                     onClick={() => {
+                      // FSM target seeding removed with the local brain (Task 6);
+                      // Task 9 selects the station on the server.
                       if (!log.isTx) {
                         const callsign = extractTransmitterCallsign(log.message);
-                        if (callsign) {
-                          setTargetCall(callsign);
-                          if (fsmRef.current) {
-                            const isSameStation = fsmRef.current.targetCall === callsign;
-                            fsmRef.current.targetCall = callsign;
-                            const gridMatch = log.message.match(/\b[A-Z]{2}[0-9]{2}\b/);
-                            if (gridMatch && gridMatch[0] !== 'RR73') {
-                              fsmRef.current.targetGrid = gridMatch[0];
-                            } else if (!isSameStation) {
-                              fsmRef.current.targetGrid = null;
-                            }
-                            if (autoSequence) {
-                              // Seed the report we'll send from the SNR at which we decoded this
-                              // station, so a report-first reply (skipTx1Grid) sends the measured
-                              // value rather than the '-12' fallback.
-                              const snr = log.snr !== undefined ? Math.round(log.snr) : -12;
-                              fsmRef.current.targetReport = snr >= 0
-                                ? `+${String(snr).padStart(2, '0')}`
-                                : `-${String(Math.abs(snr)).padStart(2, '0')}`;
-                              const msgContent = log.message.trim().split(/\s+/).slice(2).join(' ').toUpperCase();
-                              const reportMatch = msgContent.match(/^R?([+-]\d+)$/);
-                              if (reportMatch) {
-                                fsmRef.current.myReceivedReport = reportMatch[1];
-                                fsmRef.current.updateState('SENDING_R_REPORT', callsign);
-                              } else {
-                                fsmRef.current.updateState('REPLY_SENDING', callsign);
-                              }
-                              setTxEnabled(true);
-                            }
-                          }
-                        }
+                        if (callsign) setTargetCall(callsign);
                       }
 
                       // If incoming message, set TX period to OPPOSITE of caller's period
@@ -2109,16 +805,8 @@ export default function App() {
                     <span className="text-blue-400">{log.freq}Hz</span>
                     <span className={`group-hover:text-text-highlight ${textClass} flex items-center flex-wrap`}>
                       {log.message}
-                      {dxccReady && !log.isTx && (() => {
-                        const cs = extractTransmitterCallsign(log.message);
-                        const entity = cs ? dxccService.lookup(cs) : null;
-                        if (!entity) return null;
-                        const isNewDxcc = !workedDxccEntities.has(entity.primaryPrefix);
-                        return <>
-                          <span className="ml-1 inline-flex items-center text-[7.5px] px-1 py-0.2 rounded font-mono font-bold uppercase bg-neutral-200 text-neutral-500 dark:bg-neutral-800 dark:text-neutral-400 border border-neutral-300 dark:border-neutral-700/60 leading-none select-none" title={isNewDxcc ? "New DXCC entity" : "Worked DXCC entity"}>{isNewDxcc ? 'N' : 'W'}</span>
-                          <span className="ml-1 inline-flex items-center text-[7.5px] px-1 py-0.2 rounded font-mono uppercase bg-cyan-900/40 text-cyan-400 border border-cyan-700/40 leading-none select-none" title={entity.name}>{entity.primaryPrefix}</span>
-                        </>;
-                      })()}
+                      {/* N/W DXCC badges removed with the local DXCC service (Task 6);
+                          Task 12 re-adds them from the server snapshot/decodes. */}
                     </span>
                   </div>
                   );
@@ -2197,12 +885,9 @@ export default function App() {
           <div className="w-full lg:w-auto flex-1 grid grid-cols-2 gap-2 px-0 lg:px-4">
              <button 
                 onClick={() => {
-                  if (autoSequence && fsmRef.current) {
-                    fsmRef.current.updateState('CQ_SENDING');
-                    setTxEnabled(true);
-                  } else {
-                    transmitMessage(`CQ ${myCall} ${myGrid.substring(0, 4)}`);
-                  }
+                  // Local FSM drive removed with the brain (Task 6);
+                  // Task 9 reimplements CQ against the server sequencer.
+                  transmitMessage(`CQ ${myCall} ${myGrid.substring(0, 4)}`);
                 }}
                 disabled={(!autoSequence && !txEnabled) || isTransmitting || isTxQueued}
                 className="h-10 bg-btn border border-border-input hover:bg-btn-hover disabled:opacity-50 disabled:hover:bg-btn text-[10px] font-bold rounded uppercase tracking-wider transition-colors flex items-center justify-center gap-1"
@@ -2212,24 +897,9 @@ export default function App() {
              
              <button 
                 onClick={() => {
-                  if (autoSequence && fsmRef.current) {
-                    fsmRef.current.targetCall = targetCall;
-                    // Seed the report from the most recent decode of this station so a
-                    // report-first reply (skipTx1Grid) sends the measured SNR, not '-12'.
-                    const lastDecode = [...rxLog].reverse().find(
-                      l => extractTransmitterCallsign(l.message) === targetCall && l.snr !== undefined
-                    );
-                    if (lastDecode) {
-                      const snr = Math.round(lastDecode.snr);
-                      fsmRef.current.targetReport = snr >= 0
-                        ? `+${String(snr).padStart(2, '0')}`
-                        : `-${String(Math.abs(snr)).padStart(2, '0')}`;
-                    }
-                    fsmRef.current.updateState('REPLY_SENDING', targetCall);
-                    setTxEnabled(true);
-                  } else {
-                    transmitMessage(`${targetCall} ${myCall} ${myGrid.substring(0, 4)}`);
-                  }
+                  // Local FSM drive removed with the brain (Task 6);
+                  // Task 9 reimplements Ans against the server sequencer.
+                  transmitMessage(`${targetCall} ${myCall} ${myGrid.substring(0, 4)}`);
                 }}
                 disabled={(!autoSequence && !txEnabled) || !targetCall || isTransmitting || isTxQueued}
                 className="h-10 bg-btn border border-border-input hover:bg-btn-hover disabled:opacity-50 disabled:hover:bg-btn text-[10px] font-bold rounded uppercase tracking-wider transition-colors flex items-center justify-center gap-1"
@@ -2311,12 +981,12 @@ export default function App() {
 
       {/* Logbook Viewer Section */}
       <div className="w-full mt-3">
-         <LogBookViewer 
-            maxEntries={maxLogEntries} 
-            wavelogEnabled={wavelogEnabled} 
-            wavelogUrl={wavelogUrl} 
-            wavelogApiKey={wavelogApiKey} 
-            wavelogStationProfileId={wavelogStationProfileId}
+         <LogBookViewer
+            maxEntries={maxLogEntries}
+            wavelogEnabled={false}
+            wavelogUrl={''}
+            wavelogApiKey={''}
+            wavelogStationProfileId={''}
          />
       </div>
 
@@ -2401,137 +1071,8 @@ export default function App() {
                 />
               </div>
 
-              <hr className="border-border-subtle my-2" />
-              <h3 className="text-xs font-bold uppercase tracking-widest text-[#8e9299]">CAT Radio Control</h3>
-              
-              <div className="flex flex-col gap-1">
-                <label className="text-[10px] uppercase tracking-widest text-text-muted">Protocol Mode</label>
-                <select 
-                  value={catMode}
-                  onChange={e => setCatMode(e.target.value as 'manual' | 'kenwood' | 'yaesu' | 'old-yaesu' | 'elecraft' | 'qdx' | 'icom')}
-                  className="bg-app border border-border-input text-text-main rounded px-3 py-2 text-xs font-mono w-full focus:outline-none focus:border-[#4caf50]"
-                >
-                  <option value="manual">Manual (No CAT / iOS)</option>
-                  <option value="kenwood">Kenwood</option>
-                  <option value="yaesu">Yaesu (FT-710, FTDX10, FT-991A, FT-891)</option>
-                  <option value="old-yaesu">Yaesu Old Binary (FT-817, FT-857, FT-897)</option>
-                  <option value="elecraft">Elecraft (K3, KX3, KX2, etc.)</option>
-                  {/Android/i.test(navigator.userAgent) ? (
-                    <option value="qdx" disabled className="text-gray-400">QDX (Unsupported on Android)</option>
-                  ) : (
-                    <option value="qdx">QDX</option>
-                  )}
-                  <option value="icom">Icom (CI-V)</option>
-                  <option value="icom-ws">Icom CI-V (WebSocket / ESP32)</option>
-                </select>
-              </div>
-
-              {catMode !== 'manual' && catMode !== 'icom-ws' && (
-                <div className="flex flex-col gap-1">
-                  <label className="text-[10px] uppercase tracking-widest text-text-muted">Baud Rate</label>
-                  <select 
-                    value={catBaudRate}
-                    onChange={e => setCatBaudRate(Number(e.target.value))}
-                    className="bg-app border border-border-input text-text-main rounded px-3 py-2 text-xs font-mono w-full focus:outline-none focus:border-[#4caf50]"
-                  >
-                    <option value="4800">4800</option>
-                    <option value="9600">9600</option>
-                    <option value="19200">19200</option>
-                    <option value="38400">38400</option>
-                    <option value="57600">57600</option>
-                    <option value="115200">115200</option>
-                  </select>
-                </div>
-              )}
-
-              {(catMode === 'icom' || catMode === 'icom-ws') && (
-                <div className="flex flex-col gap-1">
-                  <label className="text-[10px] uppercase tracking-widest text-text-muted">Icom Address (Hex)</label>
-                  <input 
-                    type="text" 
-                    value={icomAddress} 
-                    onChange={e => setIcomAddress(e.target.value.toUpperCase())} 
-                    className="bg-app border border-border-input rounded px-3 py-2 text-sm font-mono w-full focus:outline-none focus:border-[#4caf50] text-text-main uppercase" 
-                    placeholder="94"
-                  />
-                  <span className="text-[10px] text-text-muted font-mono leading-tight mt-0.5">
-                    Common addresses: IC-7300: 94 • IC-705: A4 • IC-7100: 88 • IC-9700: A2 • IC-7610: 98 • IC-7000: 70
-                  </span>
-                </div>
-              )}
-
-              {catMode === 'icom-ws' && (
-                <div className="flex flex-col gap-1">
-                  <label className="text-[10px] uppercase tracking-widest text-text-muted">WebSocket URL</label>
-                  <input
-                    type="text"
-                    value={civWsUrl}
-                    onChange={e => setCivWsUrl(e.target.value)}
-                    className="bg-app border border-border-input rounded px-3 py-2 text-sm font-mono w-full focus:outline-none focus:border-[#4caf50] text-text-main"
-                    placeholder="ws://192.168.1.1/ws-cat"
-                  />
-                  <span className="text-[10px] text-text-muted font-mono leading-tight mt-0.5">
-                    ESP32 bridge address, e.g. ws://192.168.16.140/ws-cat
-                  </span>
-                  {window.isSecureContext && civWsUrl.startsWith('ws://') && (
-                    <div className="mt-1 p-2 rounded text-[10px] font-mono leading-tight bg-yellow-900/40 border border-yellow-600/50 text-yellow-300">
-                      Mixed content: browsers block ws:// from HTTPS pages.<br/>
-                      Fix: click the lock icon in the address bar → Site settings → Insecure content → Allow.<br/>
-                      Or open this page over HTTP instead of HTTPS.
-                    </div>
-                  )}
-                </div>
-              )}
-
-              {isDualPort && /Android/i.test(navigator.userAgent) && (
-                <div className="flex flex-col gap-1">
-                  <label className="text-[10px] uppercase tracking-widest text-text-muted">CP2105 Channel</label>
-                  <select
-                    value={cp2105Channel}
-                    onChange={e => setCp2105Channel(Number(e.target.value) as 0 | 1)}
-                    className="bg-app border border-border-input text-text-main rounded px-3 py-2 text-xs font-mono w-full focus:outline-none focus:border-[#4caf50]"
-                  >
-                    <option value={0}>Port A — Enhanced (Interface 0)</option>
-                    <option value={1}>Port B — Standard (Interface 1)</option>
-                  </select>
-                </div>
-              )}
-
-              {catMode !== 'manual' && (
-                <div className="flex flex-col gap-2 pt-2">
-                  <div className="flex gap-2">
-                    {catMode === 'icom-ws' ? (
-                      <button
-                        onClick={handleConnectCivWs}
-                        className="flex-1 bg-app border border-border-input text-text-main hover:bg-[#4caf50] hover:text-white hover:border-[#4caf50] rounded px-3 py-2 text-xs font-mono font-bold transition-colors"
-                      >
-                        {serialPort ? 'Reconnect WS' : 'Connect'}
-                      </button>
-                    ) : (
-                      <button
-                        onClick={handleSelectSerialPort}
-                        className="flex-1 bg-app border border-border-input text-text-main hover:bg-[#4caf50] hover:text-white hover:border-[#4caf50] rounded px-3 py-2 text-xs font-mono font-bold transition-colors"
-                      >
-                        {serialPort ? 'Port Selected' : 'Select Serial Port'}
-                      </button>
-                    )}
-                    <button
-                      onClick={handleTestCat}
-                      disabled={!serialPort}
-                      className="flex-1 bg-app border border-border-input text-text-main hover:bg-[#4caf50] hover:text-white hover:border-[#4caf50] disabled:opacity-50 disabled:hover:bg-app disabled:hover:border-border-input disabled:hover:text-text-main rounded px-3 py-2 text-xs font-mono font-bold transition-colors"
-                    >
-                      Test CAT
-                    </button>
-                  </div>
-                  {catTestResult && (
-                    <div className="text-[10px] font-mono text-center p-1 bg-app border border-border-subtle rounded text-text-muted">
-                      {catTestResult}
-                    </div>
-                  )}
-                </div>
-              )}
-
-              <hr className="border-border-subtle my-2" />
+              {/* CAT Radio Control settings removed with the local brain (Task 6);
+                  Task 13 re-adds a server-driven radio section. */}
 
               <div className="flex items-center justify-between pt-2">
                  <label className="text-[10px] uppercase tracking-widest text-text-muted">Color Scheme</label>
@@ -2540,19 +1081,6 @@ export default function App() {
                     className="bg-app border border-border-input text-text-main rounded px-3 py-1 text-xs font-mono focus:outline-none hover:border-[#4caf50]"
                  >
                     {theme === 'dark' ? 'Dark Mode' : 'Light Mode'}
-                 </button>
-              </div>
-
-              <div className="flex items-center justify-between pt-2">
-                 <div className="flex flex-col">
-                    <label className="text-[10px] uppercase tracking-widest text-text-muted">Prevent Screen Off</label>
-                    <span className="text-[9px] text-text-muted">Requires mobile Wake Lock support</span>
-                 </div>
-                 <button
-                    onClick={() => setWakeLockEnabled(!wakeLockEnabled)}
-                    className="bg-app border border-border-input text-text-main rounded px-3 py-1 text-xs font-mono focus:outline-none hover:border-[#4caf50]"
-                 >
-                    {wakeLockEnabled ? 'Enabled' : 'Disabled'}
                  </button>
               </div>
 
@@ -2569,193 +1097,9 @@ export default function App() {
                  </button>
               </div>
 
-              <hr className="border-border-subtle my-4" />
-              <div className="flex items-center justify-between">
-                <h3 className="text-xs font-bold uppercase tracking-widest text-[#8e9299]">Cloudlog / Wavelog</h3>
-                <button 
-                    onClick={() => setWavelogEnabled(!wavelogEnabled)}
-                    className={`bg-app border rounded px-3 py-1 text-xs font-mono focus:outline-none transition-colors ${wavelogEnabled ? 'border-[#4caf50] text-[#4caf50]' : 'border-border-input text-text-main'}`}
-                 >
-                    {wavelogEnabled ? 'Enabled' : 'Disabled'}
-                 </button>
-              </div>
-
-              {wavelogEnabled && (
-                <div className="flex flex-col gap-3 mt-2">
-                  <div className="flex items-center justify-between">
-                     <div className="flex flex-col">
-                        <label className="text-[10px] uppercase tracking-widest text-text-muted">Auto-Upload QSOs</label>
-                        <span className="text-[9px] text-text-muted">Off: store locally only, no automatic push</span>
-                     </div>
-                     <button
-                        onClick={() => setAutoUploadCloudlog(!autoUploadCloudlog)}
-                        className={`bg-app border rounded px-3 py-1 text-xs font-mono focus:outline-none transition-colors ${autoUploadCloudlog ? 'border-[#4caf50] text-[#4caf50]' : 'border-border-input text-text-main'}`}
-                     >
-                        {autoUploadCloudlog ? 'Enabled' : 'Disabled'}
-                     </button>
-                  </div>
-                  <div className="flex flex-col gap-1">
-                    <label className="text-[10px] uppercase tracking-widest text-text-muted">Server URL</label>
-                    <input 
-                      type="text" 
-                      value={wavelogUrl} 
-                      onChange={e => setWavelogUrl(e.target.value)} 
-                      className="bg-app border border-border-input rounded px-3 py-2 text-sm font-mono w-full focus:outline-none focus:border-[#4caf50] text-text-main" 
-                      placeholder="https://log.example.com"
-                    />
-                  </div>
-                  <div className="flex flex-col gap-1">
-                    <label className="text-[10px] uppercase tracking-widest text-text-muted">API Key</label>
-                    <input 
-                      type="password" 
-                      value={wavelogApiKey} 
-                      onChange={e => setWavelogApiKey(e.target.value)} 
-                      className="bg-app border border-border-input rounded px-3 py-2 text-sm font-mono w-full focus:outline-none focus:border-[#4caf50] text-text-main" 
-                      placeholder="Your API Key"
-                    />
-                  </div>
-                  <div className="flex flex-col gap-1">
-                    <label className="text-[10px] uppercase tracking-widest text-[#8e9299]">Station Profile ID</label>
-                    <input 
-                      type="text" 
-                      value={wavelogStationProfileId} 
-                      onChange={e => setWavelogStationProfileId(e.target.value)} 
-                      className="bg-app border border-border-input rounded px-3 py-2 text-sm font-mono w-full focus:outline-none focus:border-[#4caf50] text-text-main" 
-                      placeholder="e.g. 5"
-                    />
-                  </div>
-                  <button 
-                    onClick={async () => {
-                        const btn = document.getElementById('btn-wavelog-test');
-                        if (btn) btn.innerText = 'Testing...';
-                        const result = await CloudLogService.testWavelogConnection(wavelogUrl, wavelogApiKey, wavelogStationProfileId);
-                        if (btn) {
-                            if (result.success) {
-                                btn.innerText = 'Success!';
-                                btn.className = 'w-full bg-[#4caf50]/20 border border-[#4caf50] text-[#4caf50] rounded px-3 py-2 text-xs font-mono font-bold transition-colors';
-                                setTimeout(() => {
-                                    btn.innerText = 'Test Connection';
-                                    btn.className = 'w-full bg-app border border-border-input text-text-main hover:bg-[#4caf50] hover:text-white hover:border-[#4caf50] rounded px-3 py-2 text-xs font-mono font-bold transition-colors';
-                                }, 3000);
-                            } else {
-                                btn.innerText = result.message.length > 50 ? 'Error (Hover for details)' : result.message;
-                                btn.title = result.message; // tool tip
-                                btn.className = 'w-full bg-red-500/20 border border-red-500 text-red-500 rounded px-3 py-2 text-xs font-mono font-bold transition-colors truncate';
-                                setTimeout(() => {
-                                    btn.innerText = 'Test Connection';
-                                    btn.title = '';
-                                    btn.className = 'w-full bg-app border border-border-input text-text-main hover:bg-[#4caf50] hover:text-white hover:border-[#4caf50] rounded px-3 py-2 text-xs font-mono font-bold transition-colors';
-                                }, 6000);
-                            }
-                        }
-                    }}
-                    id="btn-wavelog-test"
-                    disabled={!wavelogUrl || !wavelogApiKey || !wavelogStationProfileId}
-                    className="w-full bg-app border border-border-input text-text-main hover:bg-[#4caf50] hover:text-white hover:border-[#4caf50] disabled:opacity-50 disabled:hover:bg-app disabled:hover:border-border-input disabled:hover:text-text-main rounded px-3 py-2 text-xs font-mono font-bold transition-colors"
-                  >
-                    Test Connection
-                  </button>
-                </div>
-              )}
-
-              <hr className="border-border-subtle my-4" />
-              <div className="flex items-center justify-between">
-                <h3 className="text-xs font-bold uppercase tracking-widest text-[#8e9299]">External Data Stream</h3>
-                <button
-                    onClick={() => setStreamEnabled(!streamEnabled)}
-                    className={`bg-app border rounded px-3 py-1 text-xs font-mono focus:outline-none transition-colors ${streamEnabled ? 'border-[#4caf50] text-[#4caf50]' : 'border-border-input text-text-main'}`}
-                 >
-                    {streamEnabled ? 'Enabled' : 'Disabled'}
-                 </button>
-              </div>
-
-              {streamEnabled && (
-                <div className="flex flex-col gap-3 mt-2">
-                  <p className="text-[10px] text-text-muted leading-relaxed">
-                    Pushes decodes, status and logged QSOs as JSON to a local WebSocket so
-                    companion apps (loggers, propagation tools) can consume them — like the
-                    WSJT-X UDP protocol, but browser-friendly. One-way; nothing is received.
-                  </p>
-                  <div className="flex flex-col gap-1">
-                    <label className="text-[10px] uppercase tracking-widest text-text-muted">WebSocket URL</label>
-                    <input
-                      type="text"
-                      value={streamUrl}
-                      onChange={e => setStreamUrl(e.target.value)}
-                      className={`bg-app border rounded px-3 py-2 text-sm font-mono w-full focus:outline-none text-text-main ${streamUrlValid ? 'border-border-input focus:border-[#4caf50]' : 'border-red-500 focus:border-red-400'}`}
-                      placeholder="ws://localhost:2442"
-                    />
-                    {!streamUrlValid && (
-                      <span className="text-[10px] text-red-400">Must be a ws:// or wss:// URL pointing to localhost or 127.0.0.1</span>
-                    )}
-                  </div>
-                  <div className={`text-xs font-mono ${streamConnected ? 'text-[#4caf50]' : 'text-text-muted'}`}>
-                    {streamConnected ? '● Connected' : '○ Not connected (retrying…)'}
-                  </div>
-                </div>
-              )}
-
-              <hr className="border-border-subtle my-4" />
-              <div className="flex items-center justify-between">
-                <h3 className="text-xs font-bold uppercase tracking-widest text-[#8e9299]">Send spots to PSKReporter</h3>
-                <button
-                    onClick={() => pskIdentityValid && setPskEnabled(!pskEnabled)}
-                    disabled={!pskIdentityValid}
-                    title={pskIdentityValid ? '' : 'Set a valid callsign and grid locator first'}
-                    className={`bg-app border rounded px-3 py-1 text-xs font-mono focus:outline-none transition-colors ${!pskIdentityValid ? 'border-border-input text-text-muted opacity-50 cursor-not-allowed' : pskEnabled ? 'border-[#4caf50] text-[#4caf50]' : 'border-border-input text-text-main'}`}
-                 >
-                    {pskEnabled ? 'Enabled' : 'Disabled'}
-                 </button>
-              </div>
-              <p className="text-[10px] text-text-muted leading-relaxed mt-2">
-                Uploads your reception reports (heard callsign + grid) to the
-                PSKReporter spotting network via a relay, using your call
-                <span className="font-mono"> {myCall}</span> and grid
-                <span className="font-mono"> {myGrid}</span> as the reporter identity.
-                Off by default; only standard messages carrying a grid are reported.
-              </p>
-              {!pskIdentityValid && (
-                <span className="text-[10px] text-red-400">Set a valid callsign (not the default) and Maidenhead grid above to enable.</span>
-              )}
-              {pskEnabled && pskIdentityValid && (
-                <div className="text-xs font-mono text-text-muted mt-1">
-                  Spots sent this session: {pskSpotsSent}
-                </div>
-              )}
-
-              <hr className="border-border-subtle my-4" />
-
-              <div className="flex flex-col gap-1">
-                <label className="text-[10px] uppercase tracking-widest text-text-muted">Audio Input (RX)</label>
-                <select 
-                  value={selectedDeviceId}
-                  onChange={handleDeviceChange}
-                  className="bg-app border border-border-input text-text-main rounded px-3 py-2 text-xs font-mono w-full focus:outline-none focus:border-[#4caf50]"
-                >
-                  <option value="">Default Source</option>
-                  {audioDevices.map(d => (
-                    <option key={d.deviceId} value={d.deviceId}>
-                      {d.label || `Input ${d.deviceId.substring(0,5)}...`}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              <div className="flex flex-col gap-1">
-                <label className="text-[10px] uppercase tracking-widest text-text-muted">Audio Output (TX)</label>
-                <select 
-                  value={selectedOutputDeviceId}
-                  onChange={handleOutputDeviceChange}
-                  className="bg-app border border-border-input text-text-main rounded px-3 py-2 text-xs font-mono w-full focus:outline-none focus:border-[#4caf50]"
-                >
-                  <option value="default">System Default</option>
-                  {audioOutputs.map(d => (
-                    <option key={d.deviceId} value={d.deviceId}>
-                      {d.label || `Output ${d.deviceId.substring(0,5)}...`}
-                    </option>
-                  ))}
-                </select>
-              </div>
+              {/* Cloudlog/Wavelog, External Data Stream, PSKReporter and Audio Input/Output
+                  settings removed with the local brain (Task 6); Task 13 re-adds a
+                  server-driven settings section. */}
             </div>
             
             <div className="mt-8 flex justify-end">
