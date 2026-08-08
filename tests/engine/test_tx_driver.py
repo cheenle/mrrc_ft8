@@ -273,3 +273,38 @@ def test_cq_transmits_at_default_frequency() -> None:
     sequencer.start_cq()
     run(driver.on_slot_start(0))
     assert driver.encoder.calls[0][1] == 1500.0
+
+
+def test_on_transmitted_fires_after_successful_transmit() -> None:
+    sequencer, driver = make_driver(FakeEncoder(), FakeSafety())
+    recorded: list[tuple[int, str, float]] = []
+    driver.on_transmitted = lambda slot_id, message, freq: recorded.append(
+        (slot_id, message, freq)
+    )
+    sequencer.start_cq()
+    run(driver.on_slot_start(0))
+    assert recorded == [(0, "CQ M0XX IO91", 1500.0)]
+
+
+def test_on_transmitted_not_fired_on_encode_failure() -> None:
+    sequencer, driver = make_driver(
+        FakeEncoder(error=WorkerFault("encode_fault", "boom", 1)), FakeSafety()
+    )
+    recorded: list[tuple[int, str, float]] = []
+    driver.on_transmitted = lambda slot_id, message, freq: recorded.append(
+        (slot_id, message, freq)
+    )
+    sequencer.start_cq()
+    run(driver.on_slot_start(0))
+    assert recorded == []
+
+
+def test_on_transmitted_not_fired_on_refusal() -> None:
+    sequencer, driver = make_driver(FakeEncoder(), FakeSafety(error=TxRefused("test")))
+    recorded: list[tuple[int, str, float]] = []
+    driver.on_transmitted = lambda slot_id, message, freq: recorded.append(
+        (slot_id, message, freq)
+    )
+    sequencer.start_cq()
+    run(driver.on_slot_start(0))
+    assert recorded == []

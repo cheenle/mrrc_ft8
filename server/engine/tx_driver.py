@@ -74,6 +74,9 @@ class TxDriver:
     counters: dict[str, int] = field(
         default_factory=lambda: {"tx_attempts": 0, "tx_failed": 0}
     )
+    # Optional observer for the composition layer (desktop client shows the
+    # transmitted message live).  Fired only after a successful transmit.
+    on_transmitted: Callable[[int, str, float], None] | None = None
     _tx_in_flight: bool = field(default=False, repr=False)
 
     async def on_slot_start(self, slot_id: int) -> None:
@@ -141,6 +144,8 @@ class TxDriver:
                 message, self.sequencer.tx_frequency, slot_id=slot_id
             )
             await self.safety.transmit(waveform)
+            if self.on_transmitted is not None:
+                self.on_transmitted(slot_id, message, self.sequencer.tx_frequency)
         except TxRefused:
             # Refused or aborted by the safety authority (STOP cancel,
             # disarm, watchdog, latched interlock): not a DSP fault, and
