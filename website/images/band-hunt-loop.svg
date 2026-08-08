@@ -1,0 +1,60 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 640" role="img" aria-labelledby="f9title">
+  <title id="f9title">图 9 band-hunt 闭环：双闸门 → 轮询 → 归一化 → 排序切频 → 自动呼叫</title>
+  <defs>
+    <marker id="f9-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto">
+      <path d="M 0 0 L 10 5 L 0 10 z" style="fill:var(--accent,#22d3ee)"/>
+    </marker>
+  </defs>
+
+  <rect x="0" y="0" width="960" height="640" rx="12" fill="var(--bg-tertiary,#10161e)"/>
+
+  <!-- loop boxes (clockwise) -->
+  <g text-anchor="middle">
+    <!-- 1: top -->
+    <rect x="360" y="70" width="240" height="72" rx="8" fill="var(--bg-secondary,#0d1117)" stroke-width="1.5" style="stroke:var(--accent,#22d3ee)"/>
+    <text x="480" y="100" font-family="Inter, system-ui, -apple-system, sans-serif" font-size="13" font-weight="600" style="fill:var(--text-primary,#ffffff)">① 双闸门</text>
+    <text x="480" y="124" font-family="'JetBrains Mono', ui-monospace, monospace" font-size="11" style="fill:var(--text-secondary,#8899aa)">auto_band_hunt ∧ 冷却 1200 s</text>
+
+    <!-- 2: top-right -->
+    <rect x="690" y="140" width="250" height="72" rx="8" fill="var(--bg-secondary,#0d1117)" stroke-width="1.5" style="stroke:var(--accent,#22d3ee)"/>
+    <text x="815" y="170" font-family="Inter, system-ui, -apple-system, sans-serif" font-size="13" font-weight="600" style="fill:var(--text-primary,#ffffff)">② 轮询 /api/band_hunt</text>
+    <text x="815" y="194" font-family="Inter, system-ui, -apple-system, sans-serif" font-size="11" style="fill:var(--text-secondary,#8899aa)">pskreporter · HTTP 唯一跨库边界</text>
+
+    <!-- 3: mid-right -->
+    <rect x="690" y="290" width="250" height="72" rx="8" fill="var(--bg-secondary,#0d1117)" stroke-width="1.5" style="stroke:#34d399"/>
+    <text x="815" y="320" font-family="Inter, system-ui, -apple-system, sans-serif" font-size="13" font-weight="600" style="fill:var(--text-primary,#ffffff)">③ 实体名归一化（V1.5）</text>
+    <text x="815" y="344" font-family="'JetBrains Mono', ui-monospace, monospace" font-size="11" style="fill:var(--text-secondary,#8899aa)">_CTY_NAME_ALIASES</text>
+
+    <!-- 4: bottom -->
+    <rect x="360" y="460" width="240" height="72" rx="8" fill="var(--bg-secondary,#0d1117)" stroke-width="1.5" style="stroke:var(--accent,#22d3ee)"/>
+    <text x="480" y="490" font-family="'JetBrains Mono', ui-monospace, monospace" font-size="13" font-weight="600" style="fill:var(--text-primary,#ffffff)">④ rank/decide_switch</text>
+    <text x="480" y="514" font-family="Inter, system-ui, -apple-system, sans-serif" font-size="11" style="fill:var(--text-secondary,#8899aa)">按未通联实体数降序</text>
+
+    <!-- 5: mid-left -->
+    <rect x="40" y="290" width="250" height="72" rx="8" fill="var(--bg-secondary,#0d1117)" stroke-width="1.5" style="stroke:var(--accent,#22d3ee)"/>
+    <text x="165" y="320" font-family="Inter, system-ui, -apple-system, sans-serif" font-size="13" font-weight="600" style="fill:var(--text-primary,#ffffff)">⑤ 空闲时 rig 调谐切频</text>
+    <text x="165" y="344" font-family="Inter, system-ui, -apple-system, sans-serif" font-size="11" style="fill:var(--text-secondary,#8899aa)">经 rigctld 切到目标波段</text>
+
+    <!-- 6: top-left -->
+    <rect x="40" y="140" width="250" height="72" rx="8" fill="var(--bg-secondary,#0d1117)" stroke-width="1.5" style="stroke:var(--accent,#22d3ee)"/>
+    <text x="165" y="170" font-family="Inter, system-ui, -apple-system, sans-serif" font-size="13" font-weight="600" style="fill:var(--text-primary,#ffffff)">⑥ 新波段解码</text>
+    <text x="165" y="194" font-family="Inter, system-ui, -apple-system, sans-serif" font-size="11" style="fill:var(--text-secondary,#8899aa)">auto-call 闭环自然接续</text>
+  </g>
+
+  <!-- clockwise arrows -->
+  <g fill="none" stroke-width="1.5" style="stroke:var(--accent,#22d3ee)">
+    <path d="M 600 106 H 660 V 140" marker-end="url(#f9-arrow)"/>
+    <path d="M 815 212 V 286" marker-end="url(#f9-arrow)"/>
+    <path d="M 815 362 C 815 430, 700 480, 604 494" marker-end="url(#f9-arrow)"/>
+    <path d="M 360 496 C 260 486, 170 430, 165 366" marker-end="url(#f9-arrow)"/>
+    <path d="M 165 290 V 216" marker-end="url(#f9-arrow)"/>
+    <path d="M 290 160 C 380 140, 420 120, 360 106" marker-end="url(#f9-arrow)"/>
+  </g>
+
+  <!-- center annotation -->
+  <text x="480" y="330" text-anchor="middle" font-family="Inter, system-ui, -apple-system, sans-serif" font-size="13" style="fill:var(--text-muted,#5c6370)">把波段切到新 DXCC 最密集的地方 → 自动呼叫闭环接续</text>
+
+  <!-- bottom note -->
+  <rect x="40" y="570" width="880" height="50" rx="8" fill="var(--bg-secondary,#0d1117)" stroke-width="1" style="stroke:var(--border,rgba(255,255,255,0.06))"/>
+  <text x="480" y="600" text-anchor="middle" font-family="'JetBrains Mono', ui-monospace, monospace" font-size="12" style="fill:var(--text-secondary,#8899aa)">CQ 空闲频点（UC-004）：占用环 120 s TTL · 1500±300 Hz 螺旋 · guard 30 Hz · 全占用回退 1500</text>
+</svg>

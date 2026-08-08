@@ -1,0 +1,60 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 560" role="img" aria-labelledby="f8title">
+  <title id="f8title">图 8 落库与 worked 集刷新：dxcc_dirty 闭环</title>
+  <defs>
+    <marker id="f8-arrow-green" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto">
+      <path d="M 0 0 L 10 5 L 0 10 z" style="fill:#34d399"/>
+    </marker>
+    <marker id="f8-arrow-amber" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto">
+      <path d="M 0 0 L 10 5 L 0 10 z" style="fill:#f59e0b"/>
+    </marker>
+  </defs>
+
+  <rect x="0" y="0" width="960" height="560" rx="12" fill="var(--bg-tertiary,#10161e)"/>
+
+  <!-- main chain (green): persist path -->
+  <rect x="400" y="30" width="460" height="42" rx="8" fill="var(--bg-secondary,#0d1117)" stroke-width="1.5" style="stroke:#34d399"/>
+  <text x="630" y="56" text-anchor="middle" font-family="Inter, system-ui, -apple-system, sans-serif" font-size="13" font-weight="600" style="fill:var(--text-primary,#ffffff)">收到 <tspan font-family="'JetBrains Mono', ui-monospace, monospace">RR73/73</tspan></text>
+
+  <path d="M 630 72 V 98" fill="none" stroke-width="1.5" style="stroke:#34d399" marker-end="url(#f8-arrow-green)"/>
+
+  <rect x="400" y="98" width="460" height="42" rx="8" fill="var(--bg-secondary,#0d1117)" stroke-width="1.5" style="stroke:#34d399"/>
+  <text x="630" y="124" text-anchor="middle" font-family="Inter, system-ui, -apple-system, sans-serif" font-size="13" font-weight="600" style="fill:var(--text-primary,#ffffff)"><tspan font-family="'JetBrains Mono', ui-monospace, monospace">_ensure_log</tspan>（恰好一次）</text>
+
+  <path d="M 630 140 V 166" fill="none" stroke-width="1.5" style="stroke:#34d399" marker-end="url(#f8-arrow-green)"/>
+
+  <rect x="400" y="166" width="460" height="42" rx="8" fill="var(--bg-secondary,#0d1117)" stroke-width="1.5" style="stroke:#34d399"/>
+  <text x="630" y="192" text-anchor="middle" font-family="'JetBrains Mono', ui-monospace, monospace" font-size="13" font-weight="600" style="fill:var(--text-primary,#ffffff)">on_qso</text>
+
+  <path d="M 630 208 V 234" fill="none" stroke-width="1.5" style="stroke:#34d399" marker-end="url(#f8-arrow-green)"/>
+
+  <rect x="400" y="234" width="460" height="54" rx="8" fill="var(--bg-secondary,#0d1117)" stroke-width="1.5" style="stroke:#34d399"/>
+  <text x="630" y="256" text-anchor="middle" font-family="'JetBrains Mono', ui-monospace, monospace" font-size="13" font-weight="600" style="fill:var(--text-primary,#ffffff)">qso_log.enqueue</text>
+  <text x="630" y="277" text-anchor="middle" font-family="Inter, system-ui, -apple-system, sans-serif" font-size="11.5"><tspan style="fill:var(--text-muted,#5c6370)">注：</tspan><tspan font-family="'JetBrains Mono', ui-monospace, monospace" style="fill:var(--text-secondary,#8899aa)">asyncio.to_thread</tspan></text>
+
+  <path d="M 630 288 V 314" fill="none" stroke-width="1.5" style="stroke:#34d399" marker-end="url(#f8-arrow-green)"/>
+
+  <rect x="400" y="314" width="460" height="106" rx="8" fill="var(--bg-secondary,#0d1117)" stroke-width="1.5" style="stroke:#34d399"/>
+  <text x="630" y="337" text-anchor="middle" font-family="'JetBrains Mono', ui-monospace, monospace" font-size="13" font-weight="600" style="fill:var(--text-primary,#ffffff)">record_qso</text>
+  <text x="630" y="360" text-anchor="middle" font-family="'JetBrains Mono', ui-monospace, monospace" font-size="11.5" style="fill:var(--text-secondary,#8899aa)">qso 表 source='live' · status='completed'</text>
+  <text x="630" y="381" text-anchor="middle" font-family="'JetBrains Mono', ui-monospace, monospace" font-size="11.5" style="fill:var(--text-secondary,#8899aa)">my/dx call+grid · 双方 report · freq_hz/band</text>
+  <text x="630" y="402" text-anchor="middle" font-family="'JetBrains Mono', ui-monospace, monospace" font-size="11.5" style="fill:var(--text-secondary,#8899aa)">qso_event · <tspan style="fill:#34d399">dxcc_dirty = True</tspan></text>
+
+  <path d="M 630 420 V 446" fill="none" stroke-width="1.5" style="stroke:#34d399" marker-end="url(#f8-arrow-green)"/>
+
+  <!-- bottom: next slot rebuilds cache, worked set closes the loop -->
+  <rect x="400" y="446" width="460" height="84" rx="8" fill="var(--bg-secondary,#0d1117)" stroke-width="1.5" style="stroke:var(--accent,#22d3ee)"/>
+  <text x="630" y="470" text-anchor="middle" font-family="Inter, system-ui, -apple-system, sans-serif" font-size="12.5" font-weight="600" style="fill:var(--text-primary,#ffffff)">下一 slot：<tspan font-family="'JetBrains Mono', ui-monospace, monospace">on_decode</tspan> 查 <tspan font-family="'JetBrains Mono', ui-monospace, monospace">dxcc_dirty</tspan> → 重建 <tspan font-family="'JetBrains Mono', ui-monospace, monospace">dxcc_summary</tspan></text>
+  <text x="630" y="492" text-anchor="middle" font-family="Inter, system-ui, -apple-system, sans-serif" font-size="11.5" style="fill:var(--text-secondary,#8899aa)">（~0.2 s，每 slot 至多一次）</text>
+  <text x="630" y="514" text-anchor="middle" font-family="Inter, system-ui, -apple-system, sans-serif" font-size="12.5" style="fill:#34d399">实体 ∈ <tspan font-family="'JetBrains Mono', ui-monospace, monospace">worked</tspan> → 不再触发</text>
+
+  <!-- amber branch (fault path): crash recovery from pending jsonl -->
+  <path d="M 400 261 H 360" fill="none" stroke-width="1.5" style="stroke:#f59e0b" marker-end="url(#f8-arrow-amber)"/>
+  <rect x="60" y="221" width="300" height="80" rx="8" fill="var(--bg-secondary,#0d1117)" stroke-width="1.5" style="stroke:#f59e0b"/>
+  <text x="210" y="245" text-anchor="middle" font-family="Inter, system-ui, -apple-system, sans-serif" font-size="13" font-weight="600" style="fill:#f59e0b">进程崩溃</text>
+  <text x="210" y="267" text-anchor="middle" font-family="'JetBrains Mono', ui-monospace, monospace" font-size="12" style="fill:#f59e0b">data/qso-pending.jsonl</text>
+  <text x="210" y="289" text-anchor="middle" font-family="Inter, system-ui, -apple-system, sans-serif" font-size="11.5" style="fill:#f59e0b">待办恢复（不丢记录）</text>
+
+  <!-- green dashed loop-back to the top -->
+  <path d="M 860 488 H 916 V 51 H 860" fill="none" stroke-width="1.5" stroke-dasharray="6 4" style="stroke:#34d399" marker-end="url(#f8-arrow-green)"/>
+  <text transform="translate(940 270) rotate(-90)" text-anchor="middle" font-family="Inter, system-ui, -apple-system, sans-serif" font-size="12" style="fill:#34d399">P1 修复：cache 刷新独立于 band-hunt 开关</text>
+</svg>
