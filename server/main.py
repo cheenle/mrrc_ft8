@@ -438,6 +438,9 @@ def create_server(
         state.tx_driver.on_tx_error = lambda slot_id, error: report_dsp_fault(  # type: ignore[method-assign]
             f"tx slot {slot_id}", error
         )
+        state.tx_driver.on_transmitted = lambda slot_id, message, freq_hz: _record_last_tx(
+            state, slot_id, message, freq_hz
+        )
         slot_ring = ring if ring is not None else UtcRing()
         capture_health = CaptureHealthMonitor()
         slot_rms: dict[int, float] = {}
@@ -709,6 +712,9 @@ def create_server(
         state.tx_driver.on_tx_error = lambda slot_id, error: report_dsp_fault(  # type: ignore[method-assign]
             f"tx slot {slot_id}", error
         )
+        state.tx_driver.on_transmitted = lambda slot_id, message, freq_hz: _record_last_tx(
+            state, slot_id, message, freq_hz
+        )
 
     @asynccontextmanager
     async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
@@ -978,6 +984,25 @@ def _static_dir() -> str:
     from pathlib import Path
 
     return str(Path(__file__).resolve().parent / "web" / "static")
+
+
+def _record_last_tx(state: AppState, slot_id: int, message: str, freq_hz: float) -> None:
+    """Record the just-transmitted message and push a state snapshot.
+
+    The desktop client's Active QSO panel renders outgoing messages from
+    this field; the mobile PWA ignores the unknown ``last_tx`` key.
+    """
+    import time
+
+    state.last_tx = {
+        "slot_id": slot_id,
+        "utc": time.strftime("%H%M%S", time.gmtime(slot_id * 15.0)),
+        "text": message,
+        "freq_hz": freq_hz,
+    }
+    state.bump()
+    if state.state_broadcast is not None:
+        state.state_broadcast.publish(_snapshot(state, None))
 
 
 def main() -> None:
