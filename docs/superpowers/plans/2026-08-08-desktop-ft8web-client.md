@@ -67,9 +67,12 @@ In `desktop/ft8web/src/main.tsx`, remove the Service Worker registration and Eru
 
 - [ ] **Step 5: Commit**
 
+Repository-concurrency note: another process may be committing to this branch in the same working tree — stage ONLY your paths, never `git add -u`/`-A`/`.`.
+
 ```bash
-git add .gitignore desktop/ft8web/ src 2>/dev/null || git add .gitignore desktop/ft8web/
-cd /Users/cheenle/HAM/ft8 && git add -u && git commit -m "chore(desktop): scaffold ft8web fork at desktop/ft8web"
+cd /Users/cheenle/HAM/ft8
+git add .gitignore desktop/ft8web/
+git commit -m "chore(desktop): scaffold ft8web fork at desktop/ft8web"
 ```
 
 ---
