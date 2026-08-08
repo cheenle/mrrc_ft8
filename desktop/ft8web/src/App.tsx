@@ -133,6 +133,25 @@ function mapSequencerState(s: string): string {
   return SEQUENCER_STATE_LABELS[s] ?? s.toUpperCase();
 }
 
+// --- Settings ↔ server mapping (Task 13) -----------------------------------
+// FT8web's Decoder Depth is a 1–3 label; the server's decoder_profile is 0–4.
+// Forward: 1 (fast) → 0, 2 (deep) → 3, 3 (max) → 4. Reverse collapses the
+// intermediate profiles 1–2 into the "deep" label.
+function decodeDepthToProfile(depth: number): number {
+  switch (depth) {
+    case 1: return 0;
+    case 2: return 3;
+    case 3: return 4;
+    default: return 3;
+  }
+}
+function profileToDecodeDepth(profile: number | null | undefined): number {
+  if (typeof profile !== 'number') return 2;
+  if (profile <= 0) return 1;
+  if (profile >= 4) return 3;
+  return 2;
+}
+
 // --- Advisory clock-accuracy check (SNTP-style over HTTP) -------------------
 // FT8 is time-critical. Browsers can't read the system NTP daemon or set the
 // clock, so we measure the device-clock offset against a trusted HTTP time
@@ -280,26 +299,24 @@ export default function App() {
     };
   }, []);
   
-  // Station Configuration State
+  // Station Configuration State. Callsign/grid are read-only here — the server
+  // snapshot owns them (Task 10) and the settings modal renders them read-only
+  // (Task 13). txFreq remains the local TX-offset edit only.
   const [myCall, setMyCall] = useState<string>(() => localStorage.getItem('ft8_myCall') || 'N0TMP');
   const [myGrid, setMyGrid] = useState<string>(() => localStorage.getItem('ft8_myGrid') || 'EM12');
   const [txFreq, setTxFreq] = useState<number>(() => {
       const saved = localStorage.getItem('ft8_txFreq');
       return saved ? Number(saved) : 1500;
   }); // Default TX offset
-  const [decodeDepth, setDecodeDepth] = useState<number>(() => {
-      const saved = localStorage.getItem('ft8_decodeDepth');
-      return saved ? Number(saved) : 2;
-  });
-  const [maxRetries, setMaxRetries] = useState<number>(() => {
-      const saved = localStorage.getItem('ft8_maxRetries');
-      return saved ? Number(saved) : 4;
-  });
+  // Server-backed decode settings (Task 13): decodeDepth is the modal's 1–3
+  // label for the server's decoder_profile (0–4); decoderThreads mirrors the
+  // server's decoder_threads (0 = Auto). Loaded from /settings on modal open
+  // and saved per changed key on Save & Close.
+  const [decodeDepth, setDecodeDepth] = useState<number>(2);
+  const [decoderThreads, setDecoderThreads] = useState<number>(0);
+  const [autoBandHunt, setAutoBandHunt] = useState<boolean>(false);
   const [finalMessageMode, setFinalMessageMode] = useState<'RR73'|'RRR'>(() => {
       return (localStorage.getItem('ft8_finalMessageMode') as 'RR73'|'RRR') || 'RR73';
-  });
-  const [skipTx1Grid, setSkipTx1Grid] = useState<boolean>(() => {
-      return localStorage.getItem('ft8_skipTx1Grid') === 'true';
   });
 
   const [maxLogEntries, setMaxLogEntries] = useState<number>(() => {
@@ -317,16 +334,16 @@ export default function App() {
     document.documentElement.setAttribute('data-theme', theme);
   }, [theme]);
 
+  // Local-only display/behaviour prefs stay in localStorage (Task 13). Decode
+  // settings (decodeDepth/decoderThreads/autoBandHunt) live on the server via
+  // /settings; maxRetries and skipTx1Grid were removed with the local FSM.
   useEffect(() => {
       localStorage.setItem('ft8_myCall', myCall);
       localStorage.setItem('ft8_myGrid', myGrid);
       localStorage.setItem('ft8_txFreq', txFreq.toString());
-      localStorage.setItem('ft8_decodeDepth', decodeDepth.toString());
-      localStorage.setItem('ft8_maxRetries', maxRetries.toString());
       localStorage.setItem('ft8_finalMessageMode', finalMessageMode);
       localStorage.setItem('ft8_maxLogEntries', maxLogEntries.toString());
-      localStorage.setItem('ft8_skipTx1Grid', String(skipTx1Grid));
-  }, [myCall, myGrid, txFreq, decodeDepth, maxRetries, finalMessageMode, maxLogEntries, skipTx1Grid]);
+  }, [myCall, myGrid, txFreq, finalMessageMode, maxLogEntries]);
 
   // UI State
   const [showSettings, setShowSettings] = useState(false);
@@ -703,6 +720,43 @@ export default function App() {
     void mrrc.putSetting('auto_call_new_dxcc', next);
   }, [autoSequence]);
 
+  // --- Server-backed settings modal (Task 13) -------------------------------
+  // The server owns Decoding + QSO-behaviour settings. The modal loads them on
+  // open (mrrc.settings()) and writes only the keys the operator changed on
+  // Save & Close (mrrc.putSetting per key). Appearance (theme) and Logbook
+  // (maxLogEntries) stay in localStorage.
+  const settingsBaselineRef = useRef<Record<string, unknown>>({});
+
+  const openSettingsModal = useCallback(async () => {
+    setShowSettings(true);
+    const res = await mrrc.settings();
+    if (!res.ok) return;
+    const s = res.body.settings ?? {};
+    settingsBaselineRef.current = s;
+    setDecodeDepth(profileToDecodeDepth(s.decoder_profile));
+    setDecoderThreads(typeof s.decoder_threads === 'number' ? s.decoder_threads : 0);
+    if (typeof s.auto_call_new_dxcc === 'boolean') setAutoSequence(s.auto_call_new_dxcc);
+    if (typeof s.auto_band_hunt === 'boolean') setAutoBandHunt(s.auto_band_hunt);
+  }, []);
+
+  const saveSettings = useCallback(async () => {
+    const baseline = settingsBaselineRef.current;
+    const changes: Record<string, unknown> = {};
+    const profile = decodeDepthToProfile(decodeDepth);
+    if (baseline.decoder_profile !== profile) changes.decoder_profile = profile;
+    // decoder_threads 0 = Auto (server default) — the schema only accepts 1–12,
+    // so "Auto" means "don't touch the server value".
+    if (decoderThreads >= 1 && baseline.decoder_threads !== decoderThreads) {
+      changes.decoder_threads = decoderThreads;
+    }
+    if (baseline.auto_call_new_dxcc !== autoSequence) changes.auto_call_new_dxcc = autoSequence;
+    if (baseline.auto_band_hunt !== autoBandHunt) changes.auto_band_hunt = autoBandHunt;
+    for (const [key, value] of Object.entries(changes)) {
+      await mrrc.putSetting(key, value);
+    }
+    setShowSettings(false);
+  }, [decodeDepth, decoderThreads, autoSequence, autoBandHunt]);
+
   // Sync Interval Management & Animation Frame — UTC clock, slot window progress,
   // and the waterfall only. The decode trigger, queued-TX start, FSM drive, and
   // period markers were removed with the local brain (Task 6).
@@ -775,7 +829,7 @@ export default function App() {
                 {audioActive ? "Audio Active" : "Activate Audio"}
               </button>
               <button
-                onClick={() => setShowSettings(true)}
+                onClick={() => { void openSettingsModal(); }}
                 className="px-2 border border-border-input bg-btn hover:bg-btn-hover rounded flex items-center justify-center text-text-muted hover:text-text-main transition-colors"
                 title="Settings"
               >
@@ -1106,13 +1160,13 @@ export default function App() {
           <div className="w-full lg:w-auto space-y-3 lg:border-r border-border-subtle lg:pr-6 shrink-0">
             <div className="flex flex-col">
               <label className="text-[9px] uppercase tracking-widest text-text-muted mb-1">My Station</label>
-              <div className="flex items-center gap-2 cursor-pointer" onClick={() => setShowSettings(true)}>
+              <div className="flex items-center gap-2 cursor-pointer" onClick={() => { void openSettingsModal(); }}>
                 <span className={`border border-border-subtle rounded px-3 py-1.5 text-xs font-mono uppercase font-bold min-w-[80px] text-center ${
                   theme === 'dark' ? 'bg-[#050505] text-[#4caf50]' : 'bg-white text-green-600'
-                }`} title="Click to edit in Settings">{myCall}</span>
+                }`} title="Station identity (managed on the station)">{myCall}</span>
                 <span className={`border border-border-subtle rounded px-3 py-1.5 text-xs font-mono uppercase min-w-[60px] text-center ${
                   theme === 'dark' ? 'bg-[#050505] text-text-muted' : 'bg-white text-text-muted'
-                }`} title="Click to edit in Settings">{myGrid}</span>
+                }`} title="Station identity (managed on the station)">{myGrid}</span>
                 <span className={`border border-border-subtle rounded px-3 py-1.5 text-xs font-mono min-w-[80px] text-center ${
                   theme === 'dark' ? 'bg-[#050505] text-text-main' : 'bg-white text-text-main'
                 }`} title="Click to edit in Settings">{txFreq} Hz</span>
@@ -1240,97 +1294,124 @@ export default function App() {
             </div>
             
             <div className="space-y-4">
+              {/* Station identity — read-only from the server snapshot (Task 13).
+                  Callsign/grid are configured on the station (server). */}
               <div className="flex flex-col gap-1">
                 <label className="text-[10px] uppercase tracking-widest text-text-muted">My Callsign</label>
-                <input type="text" value={myCall} onChange={e => setMyCall(e.target.value.toUpperCase())} className="bg-app border border-border-input rounded px-3 py-2 text-sm font-mono w-full focus:outline-none focus:border-[#4caf50] text-text-main uppercase" />
+                <span className="bg-app border border-border-input rounded px-3 py-2 text-sm font-mono w-full text-text-main uppercase">{myCall}</span>
               </div>
               <div className="flex flex-col gap-1">
                 <label className="text-[10px] uppercase tracking-widest text-text-muted">My Grid Locator</label>
-                <input type="text" value={myGrid} onChange={e => setMyGrid(e.target.value.toUpperCase())} className="bg-app border border-border-input rounded px-3 py-2 text-sm font-mono w-full focus:outline-none focus:border-[#4caf50] text-text-main uppercase" />
+                <span className="bg-app border border-border-input rounded px-3 py-2 text-sm font-mono w-full text-text-main uppercase">{myGrid}</span>
               </div>
-              <div className="flex flex-col gap-1">
-                <label className="text-[10px] uppercase tracking-widest text-text-muted">Decoder Depth</label>
-                <select 
-                  value={decodeDepth.toString()}
-                  onChange={e => setDecodeDepth(Number(e.target.value))}
-                  className="bg-app border border-border-input text-text-main rounded px-3 py-2 text-xs font-mono w-full focus:outline-none focus:border-[#4caf50]"
+
+              {/* Decoding — server settings (decoder_profile / decoder_threads) */}
+              <div className="flex flex-col gap-3 pt-2 border-t border-border-subtle">
+                <label className="text-[10px] uppercase tracking-widest text-text-muted">Decoding</label>
+                <div className="flex flex-col gap-1">
+                  <label className="text-[10px] text-text-muted">Decoder Depth</label>
+                  <select
+                    value={decodeDepth.toString()}
+                    onChange={e => setDecodeDepth(Number(e.target.value))}
+                    className="bg-app border border-border-input text-text-main rounded px-3 py-2 text-xs font-mono w-full focus:outline-none focus:border-[#4caf50]"
+                  >
+                    <option value="1">1 - Fast (Normal)</option>
+                    <option value="2">2 - Deep (Slower, Decodes more)</option>
+                    <option value="3">3 - Max (Slowest, Decodes weak signals)</option>
+                  </select>
+                </div>
+                <div className="flex flex-col gap-1">
+                  <label className="text-[10px] text-text-muted">Decoder Threads</label>
+                  <select
+                    value={decoderThreads.toString()}
+                    onChange={e => setDecoderThreads(Number(e.target.value))}
+                    className="bg-app border border-border-input text-text-main rounded px-3 py-2 text-xs font-mono w-full focus:outline-none focus:border-[#4caf50]"
+                  >
+                    <option value="0">Auto (server default)</option>
+                    {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12].map(n => (
+                      <option key={n} value={n}>{n}</option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
+              {/* QSO behavior — auto_call_new_dxcc / auto_band_hunt are server
+                  settings; final message mode stays local (server has no key). */}
+              <div className="flex flex-col gap-2 pt-2 border-t border-border-subtle">
+                <label className="text-[10px] uppercase tracking-widest text-text-muted">QSO Behavior</label>
+                <div className="flex items-center justify-between">
+                  <div className="flex flex-col">
+                    <span className="text-xs text-text-main">Auto-Call New DXCC</span>
+                    <span className="text-[9px] text-text-muted">Auto-call a not-yet-worked DXCC entity</span>
+                  </div>
+                  <button
+                    onClick={() => setAutoSequence(!autoSequence)}
+                    className={`bg-app border rounded px-3 py-1 text-xs font-mono focus:outline-none transition-colors ${autoSequence ? 'border-[#4caf50] text-[#4caf50]' : 'border-border-input text-text-main'}`}
+                  >
+                    {autoSequence ? 'Enabled' : 'Disabled'}
+                  </button>
+                </div>
+                <div className="flex items-center justify-between">
+                  <div className="flex flex-col">
+                    <span className="text-xs text-text-main">Auto Band Hunt</span>
+                    <span className="text-[9px] text-text-muted">Hunt new DXCC entities across bands</span>
+                  </div>
+                  <button
+                    onClick={() => setAutoBandHunt(!autoBandHunt)}
+                    className={`bg-app border rounded px-3 py-1 text-xs font-mono focus:outline-none transition-colors ${autoBandHunt ? 'border-[#4caf50] text-[#4caf50]' : 'border-border-input text-text-main'}`}
+                  >
+                    {autoBandHunt ? 'Enabled' : 'Disabled'}
+                  </button>
+                </div>
+                <div className="flex flex-col gap-1 mt-1">
+                  <label className="text-[10px] text-text-muted">Final Message Mode</label>
+                  <select
+                    value={finalMessageMode}
+                    onChange={e => setFinalMessageMode(e.target.value as 'RR73' | 'RRR')}
+                    className="bg-app border border-border-input text-text-main rounded px-3 py-2 text-xs font-mono w-full focus:outline-none focus:border-[#4caf50]"
+                  >
+                    <option value="RR73">RR73 (Standard, Faster)</option>
+                    <option value="RRR">RRR (Requires 73 from target)</option>
+                  </select>
+                </div>
+              </div>
+
+              {/* Appearance — local-only display pref */}
+              <div className="flex items-center justify-between pt-2 border-t border-border-subtle">
+                <label className="text-[10px] uppercase tracking-widest text-text-muted">Appearance</label>
+                <button
+                  onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
+                  className="bg-app border border-border-input text-text-main rounded px-3 py-1 text-xs font-mono focus:outline-none hover:border-[#4caf50]"
                 >
-                  <option value="1">1 - Fast (Normal)</option>
-                  <option value="2">2 - Deep (Slower, Decodes more)</option>
-                  <option value="3">3 - Max (Slowest, Decodes weak signals)</option>
-                </select>
+                  {theme === 'dark' ? 'Dark Mode' : 'Light Mode'}
+                </button>
               </div>
 
-              <div className="flex flex-col gap-1">
-                <label className="text-[10px] uppercase tracking-widest text-text-muted">Max Retries</label>
-                <input 
-                  type="number" 
-                  min="0"
-                  max="10"
-                  value={maxRetries} 
-                  onChange={e => setMaxRetries(Number(e.target.value))} 
-                  className="bg-app border border-border-input rounded px-3 py-2 text-sm font-mono w-full focus:outline-none focus:border-[#4caf50] text-text-main" 
-                />
-              </div>
-
-              <div className="flex flex-col gap-1">
-                <label className="text-[10px] uppercase tracking-widest text-text-muted">Final Message Mode</label>
-                <select 
-                  value={finalMessageMode}
-                  onChange={e => setFinalMessageMode(e.target.value as 'RR73' | 'RRR')}
-                  className="bg-app border border-border-input text-text-main rounded px-3 py-2 text-xs font-mono w-full focus:outline-none focus:border-[#4caf50]"
-                >
-                  <option value="RR73">RR73 (Standard, Faster)</option>
-                  <option value="RRR">RRR (Requires 73 from target)</option>
-                </select>
-              </div>
-
-              <div className="flex items-center justify-between pt-2">
-                 <div className="flex flex-col">
-                    <label className="text-[10px] uppercase tracking-widest text-text-muted">Skip Grid (TX1)</label>
-                    <span className="text-[9px] text-text-muted">Answer a CQ with the report, not the grid</span>
-                 </div>
-                 <button
-                    onClick={() => setSkipTx1Grid(!skipTx1Grid)}
-                    className={`bg-app border rounded px-3 py-1 text-xs font-mono focus:outline-none transition-colors ${skipTx1Grid ? 'border-[#4caf50] text-[#4caf50]' : 'border-border-input text-text-main'}`}
-                 >
-                    {skipTx1Grid ? 'Enabled' : 'Disabled'}
-                 </button>
-              </div>
-
-              <div className="flex flex-col gap-1">
-                <label className="text-[10px] uppercase tracking-widest text-text-muted">Display Last N QSOs</label>
-                <input 
-                  type="number" 
+              {/* Logbook — local-only display pref */}
+              <div className="flex flex-col gap-1 pt-2 border-t border-border-subtle">
+                <label className="text-[10px] uppercase tracking-widest text-text-muted">Logbook</label>
+                <input
+                  type="number"
                   min="10"
                   max="1000"
-                  value={maxLogEntries} 
-                  onChange={e => setMaxLogEntries(Number(e.target.value))} 
-                  className="bg-app border border-border-input rounded px-3 py-2 text-sm font-mono w-full focus:outline-none focus:border-[#4caf50] text-text-main" 
+                  value={maxLogEntries}
+                  onChange={e => setMaxLogEntries(Number(e.target.value))}
+                  className="bg-app border border-border-input rounded px-3 py-2 text-sm font-mono w-full focus:outline-none focus:border-[#4caf50] text-text-main"
                 />
               </div>
 
-              {/* CAT Radio Control settings removed with the local brain (Task 6);
-                  Task 13 re-adds a server-driven radio section. */}
-
-              <div className="flex items-center justify-between pt-2">
-                 <label className="text-[10px] uppercase tracking-widest text-text-muted">Color Scheme</label>
-                 <button 
-                    onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
-                    className="bg-app border border-border-input text-text-main rounded px-3 py-1 text-xs font-mono focus:outline-none hover:border-[#4caf50]"
-                 >
-                    {theme === 'dark' ? 'Dark Mode' : 'Light Mode'}
-                 </button>
+              {/* Server hint (Task 13): radio/CAT, audio, and logging integrations
+                  are all managed on the station. */}
+              <div className="pt-3 border-t border-border-subtle text-[10px] text-text-muted leading-relaxed">
+                <span className="font-bold uppercase tracking-widest text-text-main">Server</span> — Radio/CAT, audio
+                input, and external logging integrations are managed on the station. This client only controls
+                the FT8 session.
               </div>
-
-              {/* Cloudlog/Wavelog, External Data Stream, PSKReporter and Audio Input/Output
-                  settings removed with the local brain (Task 6); Task 13 re-adds a
-                  server-driven settings section. */}
             </div>
             
             <div className="mt-8 flex justify-end">
-                <button 
-                  onClick={() => setShowSettings(false)}
+                <button
+                  onClick={() => { void saveSettings(); }}
                   className="bg-green-600 dark:bg-[#4caf50] hover:bg-green-600 text-black px-6 py-2 rounded text-xs font-bold uppercase tracking-widest"
                 >
                   Save & Close
