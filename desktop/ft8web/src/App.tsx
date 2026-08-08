@@ -9,6 +9,7 @@ import { CHANGELOG, LATEST_UPDATE, type ChangelogEntry } from './changelog';
 import { extractTransmitterCallsign } from './services/pskReporterSpot';
 import { mrrc } from './services/mrrcClient';
 import { useServerFT8 } from './services/useServerFT8';
+import type { ServerDecodeMessage } from './services/mrrcStreams';
 
 export interface FT8DecodedMessage {
   time: string;
@@ -19,6 +20,29 @@ export interface FT8DecodedMessage {
   isDivider?: boolean;
   isTx?: boolean;
   isIncoming?: boolean;
+}
+
+// --- Server decode → row mapping (Task 7) ------------------------------------
+// The server decodes once per UTC 15-second slot and reports batches keyed by
+// `slot_id` = floor(epoch/15). slot_id*15 is therefore the slot-start epoch in
+// seconds; modulo 86400 gives seconds since UTC midnight, which we format as the
+// HHMMSS the Band Activity row template reads (time + period-parity fallback).
+function slotTimeToHHMMSS(slotId: number, periodSec = 15): string {
+  const sec = (slotId * periodSec) % 86400;
+  const hh = String(Math.floor(sec / 3600)).padStart(2, '0');
+  const mm = String(Math.floor((sec % 3600) / 60)).padStart(2, '0');
+  const ss = String(sec % 60).padStart(2, '0');
+  return `${hh}${mm}${ss}`;
+}
+
+function serverMessageToRow(m: ServerDecodeMessage, slotId: number): FT8DecodedMessage {
+  return {
+    time: slotTimeToHHMMSS(slotId), // HHMMSS slot start
+    snr: m.snr,
+    freq: Math.round(m.freq),
+    message: m.text,
+    isIncoming: m.to_me,
+  };
 }
 
 // --- Advisory clock-accuracy check (SNTP-style over HTTP) -------------------
@@ -155,7 +179,7 @@ export default function App() {
   const handleLoggedOut = useCallback(() => { setLoggedIn(false); }, []);
   // Gate the hook's streams on login state so they don't open before the session
   // is validated and reconnect after a fresh login (Task 6 review fix).
-  const { connected } = useServerFT8({ onLoggedOut: handleLoggedOut, enabled: loggedIn === true });
+  const { connected, lastDecodes, snapshot } = useServerFT8({ onLoggedOut: handleLoggedOut, enabled: loggedIn === true });
   useEffect(() => { setAudioActive(connected); }, [connected]);
 
   // Advisory clock-accuracy check: measures device-clock drift vs a trusted
@@ -332,6 +356,66 @@ export default function App() {
   const [isTransmitting, setIsTransmitting] = useState(false);
   const isTransmittingRef = useRef(false);
   const [isTxQueued, setIsTxQueued] = useState(false);
+
+  // Band Activity (rxLog) fed from the server decode stream (Task 7). Each UTC
+  // slot batch gets a divider row; the list keeps the last 4 periods (up to 4
+  // dividers, matching the pre-brainswap behavior) and is hard-capped at 50 rows.
+  useEffect(() => {
+    const rows: FT8DecodedMessage[] = [];
+    let dividerCount = 0;
+    for (const batch of lastDecodes) {
+      if (dividerCount >= 4) break;
+      const time = slotTimeToHHMMSS(batch.slot_id);
+      rows.push({
+        time,
+        snr: 0,
+        freq: 0,
+        message: `-------- ${time.slice(0, 2)}:${time.slice(2, 4)}:${time.slice(4, 6)} UTC --------`,
+        isDivider: true,
+        periodIndex: batch.slot_id % 2,
+      });
+      dividerCount += 1;
+      for (const m of batch.messages) rows.push(serverMessageToRow(m, batch.slot_id));
+    }
+    setRxLog(rows.slice(0, 50));
+  }, [lastDecodes]);
+
+  // Active QSO (qsoLog) from server decodes + snapshot (Task 7): messages
+  // addressed to us (to_me) or from the selected station are incoming ("<- ",
+  // green); our own echoes (mine) and the last transmitted message are outgoing
+  // (isTx, sky-blue). Rebuilt newest-first, capped at 100 rows.
+  useEffect(() => {
+    const rows: FT8DecodedMessage[] = [];
+    if (snapshot.last_tx) {
+      rows.push({
+        time: snapshot.last_tx.utc,
+        snr: 0,
+        freq: Math.round(snapshot.last_tx.freq_hz),
+        message: snapshot.last_tx.text,
+        isTx: true,
+      });
+    }
+    const selectedCall = (snapshot.selected?.call || '').toUpperCase();
+    for (const batch of lastDecodes) {
+      const time = slotTimeToHHMMSS(batch.slot_id);
+      for (const m of batch.messages) {
+        const fromSelected = selectedCall !== '' && m.call.toUpperCase() === selectedCall;
+        const incoming = m.to_me || fromSelected;
+        if (incoming || m.mine) {
+          rows.push({
+            time,
+            snr: m.snr,
+            freq: Math.round(m.freq),
+            message: incoming ? `<- ${m.text}` : m.text,
+            periodIndex: batch.slot_id % 2,
+            isIncoming: incoming,
+            isTx: m.mine,
+          });
+        }
+      }
+    }
+    setQsoLog(rows.slice(0, 100));
+  }, [lastDecodes, snapshot]);
   
   // TX Controls State
   const [targetCall, setTargetCall] = useState('');
