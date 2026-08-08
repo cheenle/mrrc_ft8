@@ -24,7 +24,8 @@ const EMPTY: ServerSnapshot = {
   last_tx: null,
 };
 
-export function useServerFT8(opts: { onLoggedOut: () => void }) {
+export function useServerFT8(opts: { onLoggedOut: () => void; enabled?: boolean }) {
+  const { onLoggedOut, enabled = true } = opts;
   const [connected, setConnected] = useState(false);
   const [snapshot, setSnapshot] = useState<ServerSnapshot>(EMPTY);
   const [lastDecodes, setLastDecodes] = useState<ServerDecodeBatch[]>([]);
@@ -36,9 +37,22 @@ export function useServerFT8(opts: { onLoggedOut: () => void }) {
   useEffect(() => {
     const onAuthFailure = () => {
       streamsRef.current?.state.close();
-      opts.onLoggedOut();
+      onLoggedOut();
     };
     setUnauthorizedHandler(onAuthFailure);
+
+    if (!enabled) {
+      // Not logged in: keep the streams closed and the connected flag false.
+      // The gate flips this effect's dependencies when `enabled` changes, so
+      // the streams start on login and close on logout / auth failure.
+      streamsRef.current?.state.close();
+      streamsRef.current?.decodes.close();
+      streamsRef.current?.waterfall.close();
+      streamsRef.current = null;
+      connectedRef.current = false;
+      setConnected(false);
+      return () => setUnauthorizedHandler(null);
+    }
 
     const streams = startStreams({
       onState: (raw) => {
@@ -61,8 +75,11 @@ export function useServerFT8(opts: { onLoggedOut: () => void }) {
       streams.state.close();
       streams.decodes.close();
       streams.waterfall.close();
+      if (streamsRef.current === streams) streamsRef.current = null;
+      connectedRef.current = false;
+      setConnected(false);
     };
-  }, [opts.onLoggedOut]);
+  }, [onLoggedOut, enabled]);
 
   const ensureLease = useCallback(async (): Promise<boolean> => {
     if (snapshotRef.current.lease.mine) return true;

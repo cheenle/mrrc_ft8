@@ -153,7 +153,9 @@ export default function App() {
   // Server connection (Task 5 hook). audioActive mirrors the server connection
   // and doubles as the "connected" lamp (Task 10 replaces the VU/interlock area).
   const handleLoggedOut = useCallback(() => { setLoggedIn(false); }, []);
-  const { connected } = useServerFT8({ onLoggedOut: handleLoggedOut });
+  // Gate the hook's streams on login state so they don't open before the session
+  // is validated and reconnect after a fresh login (Task 6 review fix).
+  const { connected } = useServerFT8({ onLoggedOut: handleLoggedOut, enabled: loggedIn === true });
   useEffect(() => { setAudioActive(connected); }, [connected]);
 
   // Advisory clock-accuracy check: measures device-clock drift vs a trusted
