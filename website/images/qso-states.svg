@@ -1,0 +1,82 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 680" role="img" aria-labelledby="f7title">
+  <title id="f7title">图 7 QSO 状态机（应答侧）：REPLYING → DONE 与中断出口</title>
+  <defs>
+    <marker id="f7-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto">
+      <path d="M 0 0 L 10 5 L 0 10 z" style="fill:var(--accent,#22d3ee)"/>
+    </marker>
+    <marker id="f7-arrow-amber" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto">
+      <path d="M 0 0 L 10 5 L 0 10 z" style="fill:#f59e0b"/>
+    </marker>
+    <marker id="f7-arrow-gray" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto">
+      <path d="M 0 0 L 10 5 L 0 10 z" style="fill:var(--text-secondary,#8899aa)"/>
+    </marker>
+  </defs>
+
+  <rect x="0" y="0" width="960" height="680" rx="12" fill="var(--bg-tertiary,#10161e)"/>
+
+  <!-- top annotation -->
+  <text x="480" y="40" text-anchor="middle" font-family="Inter, system-ui, -apple-system, sans-serif" font-size="12" style="fill:var(--text-muted,#5c6370)">应答侧（我们是应答者）· 每条消息 1 发 + 至多 3 重传（NFR-055）</text>
+
+  <!-- state ladder -->
+  <rect x="70" y="64" width="400" height="72" rx="8" fill="var(--bg-secondary,#0d1117)" stroke-width="1.5" style="stroke:var(--accent,#22d3ee)"/>
+  <text x="90" y="93" font-family="'JetBrains Mono', ui-monospace, monospace" font-size="13" font-weight="600" style="fill:var(--text-primary,#ffffff)">REPLYING</text>
+  <text x="450" y="93" text-anchor="end" font-family="'JetBrains Mono', ui-monospace, monospace" font-size="12" style="fill:var(--accent,#22d3ee)">Tx1</text>
+  <text x="90" y="116" font-family="'JetBrains Mono', ui-monospace, monospace" font-size="12.5" style="fill:var(--text-secondary,#8899aa)">&lt;dx&gt; &lt;my&gt; &lt;my-grid&gt;</text>
+  <text x="450" y="116" text-anchor="end" font-family="Inter, system-ui, -apple-system, sans-serif" font-size="11" style="fill:var(--text-muted,#5c6370)">（先发本台呼号+网格）</text>
+
+  <path d="M 270 136 V 184" fill="none" stroke-width="1.5" style="stroke:var(--accent,#22d3ee)" marker-end="url(#f7-arrow)"/>
+  <text x="284" y="164" font-family="Inter, system-ui, -apple-system, sans-serif" font-size="12" style="fill:var(--text-secondary,#8899aa)">对方报告到达</text>
+
+  <rect x="70" y="184" width="400" height="72" rx="8" fill="var(--bg-secondary,#0d1117)" stroke-width="1.5" style="stroke:var(--accent,#22d3ee)"/>
+  <text x="90" y="213" font-family="'JetBrains Mono', ui-monospace, monospace" font-size="13" font-weight="600" style="fill:var(--text-primary,#ffffff)">REPORT</text>
+  <text x="450" y="213" text-anchor="end" font-family="'JetBrains Mono', ui-monospace, monospace" font-size="12" style="fill:var(--accent,#22d3ee)">Tx2</text>
+  <text x="90" y="236" font-family="'JetBrains Mono', ui-monospace, monospace" font-size="12.5" style="fill:var(--text-secondary,#8899aa)">&lt;dx&gt; &lt;my&gt; -snr</text>
+
+  <path d="M 270 256 V 304" fill="none" stroke-width="1.5" style="stroke:var(--accent,#22d3ee)" marker-end="url(#f7-arrow)"/>
+
+  <rect x="70" y="304" width="400" height="72" rx="8" fill="var(--bg-secondary,#0d1117)" stroke-width="1.5" style="stroke:var(--accent,#22d3ee)"/>
+  <text x="90" y="333" font-family="'JetBrains Mono', ui-monospace, monospace" font-size="13" font-weight="600" style="fill:var(--text-primary,#ffffff)">ROGER_REPORT</text>
+  <text x="450" y="333" text-anchor="end" font-family="'JetBrains Mono', ui-monospace, monospace" font-size="12" style="fill:var(--accent,#22d3ee)">Tx3</text>
+  <text x="90" y="356" font-family="'JetBrains Mono', ui-monospace, monospace" font-size="12.5" style="fill:var(--text-secondary,#8899aa)">&lt;dx&gt; &lt;my&gt; R-snr</text>
+
+  <path d="M 270 376 V 424" fill="none" stroke-width="1.5" style="stroke:var(--accent,#22d3ee)" marker-end="url(#f7-arrow)"/>
+  <text x="284" y="404" font-family="Inter, system-ui, -apple-system, sans-serif" font-size="12" style="fill:var(--text-secondary,#8899aa)">对方 R 报告到达</text>
+
+  <rect x="70" y="424" width="400" height="72" rx="8" fill="var(--bg-secondary,#0d1117)" stroke-width="1.5" style="stroke:var(--accent,#22d3ee)"/>
+  <text x="90" y="453" font-family="'JetBrains Mono', ui-monospace, monospace" font-size="13" font-weight="600" style="fill:var(--text-primary,#ffffff)">ROGERS</text>
+  <text x="450" y="453" text-anchor="end" font-family="'JetBrains Mono', ui-monospace, monospace" font-size="12" style="fill:var(--accent,#22d3ee)">Tx4</text>
+  <text x="90" y="476" font-family="'JetBrains Mono', ui-monospace, monospace" font-size="12.5" style="fill:var(--text-secondary,#8899aa)">&lt;dx&gt; &lt;my&gt; RR73</text>
+
+  <path d="M 270 496 V 544" fill="none" stroke-width="1.5" style="stroke:var(--accent,#22d3ee)" marker-end="url(#f7-arrow)"/>
+  <text x="284" y="524" font-family="Inter, system-ui, -apple-system, sans-serif" font-size="12" style="fill:var(--text-secondary,#8899aa)">对方 RR73/73 到达</text>
+
+  <rect x="70" y="544" width="400" height="72" rx="8" fill="var(--bg-secondary,#0d1117)" stroke-width="1.5" style="stroke:#34d399"/>
+  <text x="90" y="573" font-family="'JetBrains Mono', ui-monospace, monospace" font-size="13" font-weight="600" style="fill:var(--text-primary,#ffffff)">SIGNOFF → DONE</text>
+  <text x="450" y="573" text-anchor="end" font-family="'JetBrains Mono', ui-monospace, monospace" font-size="12" style="fill:#34d399">Tx5</text>
+  <text x="90" y="596" font-family="'JetBrains Mono', ui-monospace, monospace" font-size="12.5" style="fill:var(--text-secondary,#8899aa)">&lt;dx&gt; &lt;my&gt; 73</text>
+  <text x="450" y="596" text-anchor="end" font-family="Inter, system-ui, -apple-system, sans-serif" font-size="12" style="fill:#34d399">→ 落库</text>
+
+  <!-- bottom-left annotation -->
+  <text x="70" y="648" font-family="Inter, system-ui, -apple-system, sans-serif" font-size="11.5" style="fill:var(--text-muted,#5c6370)">on_message 只处理 addressed-to-me；自身回波（mine）忽略</text>
+
+  <!-- abort spine: any active state may exit -->
+  <path d="M 505 100 V 460" fill="none" stroke-width="1.5" stroke-dasharray="5 4" stroke-opacity="0.8" style="stroke:#f59e0b"/>
+  <path d="M 505 202 H 560" fill="none" stroke-width="1.5" stroke-dasharray="5 4" style="stroke:#f59e0b" marker-end="url(#f7-arrow-amber)"/>
+  <path d="M 505 322 H 560" fill="none" stroke-width="1.5" stroke-dasharray="5 4" style="stroke:#f59e0b" marker-end="url(#f7-arrow-amber)"/>
+
+  <!-- amber exit boxes -->
+  <rect x="560" y="170" width="350" height="64" rx="8" fill="var(--bg-secondary,#0d1117)" stroke-width="1.5" style="stroke:#f59e0b"/>
+  <text x="580" y="196" font-family="'JetBrains Mono', ui-monospace, monospace" font-size="12.5" font-weight="600" style="fill:#f59e0b">PARTNER_LOST</text>
+  <text x="580" y="218" font-family="Inter, system-ui, -apple-system, sans-serif" font-size="12" style="fill:var(--text-secondary,#8899aa)">伙伴转呼他人 → anti-QRM 自动停</text>
+
+  <rect x="560" y="290" width="350" height="64" rx="8" fill="var(--bg-secondary,#0d1117)" stroke-width="1.5" style="stroke:#f59e0b"/>
+  <text x="580" y="316" font-family="'JetBrains Mono', ui-monospace, monospace" font-size="12.5" font-weight="600" style="fill:#f59e0b">RETRY_EXHAUSTED</text>
+  <text x="580" y="338" font-family="Inter, system-ui, -apple-system, sans-serif" font-size="12" style="fill:var(--text-secondary,#8899aa)">预算耗尽 → 停并保留伙伴上下文</text>
+
+  <!-- both exits flow into on_stop -->
+  <path d="M 910 202 H 928 V 446 H 910" fill="none" stroke-width="1.5" style="stroke:var(--text-secondary,#8899aa)" marker-end="url(#f7-arrow-gray)"/>
+  <path d="M 735 354 V 420" fill="none" stroke-width="1.5" style="stroke:var(--text-secondary,#8899aa)" marker-end="url(#f7-arrow-gray)"/>
+
+  <rect x="560" y="420" width="350" height="52" rx="8" fill="var(--bg-secondary,#0d1117)" stroke-width="1.5" style="stroke:var(--text-secondary,#8899aa)"/>
+  <text x="735" y="451" text-anchor="middle" font-family="Inter, system-ui, -apple-system, sans-serif" font-size="12.5" font-weight="600" style="fill:var(--text-primary,#ffffff)">on_stop：清除 selected（P7）</text>
+</svg>
