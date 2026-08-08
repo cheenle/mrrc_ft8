@@ -1,5 +1,12 @@
 # 14. Version History
 
+## Unreleased — 2026-08-08 — Desktop lease heartbeat 15s→5s（TX 中段被 dead-man STOP 掐断）
+
+- **现场症状**：桌面客户端 RX 正常（每 slot 8–11 msgs），但 TX 启动后约 6.5 s 被掐断。日志链：`arm: TX armed by operator` → `tx_start: 12.64s waveform` → `ptt_off: stop:lease_expired` → `tx_stop: cancelled`，且 `lease_expired` 每 ~30 s 反复出现。
+- **根因**：`useServerFT8` 的心跳间隔写死 `15_000 ms`，而服务器租约 TTL 正是 `LEASE_TTL_S = 15.0`、合同要求每 5 s 续租（移动 PWA `HEARTBEAT_MS = 5000`）。15 s 心跳对 15 s TTL 是刀刃平衡，抖动即过期 → dead-man STOP 掐断发射。
+- **修复**：桌面客户端心跳 `15_000 → 5_000`，注释引用 §15.4。
+- Regressions: 客户端 tsc/build/25 测试全绿；现场重测 TX 完整通过。
+
 ## Unreleased — 2026-08-08 — Desktop FT8 Client (/desktop) + QSO Log Window
 
 - **桌面版 FT8 界面**：以 ok1cdj/FT8web（GPL v3）为 UI 壳、MRRC-FT8 headless 服务器为大脑，新增 `desktop/ft8web/` 客户端，构建产物挂载 `/desktop`（服务器仅两处增量：`TxDriver.on_transmitted` 观察者 + state 快照 `last_tx`；移动 PWA `/static` 与既有契约不变）。客户端不做本地 DSP/音频/CAT/FSM——解码/waterfall/收发/日志全部走服务器 REST + 三路 WS；登录门 + 控制租约隐式获取；`mrrcClient.ts`/`mrrcStreams.ts`/`useServerFT8.ts` 三个适配模块 + vitest；vite `base:'/desktop/'` + dev 代理。
