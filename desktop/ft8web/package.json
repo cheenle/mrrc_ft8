@@ -13,7 +13,6 @@
     "test:watch": "vitest"
   },
   "dependencies": {
-    "@e04/ft8ts": "github:e04/ft8ts",
     "@tailwindcss/vite": "^4.1.14",
     "@vitejs/plugin-react": "^5.0.4",
     "lucide-react": "^0.546.0",

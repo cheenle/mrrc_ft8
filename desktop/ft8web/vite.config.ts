@@ -11,6 +11,9 @@ export default defineConfig(() => {
   const buildTime = new Date().toLocaleString('cs-CZ', { timeZone: 'Europe/Prague' });
 
   return {
+    // The server mounts the built client at /desktop (server/main.py
+    // _desktop_dist_dir); all asset URLs must resolve under that base path.
+    base: '/desktop/',
     define: {
       __COMMIT_HASH__: JSON.stringify(commitHash),
       __BUILD_TIME__: JSON.stringify(buildTime),
@@ -19,6 +22,14 @@ export default defineConfig(() => {
     resolve: {
       alias: {
         '@': path.resolve(__dirname, '.'),
+      },
+    },
+    server: {
+      port: 3000,
+      proxy: {
+        // Dev server forwards API + WS traffic to the loopback MRRC-FT8 server.
+        '/api': 'http://127.0.0.1:8000',
+        '/ws': { target: 'ws://127.0.0.1:8000', ws: true },
       },
     },
     test: {

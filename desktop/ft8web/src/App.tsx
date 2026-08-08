@@ -1455,30 +1455,29 @@ export default function App() {
             </div>
             
             <div className="space-y-4 text-xs text-text-main leading-relaxed">
-              <p>Welcome to the Web FT8 Client! This application runs entirely in your browser using the Web Audio API.</p>
-              
+              <p>Welcome to the MRRC-FT8 Desktop client! This is a browser-based control panel for the FT8 station. All DSP decoding, radio control, and audio I/O run on the station server — this client connects to it over the network.</p>
+
               <div>
-                <h3 className="font-bold text-green-600 dark:text-[#4caf50] mb-1">1. Audio Setup</h3>
-                <p>Click "ACTIVATE AUDIO" and allow browser permissions to use the microphone. Adjust your computer's input volume so the <strong>Input Level (VU)</strong> sits in the green/yellow zone, avoiding the red to prevent clipping.</p>
+                <h3 className="font-bold text-green-600 dark:text-[#4caf50] mb-1">1. Radio & Audio</h3>
+                <p>Radio/CAT control, audio input and output, and the FT8 DSP decoder are all managed on the station. This client needs no microphone or sound-card access in the browser.</p>
               </div>
 
               <div>
                 <h3 className="font-bold text-green-600 dark:text-[#4caf50] mb-1">2. Configuration</h3>
-                <p>Open <strong>Settings</strong> to set your Call Sign, Grid Square, and CAT control.</p>
+                <p>Your Call Sign, Grid Square, and CAT control are configured on the station and read from the server. The <strong>Settings</strong> modal adjusts decode and QSO-behaviour preferences.</p>
               </div>
 
               <div>
                 <h3 className="font-bold text-green-600 dark:text-[#4caf50] mb-1">3. Operations</h3>
                 <p>Select your band using the pill buttons (FT8 mode only; the server tunes the rig). FT8 decodes at :00, :15, :30, :45.</p>
                 <p>FT8 relies strictly on synchronized UTC time — verify your system clock is accurate.</p>
-                <p>Each decoded callsign shows a DXCC entity badge and an <strong>N</strong> (new) or <strong>W</strong> (worked) indicator for the current band and mode.</p>
-                <p>Enable TX and the FSM will automatically manage CQ, grid exchange, SNR report, and 73.</p>
+                <p>Each decode carries a DXCC badge from the server: <strong>N</strong> (not-yet-worked entity), <strong>W</strong> (already-worked entity), or <strong>B4</strong> (base callsign already in the log).</p>
+                <p>Enable TX and the server sequencer automatically manages CQ, grid exchange, SNR report, and 73.</p>
               </div>
 
               <div>
-                <h3 className="font-bold text-green-600 dark:text-[#4caf50] mb-1">4. Wavelog & Cloudlog Integration</h3>
-                <p>You can seamlessly log your completed QSOs directly to your <strong>Wavelog</strong> or <strong>Cloudlog</strong> instance. In Settings, enable the integration and input your instance URL, API Key, and Station Profile ID.</p>
-                <p>QSOs are uploaded in real time. If an upload fails, you can use the **Sync All** button or click the manual cloud-upload action icon next to a specific logbook entry to re-trigger the upload. Troubleshooting output will exist in the browser developer tools console.</p>
+                <h3 className="font-bold text-green-600 dark:text-[#4caf50] mb-1">4. Logging</h3>
+                <p>Completed QSOs are recorded by the station server. External logging integrations (Wavelog, Cloudlog, etc.) are configured on the station, not in this client.</p>
               </div>
 
               <div className="pt-4 mt-4 border-t border-border-subtle">
@@ -1494,7 +1493,7 @@ export default function App() {
                 <h4 className="font-bold text-text-main mt-4 mb-2">Acknowledgments</h4>
                 <ul className="list-disc pl-5 mb-4 space-y-1 text-[11px] text-text-muted">
                   <li><strong className="text-text-main">FT8/FT4 Protocols:</strong> FT8 and FT4 are digital amateur radio modes designed for weak-signal communication, originally developed by <strong>Joe Taylor (K1JT)</strong> and <strong>Steve Franke (K9AN)</strong> as part of the WSJT-X suite.</li>
-                  <li><strong className="text-text-main">DSP Implementation:</strong> This application utilizes the pure TypeScript DSP library <a href="https://github.com/e04/ft8ts" target="_blank" rel="noreferrer" className="text-blue-400 hover:text-blue-300 underline font-semibold">@e04/ft8ts</a>.</li>
+                  <li><strong className="text-text-main">DSP Implementation:</strong> FT8 decoding is performed by the station server, not in the browser.</li>
                 </ul>
               </div>
             </div>
