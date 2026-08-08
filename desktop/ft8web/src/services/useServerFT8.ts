@@ -91,6 +91,14 @@ export function useServerFT8(opts: { onLoggedOut: () => void; enabled?: boolean 
     await mrrc.releaseLease();
   }, []);
 
+  // Empty the decode + waterfall buffers (e.g. after a band switch) so stale
+  // rows from the previous band don't linger and reappear from the replay
+  // buffer.  The stream effect keeps filling both refs from the server.
+  const clearDecodes = useCallback((): void => {
+    setLastDecodes([]);
+    waterfallRef.current = [];
+  }, []);
+
   // 15 s heartbeat while our session holds the control lease.
   useEffect(() => {
     const timer = setInterval(() => {
@@ -101,5 +109,5 @@ export function useServerFT8(opts: { onLoggedOut: () => void; enabled?: boolean 
 
   useEffect(() => () => { void releaseLease(); }, [releaseLease]);
 
-  return { connected, snapshot, lastDecodes, waterfallRef, ensureLease, releaseLease, connectedRef, snapshotRef };
+  return { connected, snapshot, lastDecodes, waterfallRef, ensureLease, releaseLease, clearDecodes, connectedRef, snapshotRef };
 }

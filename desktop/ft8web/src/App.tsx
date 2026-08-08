@@ -265,7 +265,7 @@ export default function App() {
   const handleLoggedOut = useCallback(() => { setLoggedIn(false); }, []);
   // Gate the hook's streams on login state so they don't open before the session
   // is validated and reconnect after a fresh login (Task 6 review fix).
-  const { connected, lastDecodes, snapshot, waterfallRef, ensureLease } = useServerFT8({ onLoggedOut: handleLoggedOut, enabled: loggedIn === true });
+  const { connected, lastDecodes, snapshot, waterfallRef, ensureLease, clearDecodes } = useServerFT8({ onLoggedOut: handleLoggedOut, enabled: loggedIn === true });
   useEffect(() => { setAudioActive(connected); }, [connected]);
 
   // Advisory clock-accuracy check: measures device-clock drift vs a trusted
@@ -405,8 +405,15 @@ export default function App() {
       setTxNotice('Control is held by another session');
       return;
     }
-    await mrrc.radioBand(hz);
-  }, [ensureLease]);
+    const res = await mrrc.radioBand(hz);
+    if (res.ok) {
+      // The band changed: drop the previous band's buffered decodes/waterfall
+      // so stale rows don't linger or reappear from the replay buffer.
+      clearDecodes();
+      setRxLog([]);
+      setQsoLog([]);
+    }
+  }, [ensureLease, clearDecodes]);
 
   const formatFrequency = (hz: number) => {
     return hz.toLocaleString('en-US').replace(/,/g, '.') + ' Hz';
