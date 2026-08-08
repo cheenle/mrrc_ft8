@@ -10,14 +10,21 @@ export function LoginView({ onLoggedIn }: { onLoggedIn: () => void }) {
     e.preventDefault();
     setBusy(true);
     setError('');
-    const result = await mrrc.login(password);
-    setBusy(false);
-    if (result.ok) {
-      onLoggedIn();
-    } else if (result.reason === 'rate_limited') {
-      setError('Too many attempts — wait a moment and retry');
-    } else {
-      setError('Login failed');
+    try {
+      const result = await mrrc.login(password);
+      if (result.ok) {
+        onLoggedIn();
+      } else if (result.reason === 'rate_limited') {
+        setError('Too many attempts — wait a moment and retry');
+      } else {
+        setError('Login failed');
+      }
+    } catch {
+      // Transport failure: never strand the button in a busy state; the generic
+      // message keeps the retry path visible.
+      setError('Login failed — check your connection and retry');
+    } finally {
+      setBusy(false);
     }
   }
 

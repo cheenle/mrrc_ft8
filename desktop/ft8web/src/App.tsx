@@ -217,7 +217,7 @@ export default function App() {
   useEffect(() => {
     mrrc.currentSession().then((res) => {
       setLoggedIn(res.ok);
-    });
+    }).catch(() => setLoggedIn(false));
   }, []);
 
   // The server's FT8 band table (server/engine/bands.py FT8_BANDS) — the rig is
@@ -347,6 +347,10 @@ export default function App() {
 
   // UI State
   const [showSettings, setShowSettings] = useState(false);
+  // Inline rejection notice in the settings modal: the server rejects some
+  // settings (decoder_profile/decoder_threads) with 409 tx_active during TX, so
+  // the change must surface instead of silently dropping while the modal closes.
+  const [settingsError, setSettingsError] = useState<string | null>(null);
   const [showAbout, setShowAbout] = useState(false);
   const [whatsNewEntries, setWhatsNewEntries] = useState<ChangelogEntry[]>([]);
 
@@ -729,6 +733,7 @@ export default function App() {
 
   const openSettingsModal = useCallback(async () => {
     setShowSettings(true);
+    setSettingsError(null);
     const res = await mrrc.settings();
     if (!res.ok) return;
     const s = res.body.settings ?? {};
@@ -752,8 +757,20 @@ export default function App() {
     if (baseline.auto_call_new_dxcc !== autoSequence) changes.auto_call_new_dxcc = autoSequence;
     if (baseline.auto_band_hunt !== autoBandHunt) changes.auto_band_hunt = autoBandHunt;
     for (const [key, value] of Object.entries(changes)) {
-      await mrrc.putSetting(key, value);
+      const res = await mrrc.putSetting(key, value);
+      if (!res.ok) {
+        // Safety-impacting settings (decoder_profile/decoder_threads) return 409
+        // tx_active during TX — keep the modal open and surface the rejection so
+        // the change isn't silently dropped while the modal closes.
+        setSettingsError(
+          res.reason === 'tx_active'
+            ? 'Settings locked during TX'
+            : `Setting rejected: ${res.reason ?? res.status}`,
+        );
+        return;
+      }
     }
+    setSettingsError(null);
     setShowSettings(false);
   }, [decodeDepth, decoderThreads, autoSequence, autoBandHunt]);
 
@@ -1408,7 +1425,11 @@ export default function App() {
                 the FT8 session.
               </div>
             </div>
-            
+
+            {settingsError && (
+              <p className="mt-4 text-xs text-red-400" role="alert">{settingsError}</p>
+            )}
+
             <div className="mt-8 flex justify-end">
                 <button
                   onClick={() => { void saveSettings(); }}
