@@ -7,6 +7,7 @@ import { UniversalSerialPort, WebSocketSerialPort } from './UniversalSerialPort'
 import FT8FSM, { QueuedCaller } from './FT8FSM';
 
 import { LogBookViewer } from './components/LogBookViewer';
+import { LoginView } from './components/LoginView';
 import { VersionInfo } from './components/VersionInfo';
 import { WhatsNewModal } from './components/WhatsNewModal';
 import { CHANGELOG, LATEST_UPDATE, type ChangelogEntry } from './changelog';
@@ -17,6 +18,7 @@ import { dxccService } from './services/DxccService';
 import { externalStream } from './services/ExternalStreamService';
 import { pskReporter, PSKReporterService } from './services/PSKReporterService';
 import { extractTransmitterCallsign } from './services/pskReporterSpot';
+import { mrrc } from './services/mrrcClient';
 
 export interface FT8DecodedMessage {
   time: string;
@@ -134,6 +136,14 @@ async function checkClock(): Promise<ClockVerdict> {
 }
 
 export default function App() {
+  const [loggedIn, setLoggedIn] = useState<boolean | null>(null);
+
+  useEffect(() => {
+    mrrc.currentSession().then((res) => {
+      setLoggedIn(res.ok);
+    });
+  }, []);
+
   const BAND_FREQS_FT8 = [
     { label: '80m', mhz: '3.5', hz: 3573000 },
     { label: '40m', mhz: '7.0', hz: 7074000 },
@@ -1681,6 +1691,17 @@ export default function App() {
     const freq = Math.round((x / rect.width) * 2800) + 200;
     setTxFreq(Math.max(200, Math.min(3000, freq)));
   };
+
+  if (loggedIn === false) {
+    return <LoginView onLoggedIn={() => { setLoggedIn(true); }} />;
+  }
+  if (loggedIn === null) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-app text-text-main">
+        <p className="text-xs uppercase tracking-widest text-text-muted">Loading…</p>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-app text-text-main font-sans flex flex-col p-4 select-none">
