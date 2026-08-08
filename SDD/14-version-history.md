@@ -4,7 +4,7 @@
 
 - **桌面版 FT8 界面**：以 ok1cdj/FT8web（GPL v3）为 UI 壳、MRRC-FT8 headless 服务器为大脑，新增 `desktop/ft8web/` 客户端，构建产物挂载 `/desktop`（服务器仅两处增量：`TxDriver.on_transmitted` 观察者 + state 快照 `last_tx`；移动 PWA `/static` 与既有契约不变）。客户端不做本地 DSP/音频/CAT/FSM——解码/waterfall/收发/日志全部走服务器 REST + 三路 WS；登录门 + 控制租约隐式获取；`mrrcClient.ts`/`mrrcStreams.ts`/`useServerFT8.ts` 三个适配模块 + vitest；vite `base:'/desktop/'` + dev 代理。
 - **QSO 日志窗口**：`/logs/qsos` 新增 `since_days` 查询参数（默认 7，向后兼容，范围 1–3650，非法值 422）；桌面客户端 LogBookViewer 加 7/30/90/365 天窗口选择器。
-- **桌面客户端 polish**：波段切换时 `useServerFT8.clearDecodes()` 清空解码/waterfall 缓冲 + 乐观清 `rxLog`/`qsoLog`（旧波段行不再残留/重建）；`isTxQueued` 与 `ptt_on` 互斥（键控时不再误报 queued）；删除 10 个无引用的死模块（AudioWorkletBlob/CatManager/UniversalSerialPort/LogBook/CloudLogService/LogbookService/ExternalStreamService/PSKReporterService + public/FT8FSM.js、fsm_test_runner.html）。
+- **桌面客户端 polish**：波段切换时 `useServerFT8.clearDecodes()` 清空解码/waterfall 缓冲 + 乐观清 `rxLog`/`qsoLog`（旧波段行不再残留/重建）；`isTxQueued` 与 `ptt_on` 互斥（键控时不再误报 queued）；`_qso_view` 新增 `dxcc_entity`（cty 查呼号，服务器权威）——日志表实体列显示真实实体名而非恒 '-'，客户端删除最后惰性模块 `DxccService.ts`；删除 13 个无引用/陈旧文件（AudioWorkletBlob/CatManager/UniversalSerialPort/LogBook/CloudLogService/LogbookService/ExternalStreamService/PSKReporterService/DxccService + public/FT8FSM.js、fsm_test_runner.html、cty.dat + docs/external-stream-schema.md、compound-callsign-plan.md）。
 - Regressions: `tests/web/test_api.py`（since_days 默认/扩展窗口/非法值）、全量 web 套件绿（158 passed）；客户端 `npm test` 25 passed + tsc + build 全绿。
 
 ## Unreleased — 2026-08-08 — band-hunt Entity-Name Normalization (pskreporter → cty)
