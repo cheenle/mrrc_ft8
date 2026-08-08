@@ -99,11 +99,13 @@ export function useServerFT8(opts: { onLoggedOut: () => void; enabled?: boolean 
     waterfallRef.current = [];
   }, []);
 
-  // 15 s heartbeat while our session holds the control lease.
+  // Lease heartbeat. §15.4 contract: the holder must renew every 5 s (server
+  // LEASE_TTL_S = 15 s). A longer cadence lets the TTL lapse between beats and
+  // the dead-man STOP fires mid-QSO — the mobile PWA uses the same 5 s.
   useEffect(() => {
     const timer = setInterval(() => {
       if (snapshotRef.current.lease.mine) mrrc.heartbeat();
-    }, 15_000);
+    }, 5_000);
     return () => clearInterval(timer);
   }, []);
 
