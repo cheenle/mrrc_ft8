@@ -1183,7 +1183,11 @@ export default defineConfig({
 
 In `desktop/ft8web/package.json`, remove `"@e04/ft8ts": ...` from `dependencies` (nothing imports it after Task 6). Run `npm install`.
 
-- [ ] **Step 3: Full test + build**
+- [ ] **Step 3: Strip the upstream analytics script**
+
+`desktop/ft8web/index.html` embeds a third-party tracker (`https://stats.ok1cdj.com/analytics-x7f2`) inherited from upstream — remove that `<script>` tag and any associated script file references so the built `dist/index.html` ships no third-party analytics (deferred minor from Task 1).
+
+- [ ] **Step 4: Full test + build**
 
 ```bash
 cd desktop/ft8web
