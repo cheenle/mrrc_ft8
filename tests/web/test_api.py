@@ -822,6 +822,23 @@ def test_logs_qsos_since_days_param(client: TestClient, state: AppState) -> None
     assert client.get("/api/v1/logs/qsos?since_days=0", headers=auth).status_code == 422
 
 
+def test_logs_qsos_includes_dxcc_entity(client: TestClient, state: AppState) -> None:
+    # M0XX is a UK call → a cty entity exists; unknown calls yield None.
+    state.repository.record_qso(
+        QSORecord(my_call="M0XX", my_grid="IO91", dx_call="M0XX"),
+        completed_epoch=time.time(),
+    )
+    state.repository.record_qso(
+        QSORecord(my_call="M0XX", my_grid="IO91", dx_call="QQ1ZZ"),
+        completed_epoch=time.time(),
+    )
+    session_id = login(client)
+    body = client.get("/api/v1/logs/qsos", headers=auth_headers(session_id)).json()
+    by_call = {q["dx_call"]: q["dxcc_entity"] for q in body["qsos"]}
+    assert by_call["M0XX"]  # a real entity name (non-empty)
+    assert by_call["QQ1ZZ"] is None  # Q prefixes are unassigned → no entity
+
+
 def test_adif_export_windows_to_recent_week(client: TestClient, state: AppState) -> None:
     now = time.time()
     state.repository.record_qso(

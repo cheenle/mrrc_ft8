@@ -1039,6 +1039,10 @@ async def _audit(
 
 
 def _qso_view(qso: Any) -> dict[str, Any]:
+    # DXCC entity name from the cty database (server-authoritative) so the
+    # client's logbook can show it without a local cty.dat.  Additive key;
+    # None when the call has no entity.
+    entity = _cty_database().lookup(qso.dx_call)
     return {
         "id": qso.id,
         "my_call": qso.my_call,
@@ -1052,6 +1056,7 @@ def _qso_view(qso: Any) -> dict[str, Any]:
         "band": qso.band,
         "status": qso.status.value,
         "completed_epoch": qso.completed_epoch,
+        "dxcc_entity": entity[0] if entity else None,
     }
 
 

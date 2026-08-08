@@ -1,5 +1,4 @@
 import React, { useEffect, useState } from 'react';
-import { dxccService } from '../services/DxccService';
 import { mrrc } from '../services/mrrcClient';
 
 // Row shape rendered by the logbook table. Built from the server's canonical
@@ -15,6 +14,7 @@ interface LogRow {
     gridsquare: string;
     rst_sent: string;
     rst_rcvd: string;
+    dxccEntity: string | null;
 }
 
 // The server stores reports as signed integers (-10, +07, ...). Format them the
@@ -40,6 +40,7 @@ function qsoToRow(q: any): LogRow {
         gridsquare: q.dx_grid ?? '',
         rst_sent: fmtRst(q.report_sent),
         rst_rcvd: fmtRst(q.report_rcvd),
+        dxccEntity: q.dxcc_entity ?? null,
     };
 }
 
@@ -182,8 +183,8 @@ export function LogBookViewer({ maxEntries }: { maxEntries: number }) {
                                     <div className="text-green-600 dark:text-[#4caf50] font-mono text-left">{qso.rst_sent}</div>
                                     <div className="text-red-650 dark:text-red-450 font-mono text-left">{qso.rst_rcvd}</div>
                                     <div className="text-zinc-600 dark:text-zinc-400 font-mono tracking-wider text-left">{qso.gridsquare || '-'}</div>
-                                    <div className="text-zinc-500 dark:text-zinc-400 text-left text-[10px] hidden sm:block truncate" title={(() => { const e = dxccService.lookup(qso.call); return e?.name; })()}>
-                                        {(() => { const e = dxccService.lookup(qso.call); return e ? (e.name.length > 14 ? e.name.substring(0, 13) + '…' : e.name) : '-'; })()}
+                                    <div className="text-zinc-500 dark:text-zinc-400 text-left text-[10px] hidden sm:block truncate" title={qso.dxccEntity ?? qso.call}>
+                                        {qso.dxccEntity ? (qso.dxccEntity.length > 14 ? qso.dxccEntity.substring(0, 13) + '…' : qso.dxccEntity) : '-'}
                                     </div>
                                 </div>
                             ))}
