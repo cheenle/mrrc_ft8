@@ -631,7 +631,9 @@ export default function App() {
       snapshot.sequencer.state !== 'idle' &&
       snapshot.sequencer.state !== 'done';
     setIsTransmitting(snapshot.safety.ptt_on);
-    setIsTxQueued(inQso); // TX happens on eligible slots while a QSO is active
+    // Queued = a QSO is active AND we are not currently keying (PTT on);
+    // these two states are mutually exclusive.
+    setIsTxQueued(inQso && !snapshot.safety.ptt_on);
     setFsmState(mapSequencerState(snapshot.sequencer.state));
   }, [snapshot]);
 
