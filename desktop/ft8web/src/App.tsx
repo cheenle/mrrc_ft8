@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { Activity, Settings, X, HelpCircle } from 'lucide-react';
+import { Activity, Settings, X, HelpCircle, Square } from 'lucide-react';
 
 import { LogBookViewer } from './components/LogBookViewer';
 import { LoginView } from './components/LoginView';
@@ -7,7 +7,7 @@ import { VersionInfo } from './components/VersionInfo';
 import { WhatsNewModal } from './components/WhatsNewModal';
 import { CHANGELOG, LATEST_UPDATE, type ChangelogEntry } from './changelog';
 import { extractTransmitterCallsign } from './services/pskReporterSpot';
-import { mrrc } from './services/mrrcClient';
+import { mrrc, type DecodeCandidate } from './services/mrrcClient';
 import { useServerFT8 } from './services/useServerFT8';
 import type { ServerDecodeMessage } from './services/mrrcStreams';
 
@@ -20,6 +20,12 @@ export interface FT8DecodedMessage {
   isDivider?: boolean;
   isTx?: boolean;
   isIncoming?: boolean;
+  // Server decode fields threaded through for TX intent (Task 9): /operation/
+  // select|reply take the raw DX call/grid/flag and the UTC slot id.
+  call?: string;
+  grid?: string;
+  isCq?: boolean;
+  slotId?: number;
 }
 
 // --- Server decode → row mapping (Task 7) ------------------------------------
@@ -42,6 +48,27 @@ function serverMessageToRow(m: ServerDecodeMessage, slotId: number): FT8DecodedM
     freq: Math.round(m.freq),
     message: m.text,
     isIncoming: m.to_me,
+    call: m.call,
+    grid: m.grid || '',
+    isCq: m.is_cq,
+    slotId,
+  };
+}
+
+// Row → server candidate (Task 9): /operation/select|reply take the raw
+// DecodeCandidate shape. The Active QSO window prepends "<- " to incoming
+// messages, so the candidate text is the prefix-stripped decode.
+function rowToCandidate(row: FT8DecodedMessage): DecodeCandidate | null {
+  const call = (row.call ?? extractTransmitterCallsign(row.message) ?? '').toUpperCase();
+  if (!call) return null;
+  return {
+    call,
+    grid: (row.grid ?? '').toUpperCase(),
+    snr: row.snr,
+    text: row.message.replace(/^<-?\s+/, '').replace(/^->\s+/, '').trim(),
+    is_cq: row.isCq ?? false,
+    slot_id: row.slotId ?? 0,
+    freq: row.freq,
   };
 }
 
@@ -179,7 +206,7 @@ export default function App() {
   const handleLoggedOut = useCallback(() => { setLoggedIn(false); }, []);
   // Gate the hook's streams on login state so they don't open before the session
   // is validated and reconnect after a fresh login (Task 6 review fix).
-  const { connected, lastDecodes, snapshot, waterfallRef } = useServerFT8({ onLoggedOut: handleLoggedOut, enabled: loggedIn === true });
+  const { connected, lastDecodes, snapshot, waterfallRef, ensureLease } = useServerFT8({ onLoggedOut: handleLoggedOut, enabled: loggedIn === true });
   useEffect(() => { setAudioActive(connected); }, [connected]);
 
   // Advisory clock-accuracy check: measures device-clock drift vs a trusted
@@ -393,6 +420,7 @@ export default function App() {
         freq: Math.round(snapshot.last_tx.freq_hz),
         message: snapshot.last_tx.text,
         isTx: true,
+        slotId: snapshot.last_tx.slot_id,
       });
     }
     const selectedCall = (snapshot.selected?.call || '').toUpperCase();
@@ -410,6 +438,10 @@ export default function App() {
             periodIndex: batch.slot_id % 2,
             isIncoming: incoming,
             isTx: m.mine,
+            call: m.call,
+            grid: m.grid || '',
+            isCq: m.is_cq,
+            slotId: batch.slot_id,
           });
         }
       }
@@ -420,6 +452,18 @@ export default function App() {
   // TX Controls State
   const [targetCall, setTargetCall] = useState('');
   const [txEnabled, setTxEnabled] = useState(false);
+  // Last decode row selected for TX intent (Task 9): the Ans button replies to
+  // this candidate. Cleared when the operator hand-edits the Target Station.
+  const [selectedCandidate, setSelectedCandidate] = useState<DecodeCandidate | null>(null);
+  // Minimal inline notice (no toast component in this file): "Reply armed →
+  // TX at HH:MM:SS UTC" for deferred replies and lease-blocked controls.
+  const [txNotice, setTxNotice] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!txNotice) return;
+    const t = setTimeout(() => setTxNotice(null), 5000);
+    return () => clearTimeout(t);
+  }, [txNotice]);
 
   // FSM State Machine Integration
   const [autoSequence, setAutoSequence] = useState<boolean>(() => {
@@ -534,11 +578,98 @@ export default function App() {
     // Audio input is managed on the station; nothing to toggle here.
   }, []);
 
-  // TX Orchestrator — stubbed in Task 6. The local audio TX path was removed;
-  // Task 9 rewires the CQ/Ans buttons to drive TX via server operations.
-  const transmitMessage = useCallback(async (_message: string) => {
-    // TX is managed by the server sequencer; nothing to do locally yet.
+  // TX status mirrors the server sequencer/safety (Task 9): the local FSM and
+  // audio brain are gone, so PTT and the active-QSO flag come from the state
+  // snapshot. Task 10 takes over this mapping with the full snapshot UI.
+  useEffect(() => {
+    const active = snapshot.sequencer.state !== 'idle' && snapshot.sequencer.state !== 'done';
+    setIsTransmitting(snapshot.safety.ptt_on);
+    setIsTxQueued(active && !snapshot.safety.ptt_on);
+  }, [snapshot.sequencer.state, snapshot.safety.ptt_on]);
+
+  // Another session holds the control lease: CQ/Ans arm via the server and are
+  // disabled. STOP stays enabled (NFR-038 — it needs no lease).
+  const leaseBlocked = snapshot.lease.held && !snapshot.lease.mine;
+
+  // Selecting never transmits (§15.6): pick a decode and the server holds the
+  // selection; the Ans button replies to it.
+  const handleSelectRow = useCallback(async (row: FT8DecodedMessage) => {
+    const candidate = rowToCandidate(row);
+    if (!candidate) return;
+    setTargetCall(candidate.call);
+    setSelectedCandidate(candidate);
+    if (!(await ensureLease())) {
+      setTxNotice('Control is held by another session');
+      return;
+    }
+    const res = await mrrc.select(candidate);
+    if (!res.ok && res.reason === 'lease_required') {
+      setTxNotice('Control is held by another session');
+    }
+  }, [ensureLease]);
+
+  // Single CQ: the server sequencer runs the whole QSO from one CQ.
+  const handleCq = useCallback(async () => {
+    if (!(await ensureLease())) {
+      setTxNotice('Control is held by another session');
+      return;
+    }
+    const res = await mrrc.cq(false);
+    if (!res.ok && res.reason === 'lease_required') {
+      setTxNotice('Control is held by another session');
+    }
+  }, [ensureLease]);
+
+  // Reply to the selected decode (or a hand-entered call). The server returns
+  // scheduled_tx; when the slot lands past the fit deadline it is deferred, so
+  // tell the operator when the reply actually goes out.
+  const handleAns = useCallback(async () => {
+    const candidate = selectedCandidate ?? {
+      call: targetCall,
+      grid: '',
+      snr: 0,
+      text: targetCall,
+      is_cq: false,
+      slot_id: 0,
+      freq: txFreq,
+    };
+    if (!candidate.call) return;
+    if (!(await ensureLease())) {
+      setTxNotice('Control is held by another session');
+      return;
+    }
+    const res = await mrrc.reply(candidate);
+    if (!res.ok) {
+      setTxNotice(res.reason === 'lease_required'
+        ? 'Control is held by another session'
+        : `Reply rejected: ${res.reason ?? res.status}`);
+      return;
+    }
+    const scheduled = res.body?.scheduled_tx as { utc?: string; deferred?: boolean } | undefined;
+    if (scheduled?.deferred && scheduled.utc) {
+      setTxNotice(`Reply armed → TX at ${scheduled.utc.slice(0, 2)}:${scheduled.utc.slice(2, 4)}:${scheduled.utc.slice(4, 6)} UTC`);
+    }
+  }, [ensureLease, selectedCandidate, targetCall, txFreq]);
+
+  // STOP is unconditional and needs no lease (NFR-038).
+  const handleStop = useCallback(async () => {
+    await mrrc.stop();
   }, []);
+
+  // TX-enable is the operator's arm consent: flipping it OFF disarms the
+  // server (txOff); arming happens implicitly when CQ/Ans hit the server.
+  const handleTxEnableToggle = useCallback(() => {
+    const next = !txEnabled;
+    if (txEnabled && snapshot.lease.mine) void mrrc.txOff();
+    setTxEnabled(next);
+  }, [txEnabled, snapshot.lease.mine]);
+
+  // Auto-sequence maps to the server's auto_call_new_dxcc setting.
+  const handleAutoSequenceToggle = useCallback(() => {
+    const next = !autoSequence;
+    setAutoSequence(next);
+    void mrrc.putSetting('auto_call_new_dxcc', next);
+  }, [autoSequence]);
 
   // Sync Interval Management & Animation Frame — UTC clock, slot window progress,
   // and the waterfall only. The decode trigger, queued-TX start, FSM drive, and
@@ -802,12 +933,8 @@ export default function App() {
                     <div
                       key={i}
                       onClick={() => {
-                        const call = extractTransmitterCallsign(log.message);
-                        if (call) {
-                          setTargetCall(call);
-                          // FSM target seeding removed with the local brain (Task 6);
-                          // Task 9 selects the station on the server.
-                        }
+                        // Select the decode on the server (never transmits).
+                        handleSelectRow(log);
 
                         // Auto-set TX period to the OPPOSITE of the caller's period
                         const callerPeriod = log.periodIndex !== undefined
@@ -875,12 +1002,8 @@ export default function App() {
                   <div 
                     key={i}
                     onClick={() => {
-                      // FSM target seeding removed with the local brain (Task 6);
-                      // Task 9 selects the station on the server.
-                      if (!log.isTx) {
-                        const callsign = extractTransmitterCallsign(log.message);
-                        if (callsign) setTargetCall(callsign);
-                      }
+                      // Select the decode on the server (never transmits).
+                      if (!log.isTx) handleSelectRow(log);
 
                       // If incoming message, set TX period to OPPOSITE of caller's period
                       if (!log.isTx) {
@@ -976,33 +1099,36 @@ export default function App() {
             </div>
             <div className="flex flex-col">
               <label className="text-[9px] uppercase tracking-widest text-text-muted mb-1">Target Station</label>
-              <input type="text" value={targetCall} placeholder="DX_CALL" onChange={e => setTargetCall(e.target.value.toUpperCase())} className="bg-app border border-border-input rounded px-2 py-1 text-xs font-mono w-full max-w-[200px] focus:outline-none focus:border-blue-500 text-text-main uppercase" />
+              <input type="text" value={targetCall} placeholder="DX_CALL" onChange={e => { setSelectedCandidate(null); setTargetCall(e.target.value.toUpperCase()); }} className="bg-app border border-border-input rounded px-2 py-1 text-xs font-mono w-full max-w-[200px] focus:outline-none focus:border-blue-500 text-text-main uppercase" />
             </div>
           </div>
 
           <div className="w-full lg:w-auto flex-1 grid grid-cols-2 gap-2 px-0 lg:px-4">
-             <button 
-                onClick={() => {
-                  // Local FSM drive removed with the brain (Task 6);
-                  // Task 9 reimplements CQ against the server sequencer.
-                  transmitMessage(`CQ ${myCall} ${myGrid.substring(0, 4)}`);
-                }}
-                disabled={(!autoSequence && !txEnabled) || isTransmitting || isTxQueued}
+             <button
+                onClick={handleCq}
+                disabled={(!autoSequence && !txEnabled) || isTransmitting || isTxQueued || leaseBlocked}
                 className="h-10 bg-btn border border-border-input hover:bg-btn-hover disabled:opacity-50 disabled:hover:bg-btn text-[10px] font-bold rounded uppercase tracking-wider transition-colors flex items-center justify-center gap-1"
+                title="Send a single CQ (server sequencer runs the whole QSO)"
               >
                  CQ {myCall}
              </button>
-             
-             <button 
-                onClick={() => {
-                  // Local FSM drive removed with the brain (Task 6);
-                  // Task 9 reimplements Ans against the server sequencer.
-                  transmitMessage(`${targetCall} ${myCall} ${myGrid.substring(0, 4)}`);
-                }}
-                disabled={(!autoSequence && !txEnabled) || !targetCall || isTransmitting || isTxQueued}
+
+             <button
+                onClick={handleAns}
+                disabled={(!autoSequence && !txEnabled) || !targetCall || isTransmitting || isTxQueued || leaseBlocked}
                 className="h-10 bg-btn border border-border-input hover:bg-btn-hover disabled:opacity-50 disabled:hover:bg-btn text-[10px] font-bold rounded uppercase tracking-wider transition-colors flex items-center justify-center gap-1"
+                title="Reply to the selected station"
               >
                  Ans {targetCall || '...'}
+             </button>
+
+             {/* STOP is unconditional and needs no lease (NFR-038). */}
+             <button
+                onClick={handleStop}
+                className="col-span-2 h-10 bg-red-950/70 border border-red-700 hover:bg-red-900 text-red-100 text-[10px] font-bold rounded uppercase tracking-wider transition-colors flex items-center justify-center gap-1.5"
+                title="Stop transmitting (works even without control)"
+              >
+                 <Square size={12} /> Stop TX
              </button>
 
              {(isTransmitting || isTxQueued) && (
@@ -1016,7 +1142,7 @@ export default function App() {
             {/* Auto Sequence Toggle and FSM State Indicator */}
             <div className="flex flex-col items-center justify-center">
               <button
-                 onClick={() => setAutoSequence(!autoSequence)}
+                 onClick={handleAutoSequenceToggle}
                  className={`w-full lg:w-32 h-16 border rounded flex flex-col items-center justify-center gap-1 group transition-all active:scale-95 ${
                    autoSequence 
                      ? (theme === 'dark'
@@ -1046,8 +1172,8 @@ export default function App() {
 
             {/* Enable TX PTT Trigger */}
             <div className="flex flex-col items-center justify-center">
-              <button 
-                 onClick={() => setTxEnabled(!txEnabled)}
+              <button
+                 onClick={handleTxEnableToggle}
                  className={`w-full lg:w-32 h-16 border rounded flex flex-col items-center justify-center gap-1 group transition-all active:scale-95 ${
                    txEnabled 
                      ? (theme === 'dark'
@@ -1313,6 +1439,14 @@ export default function App() {
       )}
 
       <VersionInfo />
+
+      {/* Inline TX notice (Task 9): deferred-reply slot and lease-blocked
+          controls. Minimal replacement for a toast component. */}
+      {txNotice && (
+        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-[60] px-4 py-2 rounded-lg bg-panel border border-border-subtle text-text-main text-xs font-mono font-bold shadow-2xl whitespace-nowrap">
+          {txNotice}
+        </div>
+      )}
     </div>
   );
 }
