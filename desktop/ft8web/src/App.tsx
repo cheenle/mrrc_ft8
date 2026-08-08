@@ -72,6 +72,20 @@ function rowToCandidate(row: FT8DecodedMessage): DecodeCandidate | null {
   };
 }
 
+// --- Sequencer phase → FT8web FSM label (Task 10) --------------------------
+// The server snapshot exposes sequencer.state as one of the QSOState values
+// (server/engine/sequencer.py: idle, calling, replying, report, roger_report,
+// rogers, signoff, done). Map each phase onto the FSM labels the footer already
+// renders; unknown values fall back to an uppercased copy of the raw state.
+const SEQUENCER_STATE_LABELS: Record<string, string> = {
+  idle: 'IDLE', calling: 'CQ_SENDING', replying: 'REPLY_SENDING',
+  report: 'SENDING_REPORT', roger_report: 'SENDING_R_REPORT',
+  rogers: 'SENDING_RR73', signoff: 'SENDING_73', done: 'IDLE',
+};
+function mapSequencerState(s: string): string {
+  return SEQUENCER_STATE_LABELS[s] ?? s.toUpperCase();
+}
+
 // --- Advisory clock-accuracy check (SNTP-style over HTTP) -------------------
 // FT8 is time-critical. Browsers can't read the system NTP daemon or set the
 // clock, so we measure the device-clock offset against a trusted HTTP time
@@ -578,18 +592,38 @@ export default function App() {
     // Audio input is managed on the station; nothing to toggle here.
   }, []);
 
-  // TX status mirrors the server sequencer/safety (Task 9): the local FSM and
-  // audio brain are gone, so PTT and the active-QSO flag come from the state
-  // snapshot. Task 10 takes over this mapping with the full snapshot UI.
+  // Map the server state snapshot into the status UI (Task 10): VFO frequency
+  // and station identity come from the server (not localStorage), the TX
+  // queued/transmitting flags come from sequencer.tx_enabled + safety.ptt_on,
+  // and the FSM label tracks the server QSO phase.
   useEffect(() => {
-    const active = snapshot.sequencer.state !== 'idle' && snapshot.sequencer.state !== 'done';
+    setVfoFreq(snapshot.radio.freq_hz ?? vfoFreqRef.current);
+    setMyCall(snapshot.station.my_call || myCallRef.current);
+    setMyGrid(snapshot.station.my_grid || myGridRef.current);
+    const inQso =
+      snapshot.sequencer.tx_enabled &&
+      snapshot.sequencer.state !== 'idle' &&
+      snapshot.sequencer.state !== 'done';
     setIsTransmitting(snapshot.safety.ptt_on);
-    setIsTxQueued(active && !snapshot.safety.ptt_on);
-  }, [snapshot.sequencer.state, snapshot.safety.ptt_on]);
+    setIsTxQueued(inQso); // TX happens on eligible slots while a QSO is active
+    setFsmState(mapSequencerState(snapshot.sequencer.state));
+  }, [snapshot]);
+
+  // The server sequencer is the source of truth for TX arm state: mirror its
+  // tx_enabled into the local toggle (Task 9 deferred item). The mirror only
+  // re-runs when the server value actually changes, so an optimistic local arm
+  // by flipping the toggle survives until CQ/Ans arms the server and the
+  // snapshot confirms it.
+  useEffect(() => {
+    setTxEnabled(snapshot.sequencer.tx_enabled);
+  }, [snapshot.sequencer.tx_enabled]);
 
   // Another session holds the control lease: CQ/Ans arm via the server and are
   // disabled. STOP stays enabled (NFR-038 — it needs no lease).
   const leaseBlocked = snapshot.lease.held && !snapshot.lease.mine;
+  // Server AUDIO interlock latched (§15.5): the safety controller reports
+  // faults as a sorted list of Interlock enum values ("audio" among them).
+  const audioFault = snapshot.safety.faults.includes('audio');
 
   // Selecting never transmits (§15.6): pick a decode and the server holds the
   // selection; the Ans button replies to it.
@@ -756,11 +790,40 @@ export default function App() {
               >
                   <HelpCircle size={14} />
               </button>
+              {/* Lease status (Task 10): CONTROLLER when this session holds the
+                  control lease, OBSERVER otherwise. */}
+              <span
+                className={`px-2 py-1.5 border rounded text-[10px] font-bold uppercase tracking-widest flex items-center gap-1.5 ${
+                  snapshot.lease.mine
+                    ? 'border-[#4caf50] bg-[#0f2e1b] text-green-600 dark:text-[#4caf50]'
+                    : 'border-border-input bg-btn text-text-muted'
+                }`}
+                title={snapshot.lease.mine ? 'This session holds radio control' : 'No radio control (observer)'}
+              >
+                <div className={`w-2 h-2 rounded-full ${snapshot.lease.mine ? 'bg-green-600 dark:bg-[#4caf50] shadow-[0_0_8px_#4caf50]' : 'bg-[#2a2c31]'}`}></div>
+                {snapshot.lease.mine ? 'Controller' : 'Observer'}
+              </span>
             </div>
           </div>
 
-          {/* VU meter removed with the local audio brain (Task 6); Task 10
-              replaces it with the server AUDIO interlock lamp. */}
+          {/* Server AUDIO interlock lamp (Task 10): the VU meter was removed
+              with the local audio brain (Task 6). Green = audio interlock
+              healthy; red = the server latched an audio fault (snapshot
+              safety.faults includes the "audio" Interlock value). */}
+          <div className="flex flex-col">
+            <span className="text-[10px] uppercase tracking-widest text-text-muted mb-1">Audio Interlock</span>
+            <span
+              className={`px-3 py-1.5 border rounded text-[10px] font-bold uppercase tracking-widest flex items-center gap-2 ${
+                audioFault
+                  ? 'border-red-700 bg-red-950/60 text-red-400'
+                  : 'border-[#4caf50] bg-btn text-green-600 dark:text-[#4caf50]'
+              }`}
+              title={audioFault ? 'Server audio interlock FAULT' : 'Server audio interlock OK'}
+            >
+              <div className={`w-2 h-2 rounded-full ${audioFault ? 'bg-red-500 shadow-[0_0_8px_#ef4444] animate-pulse' : 'bg-green-600 dark:bg-[#4caf50] shadow-[0_0_8px_#4caf50]'}`}></div>
+              {audioFault ? 'Audio Fault' : 'Audio OK'}
+            </span>
+          </div>
         </div>
 
         {/* --- RF Frequency Readout --- */}
