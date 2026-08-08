@@ -1,0 +1,71 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 560" role="img" aria-labelledby="f3title">
+  <title id="f3title">图 3 DXCC 实体判定：cty.dat 三规则 lookup 与 worked 集比较</title>
+  <defs>
+    <marker id="f3-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto">
+      <path d="M 0 0 L 10 5 L 0 10 z" style="fill:var(--accent,#22d3ee)"/>
+    </marker>
+    <marker id="f3-arrow-green" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto">
+      <path d="M 0 0 L 10 5 L 0 10 z" style="fill:#34d399"/>
+    </marker>
+    <marker id="f3-arrow-gray" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto">
+      <path d="M 0 0 L 10 5 L 0 10 z" style="fill:var(--text-secondary,#8899aa)"/>
+    </marker>
+  </defs>
+
+  <rect x="0" y="0" width="960" height="560" rx="12" fill="var(--bg-tertiary,#10161e)"/>
+
+  <!-- LEFT: cty.dat → CtyDatabase -->
+  <rect x="40" y="70" width="400" height="56" rx="8" fill="var(--bg-secondary,#0d1117)" stroke-width="1.5" style="stroke:var(--accent,#22d3ee)"/>
+  <text x="60" y="94" font-family="'JetBrains Mono', ui-monospace, monospace" font-size="13" font-weight="600" style="fill:var(--text-primary,#ffffff)">cty.dat</text>
+  <text x="60" y="116" font-family="Inter, system-ui, -apple-system, sans-serif" font-size="11.5" style="fill:var(--text-secondary,#8899aa)">（country-files ADIF 格式，仓库内静态副本）</text>
+
+  <path d="M 240 126 V 150" fill="none" stroke-width="1.5" style="stroke:var(--accent,#22d3ee)" marker-end="url(#f3-arrow)"/>
+
+  <rect x="40" y="150" width="400" height="160" rx="8" fill="var(--bg-secondary,#0d1117)" stroke-width="1.5" style="stroke:var(--accent,#22d3ee)"/>
+  <text x="240" y="174" text-anchor="middle" font-family="'JetBrains Mono', ui-monospace, monospace" font-size="13" font-weight="600" style="fill:var(--text-primary,#ffffff)">CtyDatabase 解析</text>
+  <rect x="60" y="188" width="360" height="30" rx="6" fill="var(--bg-secondary,#0d1117)" stroke-width="1" style="stroke:var(--text-secondary,#8899aa)"/>
+  <text x="240" y="207" text-anchor="middle" font-family="'JetBrains Mono', ui-monospace, monospace" font-size="11.5" style="fill:var(--text-secondary,#8899aa)">=CALL 精确前缀优先</text>
+  <rect x="60" y="222" width="360" height="30" rx="6" fill="var(--bg-secondary,#0d1117)" stroke-width="1" style="stroke:var(--text-secondary,#8899aa)"/>
+  <text x="240" y="241" text-anchor="middle" font-family="'JetBrains Mono', ui-monospace, monospace" font-size="11.5" style="fill:var(--text-secondary,#8899aa)">(数字) 替换（如 (23)）加载时展开</text>
+  <rect x="60" y="256" width="360" height="30" rx="6" fill="var(--bg-secondary,#0d1117)" stroke-width="1" style="stroke:var(--text-secondary,#8899aa)"/>
+  <text x="240" y="275" text-anchor="middle" font-family="'JetBrains Mono', ui-monospace, monospace" font-size="11.5" style="fill:var(--text-secondary,#8899aa)">最长前缀匹配（TN → Niger）</text>
+
+  <path d="M 240 310 V 334" fill="none" stroke-width="1.5" style="stroke:var(--accent,#22d3ee)" marker-end="url(#f3-arrow)"/>
+
+  <rect x="40" y="334" width="400" height="56" rx="8" fill="var(--bg-secondary,#0d1117)" stroke-width="1.5" style="stroke:var(--accent,#22d3ee)"/>
+  <text x="240" y="362" text-anchor="middle" font-family="Inter, system-ui, -apple-system, sans-serif" font-size="12.5" style="fill:var(--text-primary,#ffffff)">lookup 已索引化：精确表 + 前缀 trie</text>
+  <text x="240" y="382" text-anchor="middle" font-family="Inter, system-ui, -apple-system, sans-serif" font-size="11.5" style="fill:var(--text-secondary,#8899aa)">单次亚微秒</text>
+
+  <!-- RIGHT: lookup flow -->
+  <rect x="520" y="70" width="400" height="50" rx="8" fill="var(--bg-secondary,#0d1117)" stroke-width="1.5" style="stroke:var(--accent,#22d3ee)"/>
+  <text x="720" y="100" text-anchor="middle" font-family="'JetBrains Mono', ui-monospace, monospace" font-size="13" style="fill:var(--text-primary,#ffffff)">lookup("TN8GD")</text>
+
+  <path d="M 720 120 V 146" fill="none" stroke-width="1.5" style="stroke:var(--accent,#22d3ee)" marker-end="url(#f3-arrow)"/>
+
+  <rect x="520" y="146" width="400" height="50" rx="8" fill="var(--bg-secondary,#0d1117)" stroke-width="1.5" style="stroke:var(--accent,#22d3ee)"/>
+  <text x="720" y="176" text-anchor="middle" font-family="'JetBrains Mono', ui-monospace, monospace" font-size="13" style="fill:var(--text-primary,#ffffff)">实体 = Niger</text>
+
+  <path d="M 720 196 V 222" fill="none" stroke-width="1.5" style="stroke:var(--accent,#22d3ee)" marker-end="url(#f3-arrow)"/>
+
+  <!-- diamond: in worked set? -->
+  <path d="M 720 232 L 760 268 L 720 304 L 680 268 Z" fill="var(--bg-secondary,#0d1117)" stroke-width="1.5" style="stroke:var(--accent,#22d3ee)"/>
+  <text x="720" y="272" text-anchor="middle" font-family="Inter, system-ui, -apple-system, sans-serif" font-size="11.5" style="fill:var(--text-primary,#ffffff)">∈ worked 集？</text>
+
+  <text x="720" y="330" text-anchor="middle" font-family="Inter, system-ui, -apple-system, sans-serif" font-size="10.5" style="fill:var(--text-muted,#5c6370)">worked 集 = dxcc_summary（qso 非 void 记录 × cty 查表）</text>
+
+  <path d="M 720 304 V 330" fill="none" stroke-width="1.5" style="stroke:var(--accent,#22d3ee)"/>
+  <path d="M 720 330 H 600 V 356" fill="none" stroke-width="1.5" style="stroke:var(--text-secondary,#8899aa)" marker-end="url(#f3-arrow-gray)"/>
+  <path d="M 720 330 H 840 V 356" fill="none" stroke-width="1.5" style="stroke:#34d399" marker-end="url(#f3-arrow-green)"/>
+
+  <rect x="520" y="356" width="160" height="56" rx="8" fill="var(--bg-secondary,#0d1117)" stroke-width="1.5" style="stroke:var(--text-secondary,#8899aa)"/>
+  <text x="600" y="380" text-anchor="middle" font-family="'JetBrains Mono', ui-monospace, monospace" font-size="12.5" style="fill:var(--text-secondary,#8899aa)">不触发</text>
+  <text x="600" y="400" text-anchor="middle" font-family="Inter, system-ui, -apple-system, sans-serif" font-size="11" style="fill:var(--text-muted,#5c6370)">（已通联）</text>
+
+  <rect x="760" y="356" width="160" height="56" rx="8" fill="var(--bg-secondary,#0d1117)" stroke-width="1.5" style="stroke:#34d399"/>
+  <text x="840" y="380" text-anchor="middle" font-family="'JetBrains Mono', ui-monospace, monospace" font-size="12" style="fill:#34d399">is_new_dxcc = true</text>
+  <text x="840" y="400" text-anchor="middle" font-family="Inter, system-ui, -apple-system, sans-serif" font-size="11" style="fill:var(--text-muted,#5c6370)">进入候选判定（图 4）</text>
+
+  <!-- amber note -->
+  <rect x="520" y="480" width="400" height="46" rx="8" fill="var(--bg-secondary,#0d1117)" stroke-width="1.5" style="stroke:#f59e0b"/>
+  <text x="720" y="507" text-anchor="middle" font-family="Inter, system-ui, -apple-system, sans-serif" font-size="12" style="fill:#f59e0b">cache 未建时保守为 False（不误触发）</text>
+</svg>

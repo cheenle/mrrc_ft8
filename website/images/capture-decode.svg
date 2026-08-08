@@ -1,0 +1,55 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 520" role="img" aria-labelledby="f2title">
+  <title id="f2title">图 2 信号采集与解码链：进程边界与采样率铁律</title>
+  <defs>
+    <marker id="f2-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto">
+      <path d="M 0 0 L 10 5 L 0 10 z" style="fill:var(--accent,#22d3ee)"/>
+    </marker>
+  </defs>
+
+  <rect x="0" y="0" width="960" height="520" rx="12" fill="var(--bg-tertiary,#10161e)"/>
+
+  <!-- process boundary (dashed) around capture_proc -->
+  <rect x="158" y="130" width="174" height="165" rx="8" fill="none" stroke-width="1.5" stroke-dasharray="6 4" stroke-opacity="0.7" style="stroke:var(--text-secondary,#8899aa)"/>
+  <text x="245" y="150" text-anchor="middle" font-family="Inter, system-ui, -apple-system, sans-serif" font-size="11" style="fill:var(--text-secondary,#8899aa)">进程边界</text>
+
+  <!-- chain boxes y=165..277 -->
+  <rect x="18" y="165" width="140" height="112" rx="8" fill="var(--bg-secondary,#0d1117)" stroke-width="1.5" style="stroke:var(--accent,#22d3ee)"/>
+  <text x="88" y="221" text-anchor="middle" font-family="'JetBrains Mono', ui-monospace, monospace" font-size="14" font-weight="600" style="fill:var(--text-primary,#ffffff)">FT-710</text>
+
+  <path d="M 158 221 H 164" fill="none" stroke-width="1.5" style="stroke:var(--accent,#22d3ee)" marker-end="url(#f2-arrow)"/>
+
+  <rect x="170" y="165" width="150" height="112" rx="8" fill="var(--bg-secondary,#0d1117)" stroke-width="1.5" style="stroke:var(--accent,#22d3ee)"/>
+  <text x="245" y="216" text-anchor="middle" font-family="'JetBrains Mono', ui-monospace, monospace" font-size="13" font-weight="600" style="fill:var(--text-primary,#ffffff)">capture_proc</text>
+  <text x="245" y="244" text-anchor="middle" font-family="Inter, system-ui, -apple-system, sans-serif" font-size="12" style="fill:var(--text-secondary,#8899aa)">子进程</text>
+
+  <path d="M 320 221 H 326" fill="none" stroke-width="1.5" style="stroke:var(--accent,#22d3ee)" marker-end="url(#f2-arrow)"/>
+
+  <rect x="332" y="165" width="140" height="112" rx="8" fill="var(--bg-secondary,#0d1117)" stroke-width="1.5" style="stroke:var(--accent,#22d3ee)"/>
+  <text x="402" y="216" text-anchor="middle" font-family="'JetBrains Mono', ui-monospace, monospace" font-size="13" font-weight="600" style="fill:var(--text-primary,#ffffff)">UtcRing</text>
+  <text x="402" y="244" text-anchor="middle" font-family="'JetBrains Mono', ui-monospace, monospace" font-size="11" style="fill:var(--text-secondary,#8899aa)">slot_id % capacity</text>
+
+  <path d="M 472 221 H 478" fill="none" stroke-width="1.5" style="stroke:var(--accent,#22d3ee)" marker-end="url(#f2-arrow)"/>
+
+  <rect x="484" y="165" width="150" height="112" rx="8" fill="var(--bg-secondary,#0d1117)" stroke-width="1.5" style="stroke:var(--accent,#22d3ee)"/>
+  <text x="559" y="216" text-anchor="middle" font-family="'JetBrains Mono', ui-monospace, monospace" font-size="13" font-weight="600" style="fill:var(--text-primary,#ffffff)">DSP Worker</text>
+  <text x="559" y="244" text-anchor="middle" font-family="Inter, system-ui, -apple-system, sans-serif" font-size="11.5" style="fill:var(--text-secondary,#8899aa)">全局锁 · 0–4 · A8 门控</text>
+
+  <path d="M 634 221 H 640" fill="none" stroke-width="1.5" style="stroke:var(--accent,#22d3ee)" marker-end="url(#f2-arrow)"/>
+
+  <rect x="646" y="165" width="140" height="112" rx="8" fill="var(--bg-secondary,#0d1117)" stroke-width="1.5" style="stroke:var(--accent,#22d3ee)"/>
+  <text x="716" y="216" text-anchor="middle" font-family="'JetBrains Mono', ui-monospace, monospace" font-size="12.5" font-weight="600" style="fill:var(--text-primary,#ffffff)">DecodeResult</text>
+  <text x="716" y="244" text-anchor="middle" font-family="'JetBrains Mono', ui-monospace, monospace" font-size="10.5" style="fill:var(--text-secondary,#8899aa)">slot_id / snr / dt /</text>
+  <text x="716" y="260" text-anchor="middle" font-family="'JetBrains Mono', ui-monospace, monospace" font-size="10.5" style="fill:var(--text-secondary,#8899aa)">frequency / text</text>
+
+  <path d="M 786 221 H 792" fill="none" stroke-width="1.5" style="stroke:var(--accent,#22d3ee)" marker-end="url(#f2-arrow)"/>
+
+  <rect x="798" y="165" width="140" height="112" rx="8" fill="var(--bg-secondary,#0d1117)" stroke-width="1.5" style="stroke:var(--accent,#22d3ee)"/>
+  <text x="868" y="216" text-anchor="middle" font-family="'JetBrains Mono', ui-monospace, monospace" font-size="13" font-weight="600" style="fill:var(--text-primary,#ffffff)">on_decode</text>
+  <text x="868" y="244" text-anchor="middle" font-family="'JetBrains Mono', ui-monospace, monospace" font-size="11" style="fill:var(--text-secondary,#8899aa)">(main.py)</text>
+
+  <!-- bottom annotations: sample-rate iron rules -->
+  <text x="480" y="350" text-anchor="middle" font-family="'JetBrains Mono', ui-monospace, monospace" font-size="13" style="fill:var(--accent,#22d3ee)">RX 恒 12 kHz int16 单声道（binding.py 强制）</text>
+  <text x="480" y="380" text-anchor="middle" font-family="'JetBrains Mono', ui-monospace, monospace" font-size="13" style="fill:var(--accent,#22d3ee)">TX 波形恒 48 kHz</text>
+  <text x="480" y="432" text-anchor="middle" font-family="Inter, system-ui, -apple-system, sans-serif" font-size="11.5" style="fill:var(--text-muted,#5c6370)">每 15 s slot，orchestrator 把整槽音频送 Worker 解码（WSJT-X 3.0.2 Improved）</text>
+  <text x="480" y="456" text-anchor="middle" font-family="Inter, system-ui, -apple-system, sans-serif" font-size="11.5" style="fill:var(--text-muted,#5c6370)">OpenMP 线程只在 Fortran 聚合结果，绝不回调 Python</text>
+</svg>

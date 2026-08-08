@@ -1,0 +1,55 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 500" role="img" aria-labelledby="f4title">
+  <title id="f4title">图 4 决策门 auto_call_candidate：六条件 AND，每 slot 至多命中第一个</title>
+  <defs>
+    <marker id="f4-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto">
+      <path d="M 0 0 L 10 5 L 0 10 z" style="fill:var(--accent,#22d3ee)"/>
+    </marker>
+  </defs>
+
+  <rect x="0" y="0" width="960" height="500" rx="12" fill="var(--bg-tertiary,#10161e)"/>
+
+  <!-- top annotation -->
+  <text x="480" y="34" text-anchor="middle" font-family="Inter, system-ui, -apple-system, sans-serif" font-size="12.5" style="fill:var(--text-muted,#5c6370)">每 slot 按解码消息顺序检查，至多命中第一个候选</text>
+
+  <!-- six condition chips -->
+  <g font-family="'JetBrains Mono', ui-monospace, monospace" font-size="12" style="fill:var(--text-secondary,#8899aa)">
+    <rect x="40" y="64"  width="580" height="44" rx="8" fill="var(--bg-secondary,#0d1117)" stroke-width="1.5" style="stroke:var(--text-secondary,#8899aa)"/>
+    <text x="330" y="90" text-anchor="middle">auto_call_enabled — setting_meta.auto_call_new_dxcc</text>
+
+    <rect x="40" y="120" width="580" height="44" rx="8" fill="var(--bg-secondary,#0d1117)" stroke-width="1.5" style="stroke:var(--text-secondary,#8899aa)"/>
+    <text x="330" y="146" text-anchor="middle">¬ has_selection — QSO 结束清 selected（P7）</text>
+
+    <rect x="40" y="176" width="580" height="44" rx="8" fill="var(--bg-secondary,#0d1117)" stroke-width="1.5" style="stroke:var(--text-secondary,#8899aa)"/>
+    <text x="330" y="202" text-anchor="middle">sequencer_state == IDLE — 无 QSO、无 CQ 循环</text>
+
+    <rect x="40" y="232" width="580" height="44" rx="8" fill="var(--bg-secondary,#0d1117)" stroke-width="1.5" style="stroke:var(--text-secondary,#8899aa)"/>
+    <text x="330" y="258" text-anchor="middle">is_new_dxcc</text>
+
+    <rect x="40" y="288" width="580" height="44" rx="8" fill="var(--bg-secondary,#0d1117)" stroke-width="1.5" style="stroke:var(--text-secondary,#8899aa)"/>
+    <text x="330" y="314" text-anchor="middle">is_cq</text>
+
+    <rect x="40" y="344" width="580" height="44" rx="8" fill="var(--bg-secondary,#0d1117)" stroke-width="1.5" style="stroke:var(--text-secondary,#8899aa)"/>
+    <text x="330" y="370" text-anchor="middle">¬ mine — 自身发射回波不触发</text>
+  </g>
+
+  <!-- connectors into the AND gate -->
+  <g stroke="var(--accent,#22d3ee)" stroke-width="1.5">
+    <path d="M 620 86   H 660" marker-end="url(#f4-arrow)"/>
+    <path d="M 620 142  H 660" marker-end="url(#f4-arrow)"/>
+    <path d="M 620 198  H 660" marker-end="url(#f4-arrow)"/>
+    <path d="M 620 254  H 660" marker-end="url(#f4-arrow)"/>
+    <path d="M 620 310  H 660" marker-end="url(#f4-arrow)"/>
+    <path d="M 620 366  H 660" marker-end="url(#f4-arrow)"/>
+  </g>
+
+  <!-- AND gate -->
+  <rect x="660" y="64" width="260" height="324" rx="8" fill="var(--bg-secondary,#0d1117)" stroke-width="1.5" style="stroke:var(--accent,#22d3ee)"/>
+  <text x="790" y="210" text-anchor="middle" font-family="Inter, system-ui, -apple-system, sans-serif" font-size="16" font-weight="600" style="fill:var(--accent,#22d3ee)">全部满足</text>
+  <text x="790" y="240" text-anchor="middle" font-family="'JetBrains Mono', ui-monospace, monospace" font-size="13" style="fill:var(--text-secondary,#8899aa)">AND</text>
+  <text x="790" y="330" text-anchor="middle" font-family="Inter, system-ui, -apple-system, sans-serif" font-size="11.5" style="fill:var(--text-muted,#5c6370)">六条件同时为真</text>
+
+  <path d="M 790 388 V 418" fill="none" stroke-width="1.5" style="stroke:var(--accent,#22d3ee)" marker-end="url(#f4-arrow)"/>
+
+  <rect x="560" y="418" width="460" height="52" rx="8" fill="var(--bg-secondary,#0d1117)" stroke-width="1.5" style="stroke:var(--accent,#22d3ee)"/>
+  <text x="790" y="449" text-anchor="middle" font-family="'JetBrains Mono', ui-monospace, monospace" font-size="13" style="fill:var(--text-primary,#ffffff)">命中本 slot 第一个候选 → _auto_call</text>
+</svg>
