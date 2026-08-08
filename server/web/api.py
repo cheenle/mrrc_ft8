@@ -158,6 +158,7 @@ class AppState:
     selected_freq: float | None = None  # audio offset the selected message was heard at
     occupancy: FrequencyOccupancy = field(default_factory=FrequencyOccupancy)
     radio_freq_hz: int | None = None  # last polled dial frequency, if rig is up
+    last_tx: dict[str, Any] | None = None  # last transmitted message (desktop client)
     dxcc_cache: Any = None  # cached DxccSummary; rebuilt when repository.dxcc_dirty
     band_hunt_url: str | None = None  # pskreporter /api/band_hunt (NFR-088); None = off
     band_hunt_cache: _BandHuntCache = field(default_factory=_BandHuntCache)
@@ -952,6 +953,7 @@ def _snapshot(state: AppState, session: Session | None) -> dict[str, Any]:
             else {"call": state.selected.from_call, "grid": state.selected.grid}
         ),
         "radio": {"freq_hz": state.radio_freq_hz},
+        "last_tx": state.last_tx,
         "station": {
             "my_call": state.my_call,
             "my_grid": state.my_grid,

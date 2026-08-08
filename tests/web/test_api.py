@@ -1289,3 +1289,17 @@ def test_cq_uses_default_when_band_is_empty(
     cq = client.post("/api/v1/operation/cq", headers=auth_headers(session_id))
     assert cq.status_code == 200
     assert state.sequencer.tx_frequency == 1500.0
+
+
+def test_state_snapshot_includes_last_tx(state: AppState, client: TestClient) -> None:
+    login(client)
+    state.last_tx = {
+        "slot_id": 42,
+        "utc": "071030",
+        "text": "CQ M0XX IO91",
+        "freq_hz": 1500.0,
+    }
+    response = client.get("/api/v1/state")
+    assert response.status_code == 200
+    body = response.json()
+    assert body["last_tx"] == state.last_tx
