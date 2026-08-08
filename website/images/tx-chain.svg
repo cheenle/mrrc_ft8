@@ -1,0 +1,70 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 540" role="img" aria-labelledby="f6title">
+  <title id="f6title">图 6 应答发射 TX 链：TxDriver 时隙泵 → safety.transmit → rigctld</title>
+  <defs>
+    <marker id="f6-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto">
+      <path d="M 0 0 L 10 5 L 0 10 z" style="fill:var(--accent,#22d3ee)"/>
+    </marker>
+    <marker id="f6-arrow-amber" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto">
+      <path d="M 0 0 L 10 5 L 0 10 z" style="fill:#f59e0b"/>
+    </marker>
+  </defs>
+
+  <rect x="0" y="0" width="960" height="540" rx="12" fill="var(--bg-tertiary,#10161e)"/>
+
+  <!-- chain boxes y=90..186 -->
+  <g text-anchor="middle">
+    <rect x="20" y="90" width="130" height="96" rx="8" fill="var(--bg-secondary,#0d1117)" stroke-width="1.5" style="stroke:var(--accent,#22d3ee)"/>
+    <text x="85" y="130" font-family="'JetBrains Mono', ui-monospace, monospace" font-size="13" font-weight="600" style="fill:var(--text-primary,#ffffff)">TxDriver</text>
+    <text x="85" y="156" font-family="Inter, system-ui, -apple-system, sans-serif" font-size="12" style="fill:var(--text-secondary,#8899aa)">时隙奇偶泵</text>
+
+    <rect x="162" y="90" width="110" height="96" rx="8" fill="var(--bg-secondary,#0d1117)" stroke-width="1.5" style="stroke:var(--accent,#22d3ee)"/>
+    <text x="217" y="130" font-family="Inter, system-ui, -apple-system, sans-serif" font-size="12" font-weight="600" style="fill:var(--text-primary,#ffffff)">I9 决策窗口</text>
+    <text x="217" y="156" font-family="'JetBrains Mono', ui-monospace, monospace" font-size="12" style="fill:var(--text-secondary,#8899aa)">5.0 s</text>
+
+    <rect x="284" y="90" width="110" height="96" rx="8" fill="var(--bg-secondary,#0d1117)" stroke-width="1.5" style="stroke:#f59e0b"/>
+    <text x="339" y="130" font-family="'JetBrains Mono', ui-monospace, monospace" font-size="12.5" font-weight="600" style="fill:#f59e0b">fit guard</text>
+    <text x="339" y="154" font-family="'JetBrains Mono', ui-monospace, monospace" font-size="10" style="fill:var(--text-secondary,#8899aa)">12.64 s</text>
+    <text x="339" y="172" font-family="'JetBrains Mono', ui-monospace, monospace" font-size="10" style="fill:var(--text-secondary,#8899aa)">≤ 15 s slot</text>
+
+    <rect x="406" y="90" width="130" height="96" rx="8" fill="var(--bg-secondary,#0d1117)" stroke-width="1.5" style="stroke:var(--accent,#22d3ee)"/>
+    <text x="471" y="130" font-family="'JetBrains Mono', ui-monospace, monospace" font-size="12.5" font-weight="600" style="fill:var(--text-primary,#ffffff)">dsp_encode</text>
+    <text x="471" y="156" font-family="Inter, system-ui, -apple-system, sans-serif" font-size="12" style="fill:var(--text-secondary,#8899aa)">48 kHz 波形</text>
+
+    <rect x="548" y="90" width="140" height="96" rx="8" fill="var(--bg-secondary,#0d1117)" stroke-width="1.5" style="stroke:var(--accent,#22d3ee)"/>
+    <text x="618" y="130" font-family="'JetBrains Mono', ui-monospace, monospace" font-size="12.5" font-weight="600" style="fill:var(--text-primary,#ffffff)">safety.transmit</text>
+    <text x="618" y="156" font-family="Inter, system-ui, -apple-system, sans-serif" font-size="11.5" style="fill:var(--text-secondary,#8899aa)">PTT 门 + watchdog</text>
+
+    <rect x="700" y="90" width="110" height="96" rx="8" fill="var(--bg-secondary,#0d1117)" stroke-width="1.5" style="stroke:var(--accent,#22d3ee)"/>
+    <text x="755" y="130" font-family="'JetBrains Mono', ui-monospace, monospace" font-size="13" font-weight="600" style="fill:var(--text-primary,#ffffff)">rigctld</text>
+    <text x="755" y="156" font-family="Inter, system-ui, -apple-system, sans-serif" font-size="11.5" style="fill:var(--text-secondary,#8899aa)">串口唯一 owner</text>
+
+    <rect x="822" y="90" width="110" height="96" rx="8" fill="var(--bg-secondary,#0d1117)" stroke-width="1.5" style="stroke:var(--accent,#22d3ee)"/>
+    <text x="877" y="130" font-family="'JetBrains Mono', ui-monospace, monospace" font-size="13" font-weight="600" style="fill:var(--text-primary,#ffffff)">FT-710</text>
+    <text x="877" y="156" font-family="'JetBrains Mono', ui-monospace, monospace" font-size="12" style="fill:var(--text-secondary,#8899aa)">PTT</text>
+  </g>
+
+  <!-- connectors -->
+  <g stroke-width="1.5" style="stroke:var(--accent,#22d3ee)">
+    <path d="M 150 138 H 158" marker-end="url(#f6-arrow)"/>
+    <path d="M 272 138 H 280" marker-end="url(#f6-arrow)"/>
+    <path d="M 394 138 H 402" marker-end="url(#f6-arrow)"/>
+    <path d="M 536 138 H 544" marker-end="url(#f6-arrow)"/>
+    <path d="M 688 138 H 696" marker-end="url(#f6-arrow)"/>
+    <path d="M 810 138 H 818" marker-end="url(#f6-arrow)"/>
+  </g>
+
+  <!-- fit guard amber defer branch -->
+  <path d="M 339 186 V 238" fill="none" stroke-width="1.5" stroke-dasharray="6 4" style="stroke:#f59e0b" marker-end="url(#f6-arrow-amber)"/>
+  <text x="339" y="262" text-anchor="middle" font-family="'JetBrains Mono', ui-monospace, monospace" font-size="11" style="fill:#f59e0b">错过 → deferring 下一 slot</text>
+
+  <!-- annotation panel -->
+  <rect x="40" y="300" width="880" height="210" rx="8" fill="var(--bg-secondary,#0d1117)" stroke-width="1" style="stroke:var(--border,rgba(255,255,255,0.06))"/>
+  <g font-family="Inter, system-ui, -apple-system, sans-serif" font-size="12.5" style="fill:var(--text-secondary,#8899aa)">
+    <text x="70" y="334">TxDriver：只在 sequencer 的 tx_phase 对应奇偶 slot 拉取至多一条，编码后交 safety.transmit()</text>
+    <text x="70" y="368">I9 决策窗口：sequencer 空闲时持续轮询到 5.0 s 截止，点击/自动呼叫一 arm 就发</text>
+    <text x="70" y="402">fit guard：12.64 s 波形 + 0.2 s 启动必须塞进 15 s slot，错过则顺延下一可用 slot</text>
+    <text x="70" y="436">dsp_encode：应答用伙伴解码频率（split，对方接收机能配对）；CQ 用 FrequencyOccupancy 空闲频点</text>
+    <text x="70" y="470">safety.transmit：复核 faults / armed / PTT 状态 / 聚合 TX 预算；watchdog 与 STOP 可随时取消</text>
+    <text x="70" y="496" style="fill:var(--text-muted,#5c6370)">PTT 经 rigctld（串口唯一 owner，AD-008）</text>
+  </g>
+</svg>

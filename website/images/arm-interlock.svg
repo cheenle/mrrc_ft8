@@ -1,0 +1,73 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 560" role="img" aria-labelledby="f5title">
+  <title id="f5title">图 5 触发与安全门：safety.arm 互锁矩阵与 skip/重试</title>
+  <defs>
+    <marker id="f5-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto">
+      <path d="M 0 0 L 10 5 L 0 10 z" style="fill:var(--accent,#22d3ee)"/>
+    </marker>
+    <marker id="f5-arrow-amber" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto">
+      <path d="M 0 0 L 10 5 L 0 10 z" style="fill:#f59e0b"/>
+    </marker>
+    <marker id="f5-arrow-green" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto">
+      <path d="M 0 0 L 10 5 L 0 10 z" style="fill:#34d399"/>
+    </marker>
+  </defs>
+
+  <rect x="0" y="0" width="960" height="560" rx="12" fill="var(--bg-tertiary,#10161e)"/>
+
+  <!-- interlock chips row -->
+  <text x="480" y="28" text-anchor="middle" font-family="Inter, system-ui, -apple-system, sans-serif" font-size="12" style="fill:var(--text-muted,#5c6370)">互锁矩阵（任一 faulted → arm 拒绝、PTT-off）</text>
+  <g font-family="'JetBrains Mono', ui-monospace, monospace" font-size="13" font-weight="600" style="fill:var(--text-primary,#ffffff)">
+    <rect x="90"  y="44" width="120" height="44" rx="8" fill="var(--bg-secondary,#0d1117)" stroke-width="1.5" style="stroke:var(--text-secondary,#8899aa)"/>
+    <text x="150" y="70" text-anchor="middle">CAT</text>
+    <rect x="260" y="44" width="120" height="44" rx="8" fill="var(--bg-secondary,#0d1117)" stroke-width="1.5" style="stroke:var(--text-secondary,#8899aa)"/>
+    <text x="320" y="70" text-anchor="middle">audio</text>
+    <rect x="430" y="44" width="120" height="44" rx="8" fill="var(--bg-secondary,#0d1117)" stroke-width="1.5" style="stroke:var(--text-secondary,#8899aa)"/>
+    <text x="490" y="70" text-anchor="middle">DSP</text>
+    <rect x="600" y="44" width="120" height="44" rx="8" fill="var(--bg-secondary,#0d1117)" stroke-width="1.5" style="stroke:var(--text-secondary,#8899aa)"/>
+    <text x="660" y="70" text-anchor="middle">clock</text>
+  </g>
+
+  <!-- interlock bus down into arm gate -->
+  <path d="M 150 88 V 120 M 320 88 V 120 M 490 88 V 120 M 660 88 V 120" fill="none" stroke-width="1.5" style="stroke:var(--text-secondary,#8899aa)"/>
+  <path d="M 120 120 H 690" fill="none" stroke-width="1.5" style="stroke:var(--text-secondary,#8899aa)"/>
+  <path d="M 380 120 V 160 M 440 120 V 160 M 500 120 V 160 M 560 120 V 160" fill="none" stroke-width="1.5" style="stroke:var(--text-secondary,#8899aa)"/>
+
+  <!-- left input -->
+  <rect x="40" y="176" width="260" height="52" rx="8" fill="var(--bg-secondary,#0d1117)" stroke-width="1.5" style="stroke:var(--accent,#22d3ee)"/>
+  <text x="170" y="207" text-anchor="middle" font-family="'JetBrains Mono', ui-monospace, monospace" font-size="12" style="fill:var(--text-primary,#ffffff)">候选命中（图 4）→ _auto_call</text>
+  <path d="M 300 202 H 356" fill="none" stroke-width="1.5" style="stroke:var(--accent,#22d3ee)" marker-end="url(#f5-arrow)"/>
+
+  <!-- arm gate -->
+  <rect x="356" y="160" width="248" height="66" rx="8" fill="var(--bg-secondary,#0d1117)" stroke-width="1.5" style="stroke:var(--accent,#22d3ee)"/>
+  <text x="480" y="193" text-anchor="middle" font-family="'JetBrains Mono', ui-monospace, monospace" font-size="14" font-weight="600" style="fill:var(--text-primary,#ffffff)">safety.arm()</text>
+  <text x="480" y="214" text-anchor="middle" font-family="Inter, system-ui, -apple-system, sans-serif" font-size="11.5" style="fill:var(--text-muted,#5c6370)">唯一的 TX 门</text>
+
+  <!-- branch -->
+  <path d="M 480 226 V 262" fill="none" stroke-width="1.5" style="stroke:var(--accent,#22d3ee)"/>
+  <path d="M 480 262 H 220 V 300" fill="none" stroke-width="1.5" style="stroke:#f59e0b" marker-end="url(#f5-arrow-amber)"/>
+  <path d="M 480 262 H 740 V 300" fill="none" stroke-width="1.5" style="stroke:#34d399" marker-end="url(#f5-arrow-green)"/>
+
+  <!-- amber: faulted branch -->
+  <rect x="40" y="300" width="420" height="150" rx="8" fill="var(--bg-secondary,#0d1117)" stroke-width="1.5" style="stroke:#f59e0b"/>
+  <text x="250" y="328" text-anchor="middle" font-family="'JetBrains Mono', ui-monospace, monospace" font-size="12.5" font-weight="600" style="fill:#f59e0b">任一互锁 faulted → TxRefused</text>
+  <text x="250" y="354" text-anchor="middle" font-family="'JetBrains Mono', ui-monospace, monospace" font-size="11.5" style="fill:var(--text-secondary,#8899aa)">log: auto_call skipped: interlock open (&lt;call&gt;)</text>
+  <text x="250" y="396" text-anchor="middle" font-family="Inter, system-ui, -apple-system, sans-serif" font-size="12.5" style="fill:var(--text-primary,#ffffff)">跳过本 slot，下一 slot 重试</text>
+  <text x="250" y="424" text-anchor="middle" font-family="Inter, system-ui, -apple-system, sans-serif" font-size="11.5" style="fill:var(--text-muted,#5c6370)">不崩溃、不风暴</text>
+
+  <!-- green: success branch -->
+  <rect x="520" y="300" width="400" height="150" rx="8" fill="var(--bg-secondary,#0d1117)" stroke-width="1.5" style="stroke:#34d399"/>
+  <text x="720" y="326" text-anchor="middle" font-family="Inter, system-ui, -apple-system, sans-serif" font-size="12.5" font-weight="600" style="fill:var(--text-primary,#ffffff)">arm 成功 → 记录选中消息（call/grid/snr/slot）</text>
+  <text x="720" y="352" text-anchor="middle" font-family="'JetBrains Mono', ui-monospace, monospace" font-size="12" style="fill:var(--text-secondary,#8899aa)">sequencer.reply_to(...)</text>
+  <text x="720" y="378" text-anchor="middle" font-family="'JetBrains Mono', ui-monospace, monospace" font-size="11.5" style="fill:var(--text-secondary,#8899aa)">tx_phase = 0 if slot_id is None else 1 − (slot_id % 2)</text>
+  <text x="720" y="400" text-anchor="middle" font-family="'JetBrains Mono', ui-monospace, monospace" font-size="11.5" style="fill:var(--text-secondary,#8899aa)">tx_frequency = 伙伴解码频率（UC-003）</text>
+  <text x="720" y="426" text-anchor="middle" font-family="Inter, system-ui, -apple-system, sans-serif" font-size="11.5" style="fill:var(--text-muted,#5c6370)">旧行为写死 1500 Hz（见 §7 复盘）</text>
+
+  <!-- bottom: gray lease note + green audit box -->
+  <rect x="40" y="486" width="420" height="50" rx="8" fill="var(--bg-secondary,#0d1117)" stroke-width="1.5" style="stroke:var(--text-secondary,#8899aa)"/>
+  <text x="250" y="515" text-anchor="middle" font-family="Inter, system-ui, -apple-system, sans-serif" font-size="12" style="fill:var(--text-secondary,#8899aa)">系统级、无人值守：不需要控制租约（NFR-087）</text>
+
+  <path d="M 720 450 V 484" fill="none" stroke-width="1.5" style="stroke:#34d399" marker-end="url(#f5-arrow-green)"/>
+  <rect x="520" y="486" width="400" height="50" rx="8" fill="var(--bg-secondary,#0d1117)" stroke-width="1.5" style="stroke:#34d399"/>
+  <text x="720" y="508" text-anchor="middle" font-family="'JetBrains Mono', ui-monospace, monospace" font-size="11.5" style="fill:var(--text-secondary,#8899aa)">audit_event：actor=system · operation=auto_call</text>
+  <text x="720" y="526" text-anchor="middle" font-family="'JetBrains Mono', ui-monospace, monospace" font-size="11.5" style="fill:var(--text-secondary,#8899aa)">detail=snr=… new_dxcc · target=呼号</text>
+</svg>
