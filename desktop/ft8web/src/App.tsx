@@ -179,7 +179,7 @@ export default function App() {
   const handleLoggedOut = useCallback(() => { setLoggedIn(false); }, []);
   // Gate the hook's streams on login state so they don't open before the session
   // is validated and reconnect after a fresh login (Task 6 review fix).
-  const { connected, lastDecodes, snapshot } = useServerFT8({ onLoggedOut: handleLoggedOut, enabled: loggedIn === true });
+  const { connected, lastDecodes, snapshot, waterfallRef } = useServerFT8({ onLoggedOut: handleLoggedOut, enabled: loggedIn === true });
   useEffect(() => { setAudioActive(connected); }, [connected]);
 
   // Advisory clock-accuracy check: measures device-clock drift vs a trusted
@@ -472,48 +472,57 @@ export default function App() {
     const width = canvas.width;
     const height = canvas.height;
 
-    // STUBBED (Task 8): the AnalyserNode pipeline was removed with the local
-    // audio brain. This will be rewired to drain server WF01 frames; for now we
-    // keep the canvas row-scroll + palette mapping and feed it a zeroed row.
-    const dataArray = new Uint8Array(width);
+    // Shift the canvas down 1px and stamp one horizontal row onto the new top
+    // edge from the given 0..255 spectrum bins, using the existing palette
+    // mapping (Black -> Blue -> Purple/Red -> Yellow/White).
+    const shiftDownAndDrawRow = (bins: Uint8Array) => {
+      // Shift current canvas image vertically downwards by 1px
+      ctx.drawImage(canvas, 0, 0, width, height - 1, 0, 1, width, height - 1);
 
-    // Shift current canvas image vertically downwards by 1px
-    ctx.drawImage(canvas, 0, 0, width, height - 1, 0, 1, width, height - 1);
+      // Compute the new top row
+      const rowImg = ctx.createImageData(width, 1);
+      for (let x = 0; x < width; x++) {
+        const val = bins[x] || 0;
 
-    // Compute the new top row
-    const rowImg = ctx.createImageData(width, 1);
-    for (let x = 0; x < width; x++) {
-      const val = dataArray[x] || 0;
+        const px = x * 4;
+        // Smooth color palette: Black -> Blue -> Purple/Red -> Yellow/White
+        let r = 0, g = 0, b = 0;
 
-      const px = x * 4;
-      // Smooth color palette: Black -> Blue -> Purple/Red -> Yellow/White
-      let r = 0, g = 0, b = 0;
+        if (val < 50) {
+          b = val * 2;
+        } else if (val < 100) {
+          b = 100 + (val - 50) * 3;
+          r = (val - 50) * 2;
+        } else if (val < 180) {
+          b = 250 - (val - 100);
+          r = 100 + (val - 100) * 1.5;
+        } else {
+          r = 255;
+          g = (val - 180) * 3;
+          b = (val - 220) * 5 > 0 ? (val - 220) * 5 : 0;
+        }
 
-      if (val < 50) {
-        b = val * 2;
-      } else if (val < 100) {
-        b = 100 + (val - 50) * 3;
-        r = (val - 50) * 2;
-      } else if (val < 180) {
-        b = 250 - (val - 100);
-        r = 100 + (val - 100) * 1.5;
-      } else {
-        r = 255;
-        g = (val - 180) * 3;
-        b = (val - 220) * 5 > 0 ? (val - 220) * 5 : 0;
+        rowImg.data[px + 0] = Math.min(255, Math.max(0, r));
+        rowImg.data[px + 1] = Math.min(255, Math.max(0, g));
+        rowImg.data[px + 2] = Math.min(255, Math.max(0, b));
+        rowImg.data[px + 3] = 255;
       }
 
-      rowImg.data[px + 0] = Math.min(255, Math.max(0, r));
-      rowImg.data[px + 1] = Math.min(255, Math.max(0, g));
-      rowImg.data[px + 2] = Math.min(255, Math.max(0, b));
-      rowImg.data[px + 3] = 255;
+      ctx.putImageData(rowImg, 0, 0);
+    };
+
+    // Drain ALL server WF01 frames buffered since the last draw (Task 8): one
+    // horizontal row per frame from frame.bins, which the server maps 0–3000 Hz
+    // across. When the buffer is empty we skip the shift entirely, so the
+    // previous frame stays on screen instead of being blanked.
+    const frames = waterfallRef.current.splice(0, waterfallRef.current.length);
+    for (const frame of frames) {
+      shiftDownAndDrawRow(frame.bins);
+      // Advance the row counter (naturally pauses during TX since drawWaterfall
+      // returns early).
+      waterfallRowsRef.current += 1;
     }
-
-    ctx.putImageData(rowImg, 0, 0);
-
-    // Advance the row counter (naturally pauses during TX since drawWaterfall returns early)
-    waterfallRowsRef.current += 1;
-  }, [mode]);
+  }, []);
 
   // Local audio capture was removed with the DSP brain (Task 6). audioActive
   // now mirrors the server connection; this button is a status lamp until
