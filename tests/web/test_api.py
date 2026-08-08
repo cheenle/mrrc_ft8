@@ -792,6 +792,36 @@ def test_logs_qsos_windows_to_recent_week(client: TestClient, state: AppState) -
     assert [q["dx_call"] for q in body["qsos"]] == ["FRESH1"]
 
 
+def test_logs_qsos_since_days_param(client: TestClient, state: AppState) -> None:
+    now = time.time()
+    state.repository.record_qso(
+        QSORecord(my_call="M0XX", my_grid="IO91", dx_call="OLD2"),
+        completed_epoch=now - 40 * 86_400,
+    )
+    state.repository.record_qso(
+        QSORecord(my_call="M0XX", my_grid="IO91", dx_call="OLD1"),
+        completed_epoch=now - 8 * 86_400,
+    )
+    state.repository.record_qso(
+        QSORecord(my_call="M0XX", my_grid="IO91", dx_call="FRESH1"),
+        completed_epoch=now,
+    )
+    session_id = login(client)
+    auth = auth_headers(session_id)
+    # default (no param) keeps the 7-day window — only FRESH1
+    body = client.get("/api/v1/logs/qsos", headers=auth).json()
+    assert [q["dx_call"] for q in body["qsos"]] == ["FRESH1"]
+    # since_days=30 → FRESH1 + OLD1 (8 days old)
+    body = client.get("/api/v1/logs/qsos?since_days=30", headers=auth).json()
+    assert {q["dx_call"] for q in body["qsos"]} == {"FRESH1", "OLD1"}
+    # since_days=365 → all three
+    body = client.get("/api/v1/logs/qsos?since_days=365", headers=auth).json()
+    assert {q["dx_call"] for q in body["qsos"]} == {"FRESH1", "OLD1", "OLD2"}
+    # invalid values are rejected
+    assert client.get("/api/v1/logs/qsos?since_days=abc", headers=auth).status_code == 422
+    assert client.get("/api/v1/logs/qsos?since_days=0", headers=auth).status_code == 422
+
+
 def test_adif_export_windows_to_recent_week(client: TestClient, state: AppState) -> None:
     now = time.time()
     state.repository.record_qso(

@@ -103,7 +103,8 @@ export const mrrc = {
   rigFilter: (hz: number) =>
     request('/radio/filter', { method: 'POST', idempotencyKey: key(), body: { hz } }),
 
-  qsos: () => request('/logs/qsos'),
+  qsos: (sinceDays?: number) =>
+    request(`/logs/qsos${sinceDays ? `?since_days=${sinceDays}` : ''}`),
   dxcc: () => request('/dxcc'),
   bandHunt: (params: Record<string, string>) => request(`/band-hunt?${new URLSearchParams(params)}`),
   settings: () => request('/settings'),

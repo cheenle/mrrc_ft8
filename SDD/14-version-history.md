@@ -1,5 +1,11 @@
 # 14. Version History
 
+## Unreleased — 2026-08-08 — Desktop FT8 Client (/desktop) + QSO Log Window
+
+- **桌面版 FT8 界面**：以 ok1cdj/FT8web（GPL v3）为 UI 壳、MRRC-FT8 headless 服务器为大脑，新增 `desktop/ft8web/` 客户端，构建产物挂载 `/desktop`（服务器仅两处增量：`TxDriver.on_transmitted` 观察者 + state 快照 `last_tx`；移动 PWA `/static` 与既有契约不变）。客户端不做本地 DSP/音频/CAT/FSM——解码/waterfall/收发/日志全部走服务器 REST + 三路 WS；登录门 + 控制租约隐式获取；`mrrcClient.ts`/`mrrcStreams.ts`/`useServerFT8.ts` 三个适配模块 + vitest；vite `base:'/desktop/'` + dev 代理。
+- **QSO 日志窗口**：`/logs/qsos` 新增 `since_days` 查询参数（默认 7，向后兼容，范围 1–3650，非法值 422）；桌面客户端 LogBookViewer 加 7/30/90/365 天窗口选择器。
+- Regressions: `tests/web/test_api.py`（since_days 默认/扩展窗口/非法值）、全量 web 套件绿（158 passed）；客户端 `npm test` 25 passed + tsc + build 全绿。
+
 ## Unreleased — 2026-08-08 — band-hunt Entity-Name Normalization (pskreporter → cty)
 
 - **现场根因（12h 复盘）**：band_hunt 反复切 15m 追 "Germany"，但 Germany 实体早已通联（qso 表 64 条 DL/DK 记录）。原因：`rank_bands` 的 worked 过滤直接用 pskreporter 实体名比对 cty.dat 规范名——pskreporter 用普通名 "Germany"/"Malaysia"/"Turkey"，cty 规范名是 "Fed. Rep. of Germany"/"West Malaysia"/"Asiatic Turkey" → 名称失配 → 已通联实体被判 new。实测 42 个 pskreporter 实体名中仅这 3 个不一致。

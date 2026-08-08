@@ -48,10 +48,11 @@ export function LogBookViewer({ maxEntries }: { maxEntries: number }) {
     const [filterCall, setFilterCall] = useState('');
     const [filterBand, setFilterBand] = useState('');
     const [filterMode, setFilterMode] = useState('');
+    const [sinceDays, setSinceDays] = useState(7);
 
     const fetchQsos = async () => {
         try {
-            const data = await mrrc.qsos();
+            const data = await mrrc.qsos(sinceDays);
             const rows = (data.body.qsos ?? []).map(qsoToRow);
             setQsos(rows);
         } catch (e) {
@@ -77,7 +78,7 @@ export function LogBookViewer({ maxEntries }: { maxEntries: number }) {
         return () => {
             clearInterval(interval);
         };
-    }, [maxEntries]);
+    }, [sinceDays, maxEntries]);
 
     return (
         <div className="logbook-vessel flex flex-col bg-panel border gap-2 border-border-subtle rounded mt-2 px-1">
@@ -87,6 +88,17 @@ export function LogBookViewer({ maxEntries }: { maxEntries: number }) {
                     <span className="text-[10px] font-mono text-text-muted">{qsos.length} QSO</span>
                 </div>
                 <div className="flex items-center gap-1.5 flex-wrap">
+                    <select
+                        value={sinceDays}
+                        onChange={(e) => setSinceDays(Number(e.target.value))}
+                        className="bg-btn border border-border-input hover:border-[#4caf50] text-[10px] font-bold px-2 py-1.5 rounded uppercase tracking-wider text-text-main transition-colors"
+                        title="QSO history window"
+                    >
+                        <option value={7}>7 days</option>
+                        <option value={30}>30 days</option>
+                        <option value={90}>90 days</option>
+                        <option value={365}>365 days</option>
+                    </select>
                     <a
                         href="/api/v1/logs/adif"
                         download

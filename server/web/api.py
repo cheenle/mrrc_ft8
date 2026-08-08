@@ -741,8 +741,19 @@ def create_router(state: AppState) -> APIRouter:
     # ---- logs ----------------------------------------------------------------
 
     @router.get("/logs/qsos")
-    async def logs_qsos(session: Session = Depends(require_session)) -> JSONResponse:
-        qsos = await asyncio.to_thread(state.repository.list_qsos, since_days=7)
+    async def logs_qsos(request: Request, session: Session = Depends(require_session)) -> JSONResponse:
+        # Optional ``since_days`` window (desktop client logbook); default 7
+        # keeps the mobile PWA and legacy callers unchanged.
+        raw = request.query_params.get("since_days")
+        since_days = 7
+        if raw is not None:
+            try:
+                since_days = float(raw)
+            except (TypeError, ValueError):
+                return _reject(422, "invalid_request")
+            if not 1 <= since_days <= 3650:
+                return _reject(422, "invalid_request")
+        qsos = await asyncio.to_thread(state.repository.list_qsos, since_days=since_days)
         # _ok envelope: the drawer's api.qsos() gate is ``res.ok`` (same as
         # every mutation); a bare dict made the log overlay always take the
         # error branch even on 200 ("Could not load log: 200").
