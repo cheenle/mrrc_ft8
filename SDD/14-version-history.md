@@ -1,5 +1,12 @@
 # 14. Version History
 
+## Unreleased — 2026-08-08 — Desktop decode 行缺少双击回复（单击只 select，永不发射）
+
+- **现场症状**：桌面客户端 RX 正常、租约心跳已修复，但点解码行仍无 TX。日志只有 `operation/select`（永不发射），无 `operation/cq`/`operation/reply`。
+- **根因**：FT8web 改造时只保留了单行 `onClick → handleSelectRow`（服务器 select，§15.6 永不发射），没有接移动 PWA 的「双击=回复」惯例 — 用户点行以为会发射，实际只选中。
+- **修复**：Band Activity 与 Active QSO 解码行加 `onDoubleClick → handleReplyRow`（`rowToCandidate` → 隐式取租约 → `operation/reply`，deferred 时提示预定 UTC 时隙）。
+- Regressions: 客户端 tsc/build/25 测试全绿；现场双击 CQ 行可完整发射。
+
 ## Unreleased — 2026-08-08 — Desktop lease heartbeat 15s→5s（TX 中段被 dead-man STOP 掐断）
 
 - **现场症状**：桌面客户端 RX 正常（每 slot 8–11 msgs），但 TX 启动后约 6.5 s 被掐断。日志链：`arm: TX armed by operator` → `tx_start: 12.64s waveform` → `ptt_off: stop:lease_expired` → `tx_stop: cancelled`，且 `lease_expired` 每 ~30 s 反复出现。
