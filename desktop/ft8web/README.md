@@ -35,6 +35,24 @@ npm run lint     # tsc --noEmit
 `127.0.0.1:8000` — the Vite proxy forwards `/api` (HTTP) and `/ws` (WebSocket)
 traffic there.
 
+## Deploy to the station
+
+`dist/` is gitignored, so a `git pull` alone does **not** bring the built
+client — the station must build it before restarting the server:
+
+```bash
+cd /path/to/mrrc_ft8
+git pull
+cd desktop/ft8web
+npm install          # first deploy only (or when deps change)
+npm run build        # → dist/ with base /desktop/
+cd ../..
+# restart the server (restart.sh, or your LaunchAgent/systemd unit)
+```
+
+The client is then served at `<server-origin>/desktop/` (e.g.
+`https://radio.vlsc.net:9988/desktop/`). The mobile PWA stays at `/static/`.
+
 ## Server settings this client exposes
 
 The Settings modal reads and writes these server keys via `/api/v1/settings`:
