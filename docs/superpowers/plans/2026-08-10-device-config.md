@@ -604,6 +604,10 @@ def client(tmp_path):
 
 def test_devices_view_reports_config_source_and_enums(client, monkeypatch) -> None:
     session_id = login(client)
+    # Deterministic: effective_config/source_of read the real os.environ.
+    monkeypatch.delenv("MRRC_FT8_RIGCTLD", raising=False)
+    monkeypatch.delenv("MRRC_FT8_AUDIO_DEVICE", raising=False)
+    monkeypatch.delenv("MRRC_FT8_RIG_MODEL", raising=False)
     fake_sd = SimpleNamespace(query_devices=lambda: [
         {"name": "USB Audio", "max_input_channels": 2, "max_output_channels": 2},
     ])
