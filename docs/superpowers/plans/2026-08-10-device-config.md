@@ -577,8 +577,12 @@ from server.web.lease import LeaseService
 
 
 def build_state(tmp_path, rig: ApiRig) -> AppState:
+    from test_audio_tx import FakeOutputStream
+
     sequencer = Sequencer(my_call="M0XX", my_grid="IO91")
-    safety = SafetyController(rig, TxPlayer(stream_factory=None), sequencer=sequencer)
+    safety = SafetyController(
+        rig, TxPlayer(stream_factory=FakeOutputStream), sequencer=sequencer
+    )
     return AppState(
         auth=AuthService(hash_password(PASSWORD)),
         lease=LeaseService(),
@@ -857,7 +861,7 @@ print('\n'.join(shell_env_lines(cfg)))
 ```
 预期：`syntax OK` + 四行 `KEY=value`。随后人工验证 restart.sh 的 eval 段真实生效（不杀进程）：
 ```bash
-bash -c 'eval "$(venv/bin/python -c '\''import json,pathlib;cfg=json.loads(pathlib.Path("data/device-config.json").read_text());print(f"MRRC_FT8_RIG_MODEL={cfg.get("rig_model")}")'\'')"; echo "model=$MRRC_FT8_RIG_MODEL"'
+bash -c 'source /tmp/mrrc-rig.env && echo "model=$MRRC_FT8_RIG_MODEL"'
 ```
 预期：`model=1049`
 
