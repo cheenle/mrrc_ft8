@@ -87,6 +87,7 @@ class ServerConfig:
     jtdx_log_path: str | None = None
     rigctld_host: str = "127.0.0.1"
     rigctld_port: int = 4532
+    rig_mode: str = "USB"  # 启动时对电台 best-effort 应用的模式（设备配置）
     audio_device: int | str | None = None
     # 独立输入/输出音频设备（2026-08-10：声卡配置拆 in/out 两个）；
     # None 时回退 audio_device（旧单一设备语义）。
@@ -171,6 +172,7 @@ class ServerConfig:
             jtdx_log_path=jtdx_log_path,
             rigctld_host=rig_host,
             rigctld_port=int(rig_port or 4532),
+            rig_mode=os.environ.get("MRRC_FT8_RIG_MODE", "USB").upper() or "USB",
             audio_device=audio_device,
             audio_in_device=audio_device,
             audio_out_device=audio_device,
@@ -949,6 +951,28 @@ def create_server(
                     await _proactive_capture_restart(band_now, "rig_poll")
 
         tasks.append(asyncio.create_task(rig_poll()))
+
+        async def apply_startup_rig_mode() -> None:
+            """Best-effort apply of the configured default rig mode (e.g. USB).
+
+            Operator intent from the device config: the mode is applied once
+            the rig becomes reachable (radio may be off at boot), retried on
+            the poll cadence; failures never fault or block startup.
+            """
+
+            mode = config.rig_mode
+            if not mode:
+                return
+            while True:
+                await asyncio.sleep(RIG_POLL_S)
+                try:
+                    await state.rig.set_mode(mode, 2400)
+                    log.info("rig mode set to %s (startup default)", mode)
+                    return
+                except Exception:
+                    log.debug("rig mode apply deferred (rig unreachable?)", exc_info=True)
+
+        tasks.append(asyncio.create_task(apply_startup_rig_mode()))
         try:
             yield
         finally:

@@ -35,7 +35,7 @@ CURATED_RIG_MODELS: list[tuple[int, str]] = [
 BAUD_RATES: list[int] = [1200, 2400, 4800, 9600, 19200, 38400, 57600, 115200]
 
 _CONFIG_KEYS = (
-    "rig_model", "rig_device", "rig_baud", "rig_stop_bits", "rigctld_port",
+    "rig_model", "rig_device", "rig_baud", "rig_stop_bits", "rig_mode", "rigctld_port",
     "audio_device", "audio_in_device", "audio_out_device",
 )
 
@@ -50,6 +50,7 @@ _ENV_KEY = {
     "rig_device": "MRRC_FT8_RIG_DEVICE",
     "rig_baud": "MRRC_FT8_RIG_BAUD",
     "rig_stop_bits": "MRRC_FT8_RIG_STOP_BITS",
+    "rig_mode": "MRRC_FT8_RIG_MODE",
     "rigctld_port": "MRRC_FT8_RIGCTLD_PORT",
     "audio_device": "MRRC_FT8_AUDIO_DEVICE",
     "audio_in_device": "MRRC_FT8_AUDIO_IN_DEVICE",
@@ -61,6 +62,7 @@ _SOURCE_ENV = {
     "rig_device": "MRRC_FT8_RIG_DEVICE",
     "rig_baud": "MRRC_FT8_RIG_BAUD",
     "rig_stop_bits": "MRRC_FT8_RIG_STOP_BITS",
+    "rig_mode": "MRRC_FT8_RIG_MODE",
     "rigctld_port": "MRRC_FT8_RIGCTLD",  # server 实际连接所用 env（host:port）
     "audio_device": "MRRC_FT8_AUDIO_DEVICE",
     "audio_in_device": "MRRC_FT8_AUDIO_IN_DEVICE",
@@ -147,6 +149,8 @@ def effective_config(
         cfg["audio_device"] = _audio_value(audio_raw)
     cfg["audio_in_device"] = _resolve_audio(file_cfg, environ, direction="in")
     cfg["audio_out_device"] = _resolve_audio(file_cfg, environ, direction="out")
+    rig_mode = environ.get("MRRC_FT8_RIG_MODE", "")
+    cfg["rig_mode"] = rig_mode or "USB"
     _, _, rig_port = environ.get("MRRC_FT8_RIGCTLD", "127.0.0.1:4532").partition(":")
     cfg["rigctld_port"] = int(rig_port or 4532)
     for env, key in (
@@ -172,6 +176,8 @@ def merge_into(config: Any, file_cfg: dict[str, Any] | None) -> Any:
     for key in ("audio_device", "audio_in_device", "audio_out_device"):
         if key in file_cfg:
             overrides[key] = file_cfg[key]
+    if "rig_mode" in file_cfg:
+        overrides["rig_mode"] = file_cfg["rig_mode"]
     if "rigctld_port" in file_cfg:
         overrides["rigctld_port"] = int(file_cfg["rigctld_port"])
     return dataclasses.replace(config, **overrides)
@@ -254,6 +260,11 @@ def validate(
         port = cfg["rigctld_port"]
         if not isinstance(port, int) or isinstance(port, bool) or not 1024 <= port <= 65535 or port == 8000:
             return "rigctld_port must be an integer in 1024..65535 (not 8000)"
+    if "rig_mode" in cfg:
+        import re as _re
+
+        if not isinstance(cfg["rig_mode"], str) or not _re.fullmatch(r"[A-Z0-9]{1,16}", cfg["rig_mode"]):
+            return "rig_mode must be an uppercase Hamlib mode token (e.g. USB)"
     for key in ("audio_device", "audio_in_device", "audio_out_device"):
         if key in cfg and cfg[key] is not None:
             wanted = cfg[key]
