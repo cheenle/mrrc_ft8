@@ -108,6 +108,18 @@ def test_devices_put_locked_during_tx(client, tmp_path, monkeypatch) -> None:
     assert res.json()["reason"] == "tx_active"
 
 
+def test_devices_put_locked_when_ptt_on_only(client, tmp_path) -> None:
+    """TX 锁同时检查 safety.ptt_on（非仅 armed）；直接置位验证该分支。"""
+
+    session_id = login(client)
+    client.app.state.app_state.safety.ptt_on = True
+    res = client.put(
+        "/api/v1/devices", json={"rigctld_port": 4533}, headers=auth_headers(session_id)
+    )
+    assert res.status_code == 409
+    assert res.json()["reason"] == "tx_active"
+
+
 def test_devices_apply_requires_saved_config(client) -> None:
     session_id = login(client)
     res = client.post("/api/v1/devices/apply", headers=auth_headers(session_id))

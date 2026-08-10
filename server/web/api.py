@@ -995,8 +995,10 @@ def create_router(state: AppState) -> APIRouter:
             return _reject(409, "no_device_config")
         if state.safety.armed or state.safety.ptt_on:
             return _reject(409, REASON_TX_ACTIVE)
-        # Let the 202 response flush before restart.sh kills this process.
-        await asyncio.sleep(0.75)
+        # The 202 response is guaranteed to reach the client: spawn_restart
+        # uses a detached Popen (new session, non-blocking), and restart.sh's
+        # own lsof/pgrep discovery runs only after the fork — far later than
+        # the ASGI response write for this handler.  No extra sleep needed.
         try:
             await asyncio.to_thread(store.spawn_restart)
         except FileNotFoundError as exc:
