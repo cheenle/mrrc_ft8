@@ -17,6 +17,7 @@ cfg = json.loads(pathlib.Path("data/device-config.json").read_text())
 for env, key in (("MRRC_FT8_RIG_MODEL", "rig_model"),
                  ("MRRC_FT8_RIG_DEVICE", "rig_device"),
                  ("MRRC_FT8_RIG_BAUD", "rig_baud"),
+                 ("MRRC_FT8_RIG_STOP_BITS", "rig_stop_bits"),
                  ("MRRC_FT8_RIGCTLD_PORT", "rigctld_port")):
     v = cfg.get(key)
     if v is not None:
@@ -27,6 +28,8 @@ fi
 RIG_MODEL="${MRRC_FT8_RIG_MODEL:-1049}"
 RIG_DEVICE="${MRRC_FT8_RIG_DEVICE:-/dev/cu.usbserial-0121DB3A0}"
 RIG_BAUD="${MRRC_FT8_RIG_BAUD:-38400}"
+# 停止位：IC-M710 等海事电台需要 2（hamlib `-C stop_bits=`）；缺省 1。
+RIG_STOP_BITS="${MRRC_FT8_RIG_STOP_BITS:-1}"
 RIGCTLD_PORT="${MRRC_FT8_RIGCTLD_PORT:-4532}"
 RIGCTLD_LOG="/tmp/mrrc-rigctld.err.log"
 RIG_START_ATTEMPTS=3
@@ -162,9 +165,14 @@ fi
 
 # ─── 2. 启动 rigctld 并等待就绪 ──────────────────────────────────────
 start_rigctld() {
-	echo "Starting rigctld ($RIG_DEVICE @ $RIG_BAUD, model $RIG_MODEL, port $RIGCTLD_PORT)..."
-	nohup "$RIGCTLD_BIN" -m "$RIG_MODEL" -r "$RIG_DEVICE" -s "$RIG_BAUD" \
-		-T 127.0.0.1 -t "$RIGCTLD_PORT" -vvv >>"$RIGCTLD_LOG" 2>&1 &
+	echo "Starting rigctld ($RIG_DEVICE @ $RIG_BAUD, stop_bits=$RIG_STOP_BITS, model $RIG_MODEL, port $RIGCTLD_PORT)..."
+	if [ "$RIG_STOP_BITS" != "1" ]; then
+		nohup "$RIGCTLD_BIN" -m "$RIG_MODEL" -r "$RIG_DEVICE" -s "$RIG_BAUD" \
+			-C "stop_bits=$RIG_STOP_BITS" -T 127.0.0.1 -t "$RIGCTLD_PORT" -vvv >>"$RIGCTLD_LOG" 2>&1 &
+	else
+		nohup "$RIGCTLD_BIN" -m "$RIG_MODEL" -r "$RIG_DEVICE" -s "$RIG_BAUD" \
+			-T 127.0.0.1 -t "$RIGCTLD_PORT" -vvv >>"$RIGCTLD_LOG" 2>&1 &
+	fi
 	local rig_pid=$!
 	for _ in $(seq 1 20); do
 		if lsof -iTCP:"$RIGCTLD_PORT" -sTCP:LISTEN -t 2>/dev/null | grep -q .; then
