@@ -36,7 +36,7 @@ BAUD_RATES: list[int] = [1200, 2400, 4800, 9600, 19200, 38400, 57600, 115200]
 
 _CONFIG_KEYS = (
     "rig_model", "rig_device", "rig_baud", "rig_stop_bits", "rig_mode", "rigctld_port",
-    "audio_device", "audio_in_device", "audio_out_device",
+    "audio_device", "audio_in_device", "audio_out_device", "audio_in_channel",
 )
 
 # _ENV_KEY: env names restart.sh evals when launching rigctld (launch vars).
@@ -55,6 +55,7 @@ _ENV_KEY = {
     "audio_device": "MRRC_FT8_AUDIO_DEVICE",
     "audio_in_device": "MRRC_FT8_AUDIO_IN_DEVICE",
     "audio_out_device": "MRRC_FT8_AUDIO_OUT_DEVICE",
+    "audio_in_channel": "MRRC_FT8_AUDIO_IN_CHANNEL",
 }
 
 _SOURCE_ENV = {
@@ -67,6 +68,7 @@ _SOURCE_ENV = {
     "audio_device": "MRRC_FT8_AUDIO_DEVICE",
     "audio_in_device": "MRRC_FT8_AUDIO_IN_DEVICE",
     "audio_out_device": "MRRC_FT8_AUDIO_OUT_DEVICE",
+    "audio_in_channel": "MRRC_FT8_AUDIO_IN_CHANNEL",
 }
 
 
@@ -149,6 +151,10 @@ def effective_config(
         cfg["audio_device"] = _audio_value(audio_raw)
     cfg["audio_in_device"] = _resolve_audio(file_cfg, environ, direction="in")
     cfg["audio_out_device"] = _resolve_audio(file_cfg, environ, direction="out")
+    ch_raw = environ.get("MRRC_FT8_AUDIO_IN_CHANNEL", "")
+    cfg["audio_in_channel"] = (
+        int(ch_raw) if ch_raw.isdigit() else 0
+    ) if ch_raw else 0
     rig_mode = environ.get("MRRC_FT8_RIG_MODE", "")
     cfg["rig_mode"] = rig_mode or "USB"
     _, _, rig_port = environ.get("MRRC_FT8_RIGCTLD", "127.0.0.1:4532").partition(":")
@@ -176,6 +182,8 @@ def merge_into(config: Any, file_cfg: dict[str, Any] | None) -> Any:
     for key in ("audio_device", "audio_in_device", "audio_out_device"):
         if key in file_cfg:
             overrides[key] = file_cfg[key]
+    if "audio_in_channel" in file_cfg:
+        overrides["audio_in_channel"] = int(file_cfg["audio_in_channel"])
     if "rig_mode" in file_cfg:
         overrides["rig_mode"] = file_cfg["rig_mode"]
     if "rigctld_port" in file_cfg:
@@ -279,6 +287,10 @@ def validate(
                 ok = True
             if not ok:
                 return f"{key} not found in device list"
+    if "audio_in_channel" in cfg:
+        ch = cfg["audio_in_channel"]
+        if not isinstance(ch, int) or isinstance(ch, bool) or ch not in (0, 1):
+            return "audio_in_channel must be 0 (left) or 1 (right)"
     return None
 
 

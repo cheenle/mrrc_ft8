@@ -371,6 +371,7 @@ export function createSettingsDrawer() {
 			audio_device: config.audio_device ?? null,
 			audio_in_device: config.audio_in_device ?? config.audio_device ?? null,
 			audio_out_device: config.audio_out_device ?? config.audio_device ?? null,
+			audio_in_channel: Number(config.audio_in_channel ?? 0),
 		};
 		const customModel = !curated_rig_models.some(
 			(m) => m.model === form.rig_model,
@@ -465,6 +466,13 @@ export function createSettingsDrawer() {
         <select data-device-audio-in>${audioInOptions}</select>
       </label>
       <label class="setting-row">
+        <span>Input channel</span>
+        <select data-device-audio-channel>
+          <option value="0" ${form.audio_in_channel === 0 ? "selected" : ""}>Left (0)</option>
+          <option value="1" ${form.audio_in_channel === 1 ? "selected" : ""}>Right (1)</option>
+        </select>
+      </label>
+      <label class="setting-row">
         <span>Audio output (TX)</span>
         <select data-device-audio-out>${audioOutOptions}</select>
       </label>
@@ -517,6 +525,9 @@ export function createSettingsDrawer() {
 				Number(content.querySelector("[data-device-audio-in]")?.value) || null,
 			audio_out_device:
 				Number(content.querySelector("[data-device-audio-out]")?.value) || null,
+			audio_in_channel: Number(
+				content.querySelector("[data-device-audio-channel]")?.value ?? 0,
+			),
 		});
 		content
 			.querySelector("[data-device-save]")

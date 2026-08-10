@@ -93,6 +93,7 @@ class ServerConfig:
     # None 时回退 audio_device（旧单一设备语义）。
     audio_in_device: int | str | None = None
     audio_out_device: int | str | None = None
+    audio_in_channel: int = 0  # 0=左 1=右（电台 RX 音频可能只在一侧声道）
     decoder_profile: int = 3
     decoder_threads: int = 0  # 0 = Auto: clamp(cpu_count - 1, 1, 12) (I9, §12.6)
     band_hunt_url: str | None = None  # pskreporter /api/band_hunt; None = feature off
@@ -176,6 +177,7 @@ class ServerConfig:
             audio_device=audio_device,
             audio_in_device=audio_device,
             audio_out_device=audio_device,
+            audio_in_channel=int(os.environ.get("MRRC_FT8_AUDIO_IN_CHANNEL", "0") or 0),
             decoder_profile=profile,
             decoder_threads=threads,
             band_hunt_url=band_hunt_url,
@@ -427,7 +429,10 @@ def create_server(
                 state.waterfall_fanout.publish(frame)
 
         capture = CaptureProcess(
-            ring, device=config.audio_in_device or config.audio_device, tap=waterfall_tap
+            ring,
+            device=config.audio_in_device or config.audio_device,
+            channel=config.audio_in_channel,
+            tap=waterfall_tap,
         )
 
     if start_dsp:

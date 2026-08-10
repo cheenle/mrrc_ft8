@@ -50,6 +50,7 @@ def capture_child_main(
     conn: Connection,
     *,
     device: int | str | None = None,
+    channel: int = 0,
     stream_factory: Callable[..., object] | None = None,
 ) -> None:
     """Child entry point: capture and forward every converted block.
@@ -83,7 +84,7 @@ def capture_child_main(
 
     # The child never reads its own ring; AudioCapture simply requires one.
     capture = AudioCapture(
-        UtcRing(), device=device, stream_factory=stream_factory, tap=forward
+        UtcRing(), device=device, channel=channel, stream_factory=stream_factory, tap=forward
     )
     capture.start()
     thread = threading.Thread(target=sender, name="capture-sender", daemon=True)
@@ -112,6 +113,7 @@ class CaptureProcess:
         ring: UtcRing,
         *,
         device: int | str | None = None,
+        channel: int = 0,
         tap: Callable[[np.ndarray, float], None] | None = None,
         child_target: Callable[..., None] = capture_child_main,
         stall_timeout: float = STALL_TIMEOUT_S,
@@ -121,6 +123,7 @@ class CaptureProcess:
             raise ValueError("stall timeout must be positive")
         self._ring = ring
         self._device = device
+        self._channel = channel
         self._tap = tap
         self._child_target = child_target
         self._stall_timeout = stall_timeout
@@ -204,7 +207,7 @@ class CaptureProcess:
             target=self._child_target,
             name=f"mrrc-capture-g{self._generation}",
             args=(child,),
-            kwargs={"device": self._device},
+            kwargs={"device": self._device, "channel": self._channel},
             daemon=True,
         )
         try:

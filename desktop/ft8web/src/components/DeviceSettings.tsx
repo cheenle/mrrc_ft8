@@ -9,6 +9,7 @@ export interface DeviceForm {
 	rigctld_port: number;
 	audio_in_device: number | null;
 	audio_out_device: number | null;
+	audio_in_channel: number;
 }
 
 export const RIG_MODEL_OPTIONS = [
@@ -28,9 +29,11 @@ export function formFromConfig(
 ): DeviceForm {
 	// 音频设备用 index（重名设备按 name 会歧义）；兼容旧字符串名→null。
 	const audioVal = (v: any): number | null =>
-		typeof v === "number" ? v
-		: typeof v === "string" && /^\d+$/.test(v) ? Number(v)
-		: null;
+		typeof v === "number"
+			? v
+			: typeof v === "string" && /^\d+$/.test(v)
+				? Number(v)
+				: null;
 	return {
 		rig_model: typeof cfg?.rig_model === "number" ? cfg.rig_model : 1049,
 		rig_device: typeof cfg?.rig_device === "string" ? cfg.rig_device : "",
@@ -42,6 +45,8 @@ export function formFromConfig(
 			typeof cfg?.rigctld_port === "number" ? cfg.rigctld_port : 4532,
 		audio_in_device: audioVal(cfg?.audio_in_device ?? cfg?.audio_device),
 		audio_out_device: audioVal(cfg?.audio_out_device ?? cfg?.audio_device),
+		audio_in_channel:
+		typeof cfg?.audio_in_channel === "number" ? cfg.audio_in_channel : 0,
 	};
 }
 
@@ -299,10 +304,14 @@ export function DeviceSettings(props: DeviceSettingsProps) {
 				<label className="text-[10px] text-text-muted">Audio Input (RX)</label>
 				<select
 					className={selectCls}
-					value={form.audio_in_device != null ? String(form.audio_in_device) : ""}
+					value={
+						form.audio_in_device != null ? String(form.audio_in_device) : ""
+					}
 					disabled={busy}
 					onChange={(e) =>
-						set({ audio_in_device: e.target.value ? Number(e.target.value) : null })
+						set({
+							audio_in_device: e.target.value ? Number(e.target.value) : null,
+						})
 					}
 				>
 					<option value="">System default</option>
@@ -317,13 +326,30 @@ export function DeviceSettings(props: DeviceSettingsProps) {
 			</div>
 
 			<div className="flex flex-col gap-1">
+				<label className="text-[10px] text-text-muted">Input Channel</label>
+				<select
+					className={selectCls}
+					value={String(form.audio_in_channel)}
+					disabled={busy}
+					onChange={(e) => set({ audio_in_channel: Number(e.target.value) })}
+				>
+					<option value="0">Left (0)</option>
+					<option value="1">Right (1)</option>
+				</select>
+			</div>
+
+			<div className="flex flex-col gap-1">
 				<label className="text-[10px] text-text-muted">Audio Output (TX)</label>
 				<select
 					className={selectCls}
-					value={form.audio_out_device != null ? String(form.audio_out_device) : ""}
+					value={
+						form.audio_out_device != null ? String(form.audio_out_device) : ""
+					}
 					disabled={busy}
 					onChange={(e) =>
-						set({ audio_out_device: e.target.value ? Number(e.target.value) : null })
+						set({
+							audio_out_device: e.target.value ? Number(e.target.value) : null,
+						})
 					}
 				>
 					<option value="">System default</option>

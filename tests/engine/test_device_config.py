@@ -183,3 +183,18 @@ def test_enumerate_audio_devices_times_out_on_wedged_sounddevice(monkeypatch) ->
     t0 = _time.monotonic()
     assert enumerate_audio_devices(timeout=1.0) == []
     assert _time.monotonic() - t0 < 5
+
+
+def test_validate_accepts_input_channel_0_and_1() -> None:
+    assert validate({"audio_in_channel": 0}, []) is None
+    assert validate({"audio_in_channel": 1}, []) is None
+
+
+@pytest.mark.parametrize("bad", [
+    {"audio_in_channel": 2},
+    {"audio_in_channel": -1},
+    {"audio_in_channel": "1"},
+    {"audio_in_channel": True},
+])
+def test_validate_rejects_input_channel(bad: dict) -> None:
+    assert validate(bad, []) is not None

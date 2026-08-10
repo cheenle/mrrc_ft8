@@ -22,6 +22,7 @@ describe("DeviceSettings helpers", () => {
 		expect(f.rigctld_port).toBe(4532);
 		expect(f.audio_in_device).toBeNull();
 		expect(f.audio_out_device).toBeNull();
+		expect(f.audio_in_channel).toBe(0);
 	});
 	it("preserves the saved config", () => {
 		const f = formFromConfig({
@@ -30,22 +31,26 @@ describe("DeviceSettings helpers", () => {
 			audio_out_device: 2,
 			rig_mode: "LSB",
 			rig_stop_bits: 2,
+			audio_in_channel: 1,
 		});
 		expect(f.rig_model).toBe(3073);
 		expect(f.rig_stop_bits).toBe(2);
 		expect(f.rig_mode).toBe("LSB");
 		expect(f.audio_in_device).toBe(3);
 		expect(f.audio_out_device).toBe(2);
+		expect(f.audio_in_channel).toBe(1);
 	});
 	it("coerces numeric-string audio values to indexes", () => {
 		const f = formFromConfig({ audio_in_device: "3", audio_out_device: "2" });
 		expect(f.audio_in_device).toBe(3);
 		expect(f.audio_out_device).toBe(2);
+		expect(f.audio_in_channel).toBe(0);
 	});
 	it("drops legacy non-numeric audio names (index-based UI)", () => {
 		const f = formFromConfig({ audio_device: "FT8" });
 		expect(f.audio_in_device).toBeNull();
 		expect(f.audio_out_device).toBeNull();
+		expect(f.audio_in_channel).toBe(0);
 	});
 	it("detects custom models", () => {
 		expect(isCustomModel(formFromConfig({ rig_model: 9999 }))).toBe(true);

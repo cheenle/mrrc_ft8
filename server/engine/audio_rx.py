@@ -196,6 +196,7 @@ class AudioCapture:
         stream_factory: Callable[..., object] | None = None,
         device: int | str | None = None,
         blocksize: int = 4_096,
+        channel: int = 0,
         tap: Callable[[np.ndarray, float], None] | None = None,
     ) -> None:
         if stream_factory is None:
@@ -220,9 +221,13 @@ class AudioCapture:
         self._prev_adc: float | None = None    # ADC-timestamped previous block
         self._adc_offset: float | None = None  # wall↔host clock calibration
         self._stream_factory = stream_factory
+        self._channel = int(channel) if channel else 0
+        # 电台 RX 音频可能只在立体声输入的某一侧；channels=1 固定取第 0 声道。
+        # channel=1 时开 2 声道再切片；channels=1 时保持原行为（更省）。
+        in_channels = 2 if self._channel >= 1 else 1
         self._stream_kwargs = dict(
             samplerate=RX_SAMPLE_RATE,
-            channels=1,
+            channels=in_channels,
             dtype=RX_DTYPE,
             blocksize=blocksize,
             device=device,
@@ -237,7 +242,10 @@ class AudioCapture:
             self.overruns += 1
             _audio_log.debug("input overflow #%d (%d frames)", self.overruns, frames)
         block_epoch = self._block_epoch(frames, time_info)
-        pcm = indata[:, 0]
+        if self._channel >= 1 and indata.ndim >= 2 and indata.shape[1] >= 2:
+            pcm = indata[:, self._channel]
+        else:
+            pcm = indata[:, 0]
         if pcm.dtype != np.float32:
             # int16 capture (RX_DTYPE): normalize once inside the seam so the
             # converter contract (float32 → 12 kHz int16) is unchanged.

@@ -414,3 +414,29 @@ def test_capture_resolves_device_name_to_index(monkeypatch) -> None:
     monkeypatch.setitem(sys.modules, "sounddevice", fake_sd)
     capture = AudioCapture(UtcRing(), device="USB Audio Device")
     assert capture._stream_kwargs["device"] == 4
+
+
+def test_audio_capture_channel_selects_stereo_slice(monkeypatch) -> None:
+    """channel=1 时开 2 声道并切右声道；channel=0 保持单声道（原行为）。"""
+
+    from server.engine.audio_rx import AudioCapture
+    from server.engine.audio_rx import UtcRing
+
+    class FakeStream:
+        instances: list = []
+
+        def __init__(self, **kwargs):
+            self.kwargs = kwargs
+            FakeStream.instances.append(self)
+
+        def start(self): ...
+        def stop(self): ...
+
+    stream_factory = FakeStream
+    ring = UtcRing()
+
+    AudioCapture(ring, stream_factory=stream_factory, channel=1)
+    assert FakeStream.instances[-1].kwargs["channels"] == 2
+
+    AudioCapture(ring, stream_factory=stream_factory, channel=0)
+    assert FakeStream.instances[-1].kwargs["channels"] == 1
