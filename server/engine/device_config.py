@@ -186,8 +186,10 @@ def validate(
         device = cfg["rig_device"]
         # 空/空白串口 = "不改动"（本站串口可能只在 restart.sh 默认值里，UI 表单
         # 总是提交该字段）；非空才要求绝对 /dev/ 路径。
-        if device and device.strip():
-            if not isinstance(device, str) or not device.strip().startswith("/dev/"):
+        if isinstance(device, str):
+            device = device.strip()
+        if device:
+            if not isinstance(device, str) or not device.startswith("/dev/"):
                 return "rig_device must be an absolute /dev/... path"
     if "rig_baud" in cfg:
         if cfg["rig_baud"] not in BAUD_RATES:
