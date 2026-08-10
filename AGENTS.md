@@ -31,7 +31,7 @@ venv/bin/python -m pytest tests/
 ## 模块表
 
 | 路径 | 职责 |
-| --- | --- |
+|---|---|
 | `dsp/` | Fortran shim + CMake → `wsjt_core` 共享库（FT8/FT4 解码/编码） |
 | `dsp/ft8_stdcall.f90` | 从 WSJT-X `lib/qra/q65/q65_set_list.f90:66-97` 等价提取的标准呼号判定；隔离无关 Q65 链；由 `test_ft8_encode.py` fresh-build 回归 |
 | `dsp/cmake/improved-ft8.cmake` | Improved `ft8var` 的显式、无 glob 最小源清单 |
@@ -68,7 +68,7 @@ venv/bin/python -m pytest tests/
 ## Vendor 补丁副本登记
 
 | 本地文件 | Origin / revision | 唯一差异 | 原因 | 回归 |
-| --- | --- | --- | --- | --- |
+|---|---|---|---|---|
 | `dsp/patched/encode174_91var.f90` | WSJT-X Improved 3.0.2 `lib/ft8var/encode174_91var.f90` | 一处 `include '/lib/ft8/ldpc_174_91_c_generator.f90'` 改为相对 include | relocatable headless build | `test_vendor_policy.py` 逆替换 byte-identical + Improved synthetic profiles |
 | `dsp/patched/osd174_91var.f90` | WSJT-X Improved 3.0.2 `lib/ft8var/osd174_91var.f90` | 相对 LDPC include；将 `first_osd` 检查完整置于 named critical 内 | relocatable build；并发只初始化一次生成矩阵 | 精确正/逆变换 + 并发 profile stress |
 | `dsp/patched/four2avar.f90` | WSJT-X Improved 3.0.2 `lib/ft8var/four2avar.f90` | 相对 FFTW include；plan registry 设为 `THREADPRIVATE` | relocatable FFTW；线程私有 plan/address cache | 精确正/逆变换 + 重复并发 region stress |
