@@ -128,6 +128,11 @@ def test_source_of_priority(monkeypatch) -> None:
     assert src["rig_model"] == "env"
     assert src["rigctld_port"] == "default"
 
+    # Server-side env for rigctld_port is MRRC_FT8_RIGCTLD (host:port); the
+    # restart.sh launch var MRRC_FT8_RIGCTLD_PORT is not a server-side source.
+    assert source_of({}, environ={"MRRC_FT8_RIGCTLD": "127.0.0.1:4533"})["rigctld_port"] == "env"
+    assert source_of({}, environ={"MRRC_FT8_RIGCTLD_PORT": "4533"})["rigctld_port"] == "default"
+
 
 def test_store_roundtrip_and_spawn_script(tmp_path) -> None:
     store = DeviceConfigStore(tmp_path / "d.json", script="/nonexistent/restart.sh")

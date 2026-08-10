@@ -36,11 +36,25 @@ BAUD_RATES: list[int] = [1200, 2400, 4800, 9600, 19200, 38400, 57600, 115200]
 
 _CONFIG_KEYS = ("rig_model", "rig_device", "rig_baud", "rigctld_port", "audio_device")
 
+# _ENV_KEY: env names restart.sh evals when launching rigctld (launch vars).
+# _SOURCE_ENV: env names the server actually reads when connecting — the
+# source detection in ``source_of`` must report against these, not the
+# restart.sh vars. rigctld_port is the one divergence: the server connects
+# via ``MRRC_FT8_RIGCTLD`` (host:port) while restart.sh is launched with
+# ``MRRC_FT8_RIGCTLD_PORT`` (port only).
 _ENV_KEY = {
     "rig_model": "MRRC_FT8_RIG_MODEL",
     "rig_device": "MRRC_FT8_RIG_DEVICE",
     "rig_baud": "MRRC_FT8_RIG_BAUD",
     "rigctld_port": "MRRC_FT8_RIGCTLD_PORT",
+    "audio_device": "MRRC_FT8_AUDIO_DEVICE",
+}
+
+_SOURCE_ENV = {
+    "rig_model": "MRRC_FT8_RIG_MODEL",
+    "rig_device": "MRRC_FT8_RIG_DEVICE",
+    "rig_baud": "MRRC_FT8_RIG_BAUD",
+    "rigctld_port": "MRRC_FT8_RIGCTLD",  # server 实际连接所用 env（host:port）
     "audio_device": "MRRC_FT8_AUDIO_DEVICE",
 }
 
@@ -199,7 +213,7 @@ def source_of(file_cfg: dict[str, Any] | None, environ: Any = os.environ) -> dic
     for key in _CONFIG_KEYS:
         if file_cfg and key in file_cfg:
             source[key] = "file"
-        elif environ.get(_ENV_KEY[key]):
+        elif environ.get(_SOURCE_ENV[key]):
             source[key] = "env"
         else:
             source[key] = "default"
