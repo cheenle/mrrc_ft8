@@ -34,6 +34,16 @@ from ..engine.safety import Interlock, SafetyController, TxRefused
 from ..engine.tx_driver import TX_FIT_MARGIN_SECONDS, TX_WAVEFORM_SECONDS
 from ..engine.tx_frequency import FrequencyOccupancy
 from ..engine.sequencer import DEFAULT_TX_AUDIO_FREQUENCY, DisarmReason, Sequencer
+from ..engine.device_config import (
+    BAUD_RATES,
+    CURATED_RIG_MODELS,
+    DeviceConfigStore,
+    effective_config,
+    enumerate_audio_devices,
+    enumerate_serial_devices,
+    source_of,
+    validate,
+)
 log = logging.getLogger("mrrc-ft8.api")
 from .auth import AuthService, Session, host_allowed, origin_allowed
 from .lease import LeaseService
@@ -923,6 +933,80 @@ def create_router(state: AppState) -> APIRouter:
         for key, value in body.items():
             await asyncio.to_thread(state.repository.set_setting, key, value)
         return await mutate(request, request.headers.get("idempotency-key"), 200, {"updated": sorted(body)})
+
+    # ---- station device configuration (spec 2026-08-10) ----------------------
+
+    @router.get("/devices")
+    async def devices_view(session: Session = Depends(require_session)) -> JSONResponse:
+        store: DeviceConfigStore | None = state.device_config
+        file_cfg = store.load() if store else None
+        audio = await asyncio.to_thread(enumerate_audio_devices)
+        serial = await asyncio.to_thread(enumerate_serial_devices)
+        return JSONResponse(
+            {
+                "config": effective_config(file_cfg),
+                "source": source_of(file_cfg),
+                "audio_devices": audio,
+                "serial_devices": serial,
+                "rig_status": {
+                    "host": getattr(state.rig, "host", "127.0.0.1"),
+                    "port": getattr(state.rig, "port", 4532),
+                    "connected": bool(getattr(state.rig, "connected", False)),
+                },
+                "curated_rig_models": [
+                    {"model": m, "name": n} for m, n in CURATED_RIG_MODELS
+                ],
+                "baud_rates": BAUD_RATES,
+            }
+        )
+
+    @router.put("/devices")
+    async def devices_update(
+        request: Request, session: Session = Depends(require_session)
+    ) -> JSONResponse:
+        await validate_mutation(request)
+        store: DeviceConfigStore | None = state.device_config
+        if store is None:
+            return _reject(503, "device_config_unavailable")
+        if state.safety.armed or state.safety.ptt_on:
+            return _reject(409, REASON_TX_ACTIVE)
+        body = await request.json()
+        if not isinstance(body, dict) or not body:
+            return _reject(422, "invalid_request")
+        audio = await asyncio.to_thread(enumerate_audio_devices)
+        effective = effective_config(store.load())
+        error = await asyncio.to_thread(
+            validate, body, audio, current_effective=effective.get("audio_device")
+        )
+        if error:
+            return _reject(422, "invalid_device_config", detail=error)
+        await asyncio.to_thread(store.save, body)
+        return await mutate(
+            request, request.headers.get("idempotency-key"), 200, {"saved": True}
+        )
+
+    @router.post("/devices/apply")
+    async def devices_apply(
+        request: Request, session: Session = Depends(require_session)
+    ) -> JSONResponse:
+        await validate_mutation(request)
+        store: DeviceConfigStore | None = state.device_config
+        if store is None or store.load() is None:
+            return _reject(409, "no_device_config")
+        if state.safety.armed or state.safety.ptt_on:
+            return _reject(409, REASON_TX_ACTIVE)
+        # Let the 202 response flush before restart.sh kills this process.
+        await asyncio.sleep(0.75)
+        try:
+            await asyncio.to_thread(store.spawn_restart)
+        except FileNotFoundError as exc:
+            return _reject(503, "restart_script_missing", detail=str(exc))
+        return await mutate(
+            request,
+            request.headers.get("idempotency-key"),
+            202,
+            {"restarting": True, "eta_s": 20},
+        )
 
     return router
 
