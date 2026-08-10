@@ -63,7 +63,7 @@ def test_child_forwards_converted_blocks() -> None:
     assert not thread.is_alive()
 
 
-def _frame_child(conn, *, device: object = None) -> None:
+def _frame_child(conn, *, device: object = None, channel: int = 0) -> None:
     samples = (np.ones(12_000, dtype="<i2") * 100).tobytes()
     for index in range(16):
         conn.send((index + 1, float(index), samples))
