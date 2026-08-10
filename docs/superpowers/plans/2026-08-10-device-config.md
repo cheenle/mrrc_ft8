@@ -699,6 +699,18 @@ def test_devices_apply_locked_during_tx(client, tmp_path) -> None:
     assert res.json()["reason"] == "tx_active"
 
 
+def test_devices_put_locked_when_ptt_on_only(client, tmp_path) -> None:
+    """TX 锁同时检查 safety.ptt_on（非仅 armed）；直接置位验证该分支。"""
+
+    session_id = login(client)
+    client.app.state.app_state.safety.ptt_on = True
+    res = client.put(
+        "/api/v1/devices", json={"rigctld_port": 4533}, headers=auth_headers(session_id)
+    )
+    assert res.status_code == 409
+    assert res.json()["reason"] == "tx_active"
+
+
 def test_devices_apply_spawns_restart(client, tmp_path) -> None:
     save_device_config({"rigctld_port": 4532}, tmp_path / "device-config.json")
     session_id = login(client)
@@ -813,8 +825,10 @@ from .engine.device_config import (
             return _reject(409, "no_device_config")
         if state.safety.armed or state.safety.ptt_on:
             return _reject(409, REASON_TX_ACTIVE)
-        # Let the 202 response flush before restart.sh kills this process.
-        await asyncio.sleep(0.75)
+        # The 202 response is guaranteed to reach the client: spawn_restart
+        # uses a detached Popen (new session, non-blocking), and restart.sh's
+        # own lsof/pgrep discovery runs only after the fork — far later than
+        # the ASGI response write for this handler.  No extra sleep needed.
         try:
             await asyncio.to_thread(store.spawn_restart)
         except FileNotFoundError as exc:
