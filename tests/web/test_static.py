@@ -26,6 +26,11 @@ def test_index_has_no_inline_javascript() -> None:
     assert 'type="module" src="/static/js/main.js"' in html
 
 
+def test_index_has_devices_drawer_tab() -> None:
+    html = (STATIC / "index.html").read_text()
+    assert 'data-tab="devices"' in html
+
+
 def test_referenced_assets_exist() -> None:
     html = (STATIC / "index.html").read_text()
     for ref in re.findall(r'(?:src|href)="(/static/[^"]+)"', html):

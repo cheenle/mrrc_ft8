@@ -104,6 +104,11 @@ export const api = {
   settings: () => request("/settings"),
   putSetting: (key, value) =>
     request("/settings", { method: "PUT", idempotencyKey: key(), body: { [key]: value } }),
+  devices: () => request("/devices"),
+  saveDevices: (cfg) =>
+    request("/devices", { method: "PUT", idempotencyKey: key(), body: cfg }),
+  applyDevices: () =>
+    request("/devices/apply", { method: "POST", idempotencyKey: key() }),
   txOff: () => request("/operation/enable_tx_off", { method: "POST", idempotencyKey: key() }),
   stop: () => request("/operation/stop", { method: "POST", idempotencyKey: key() }),
   clearFault: (interlock) =>

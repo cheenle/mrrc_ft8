@@ -308,6 +308,115 @@ export function createSettingsDrawer() {
         log and drive the “hide already-worked” filter.</div>`;
   }
 
+  // Devices: station hardware (hamlib rig + audio, spec 2026-08-10).
+  // Save persists server-side without restart; Apply & Restart relaunches
+  // rigctld + the server (~20 s disconnect).
+  async function renderDevices() {
+    content.innerHTML = "<p class='drawer-hint'>Loading device settings…</p>";
+    const res = await api.devices();
+    if (!res.ok) {
+      content.innerHTML = "<p class='drawer-hint'>Device settings unavailable.</p>";
+      return;
+    }
+    const { config = {}, source = {}, audio_devices = [], serial_devices = [],
+            curated_rig_models = [], baud_rates = [] } = res;
+    const form = {
+      rig_model: Number(config.rig_model ?? 1049),
+      rig_device: String(config.rig_device ?? ""),
+      rig_baud: Number(config.rig_baud ?? 38400),
+      rigctld_port: Number(config.rigctld_port ?? 4532),
+      audio_device: config.audio_device ?? null,
+    };
+    const customModel = !curated_rig_models.some((m) => m.model === form.rig_model);
+    const modelOptions = curated_rig_models
+      .map((m) => `<option value="${m.model}" ${m.model === form.rig_model ? "selected" : ""}>${m.name} (${m.model})</option>`)
+      .join("") + `<option value="custom" ${customModel ? "selected" : ""}>Custom…</option>`;
+    const customDeviceOption =
+      form.rig_device && !serial_devices.includes(form.rig_device)
+        ? `<option value="${form.rig_device}" selected>${form.rig_device}</option>` : "";
+    const serialOptions = serial_devices
+      .map((d) => `<option value="${d}" ${d === form.rig_device ? "selected" : ""}>${d}</option>`)
+      .join("") + customDeviceOption;
+    const audioOptions =
+      `<option value="">System default</option>` +
+      audio_devices
+        .map((d) => `<option value="${d.name}" ${d.name === form.audio_device ? "selected" : ""}>${d.name}</option>`)
+        .join("");
+    const sourceLine = (key) => `${key}: ${source[key] || "default"}`;
+    content.innerHTML = `
+      <h3>Devices</h3>
+      <label class="setting-row">
+        <span>Rig model (hamlib)</span>
+        <select data-device-model>${modelOptions}</select>
+      </label>
+      <div class="device-custom" ${customModel ? "" : "hidden"}>
+        <label class="setting-row">
+          <span>Custom model number</span>
+          <input data-device-model-custom type="number" min="1" value="${customModel ? form.rig_model : ""}">
+        </label>
+      </div>
+      <label class="setting-row">
+        <span>CAT serial device</span>
+        <select data-device-serial>
+          <option value="">—</option>${serialOptions}
+        </select>
+      </label>
+      <label class="setting-row">
+        <span>Baud rate</span>
+        <select data-device-baud>
+          ${baud_rates.map((b) => `<option value="${b}" ${b === form.rig_baud ? "selected" : ""}>${b}</option>`).join("")}
+        </select>
+      </label>
+      <label class="setting-row">
+        <span>rigctld port</span>
+        <input data-device-port type="number" min="1024" max="65535" value="${form.rigctld_port}">
+      </label>
+      <label class="setting-row">
+        <span>Audio device</span>
+        <select data-device-audio>${audioOptions}</select>
+      </label>
+      <p class="drawer-hint dim">Source — ${sourceLine("rig_model")} · ${sourceLine("rig_device")} · ${sourceLine("rig_baud")} · ${sourceLine("rigctld_port")} · ${sourceLine("audio_device")}</p>
+      <div class="device-actions" style="display:flex;gap:8px;margin-top:8px">
+        <button data-device-save class="cmd">Save</button>
+        <button data-device-apply class="cmd">Apply &amp; Restart</button>
+      </div>
+      <p class="drawer-hint dim">Apply &amp; Restart relaunches rigctld and the
+        server — about 20 seconds of disconnect, then log in again.</p>`;
+
+    const customWrap = content.querySelector(".device-custom");
+    content.querySelector("[data-device-model]")?.addEventListener("change", (e) => {
+      const custom = e.target.value === "custom";
+      if (customWrap) customWrap.hidden = !custom;
+    });
+    const readForm = () => ({
+      rig_model: Number(content.querySelector("[data-device-model]")?.value === "custom"
+        ? (content.querySelector("[data-device-model-custom]")?.value ?? 1049)
+        : content.querySelector("[data-device-model]")?.value),
+      rig_device: String(content.querySelector("[data-device-serial]")?.value ?? ""),
+      rig_baud: Number(content.querySelector("[data-device-baud]")?.value ?? 38400),
+      rigctld_port: Number(content.querySelector("[data-device-port]")?.value ?? 4532),
+      audio_device: content.querySelector("[data-device-audio]")?.value || null,
+    });
+    content.querySelector("[data-device-save]")?.addEventListener("click", async () => {
+      const result = await api.saveDevices(readForm());
+      if (!result.ok) {
+        showToast(result.reason === "tx_active" ? "Devices locked during TX" : `Save: ${result.reason || result.status}`);
+      } else {
+        showToast("Device settings saved (apply to restart)");
+        renderDevices();  // refresh source labels
+      }
+    });
+    content.querySelector("[data-device-apply]")?.addEventListener("click", async () => {
+      if (!window.confirm("Apply will restart rigctld and the server.\n~20 s disconnect, then log in again. Continue?")) return;
+      const result = await api.applyDevices();
+      if (!result.ok) {
+        showToast(result.reason === "tx_active" ? "Devices locked during TX" : `Apply: ${result.reason || result.status}`);
+      } else {
+        showToast("Restarting… reconnecting shortly");
+      }
+    });
+  }
+
   // ---- full-screen QSO log -------------------------------------------
 
   const logOverlay = document.getElementById("log-overlay");
@@ -465,6 +574,7 @@ export function createSettingsDrawer() {
     if (tab === "radio") renderRadio();
     else if (tab === "ft8") renderFt8();
     else if (tab === "station") renderStation();
+    else if (tab === "devices") renderDevices();
   }
 
   btnMenu.addEventListener("click", open);
