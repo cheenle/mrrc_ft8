@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 export interface DeviceForm {
 	rig_model: number;
@@ -61,7 +61,8 @@ export function DeviceSettings(props: DeviceSettingsProps) {
 	const { config, source, audioDevices, serialDevices, busy, onSave, onApply } =
 		props;
 	const [form, setForm] = useState<DeviceForm>(() => formFromConfig(config));
-	const [customModel, setCustomModel] = useState("");
+	const [customModel, setCustomModel] = useState(() => String(form.rig_model));
+	const [modelIsCustom, setModelIsCustom] = useState(() => isCustomModel(form));
 	const [customDevice, setCustomDevice] = useState("");
 	const [deviceIsCustom, setDeviceIsCustom] = useState(
 		() => !!(form.rig_device && !serialDevices.includes(form.rig_device)),
@@ -76,14 +77,13 @@ export function DeviceSettings(props: DeviceSettingsProps) {
 	useEffect(() => {
 		const next = formFromConfig(config);
 		setForm(next);
+		setCustomModel(String(next.rig_model));
+		setModelIsCustom(isCustomModel(next));
+		setDeviceIsCustom(!!(next.rig_device && !serialDevices.includes(next.rig_device)));
 		const s = savedFormRef.current;
 		setSaved(Boolean(s) && JSON.stringify(s) === JSON.stringify(next));
 	}, [config]);
 
-	const modelIsCustom = useMemo(() => isCustomModel(form), [form]);
-	const effectiveCustomModel = modelIsCustom
-		? String(form.rig_model)
-		: customModel;
 	const effectiveCustomDevice = deviceIsCustom ? customDevice : "";
 
 	const set = (patch: Partial<DeviceForm>) =>
@@ -93,7 +93,7 @@ export function DeviceSettings(props: DeviceSettingsProps) {
 		setError(null);
 		const next: DeviceForm = { ...form };
 		if (modelIsCustom) {
-			const n = Number(effectiveCustomModel);
+			const n = Number(customModel);
 			if (!Number.isInteger(n) || n <= 0) {
 				setError("Custom rig model must be a positive integer");
 				return;
@@ -154,9 +154,11 @@ export function DeviceSettings(props: DeviceSettingsProps) {
 					value={modelIsCustom ? "custom" : form.rig_model}
 					onChange={(e) => {
 						if (e.target.value === "custom") {
+							setModelIsCustom(true);
 							setCustomModel(String(form.rig_model));
 							return;
 						}
+						setModelIsCustom(false);
 						set({ rig_model: Number(e.target.value) });
 					}}
 					disabled={busy}
@@ -173,7 +175,7 @@ export function DeviceSettings(props: DeviceSettingsProps) {
 						type="number"
 						min={1}
 						className={selectCls}
-						value={effectiveCustomModel}
+						value={customModel}
 						onChange={(e) => setCustomModel(e.target.value)}
 					/>
 				)}
