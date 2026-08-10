@@ -114,7 +114,7 @@ pinned to slot boundary + delivery grace (real audio lands ~one block late;
 a boundary-exact read skipped every slot in the foreground/launchd
 deployment). The composition config suite now also pins §12.6 parsing: audio
 device by index or name, decoder profile 0–4 and threads `auto`/1–12 with
-fail-startup validation.
+fail-startup validation. The device-config suite (`tests/engine/test_device_config.py`) covers `data/device-config.json` read/write with atomic tempfile+rename, the file > env > default effective-config priority, `merge_into` override of `audio_device` and `rigctld_port`, `enumerate_audio_devices`/`enumerate_serial_devices` hardware enumeration, `validate` rejection of invalid values, `source_of` origin tracking, `shell_env_lines` for restart.sh, and `DeviceConfigStore` spawn_restart → detached restart.sh.
 
 Receive-path tests stay hardware-free. The converter suite proves sample-exact
 block-boundary independence against a one-shot reference, passband tone
@@ -186,7 +186,7 @@ exposure with the legacy single-CQ path preserved) and its idle-timeout
 setting bounds, observer STOP without a lease, band rules
 (invalid/TX-active/rig-down), QSO listing with audited void, ADIF export,
 re-auth-gated diagnostic bundles free of secrets, and settings schema plus
-the TX lock on safety-impacting keys. The WebSocket suites cover state
+the TX lock on safety-impacting keys. The device-config API suite (`tests/web/test_devices.py`) covers `GET`/`PUT`/`POST /api/v1/devices` including CRUD round-trips, apply → 202 restarting, TX-active → 409 tx_active, and unauthenticated → 401. The WebSocket suites cover state
 coalescing with slow-client close, ordered decode overflow semantics and
 reconnect history, cookie/Origin rejection at upgrade, lease drop on
 controller disconnect and binary waterfall delivery. Static contract tests

@@ -43,7 +43,7 @@ base advance (2026-08-03 field bug "D").
 ## AD-008 — rigctld is the serial owner
 
 **Decision:** The application uses Hamlib TCP and never opens the CAT serial device.  
-**Consequence:** Radio compatibility is isolated; rigctld failure is a handled interlock.
+**Consequence:** Radio compatibility is isolated; rigctld failure is a handled interlock. Rigctld launch parameters are now configurable via `data/device-config.json` (written through `/api/v1/devices` and read by `restart.sh` at startup); the application still never opens the serial device directly.
 
 ## AD-009 — Caddy public edge and secure-cookie auth
 

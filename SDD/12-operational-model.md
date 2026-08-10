@@ -42,6 +42,18 @@ Configuration covers domain/proxy trust, password-hash bootstrap, radio/rigctld,
 
 Setting `auto_call_new_dxcc` (bool, persisted in setting_meta via `/settings`) arms unattended auto-QSO on the first new-DXCC CQ when idle; the safety interlock always gates TX (NFR-087).
 
+`data/device-config.json` (operator-editable, created by `PUT /api/v1/devices`) drives rigctld launch parameters and the server's audio device selection at startup. When present, its values take precedence over environment variables. `restart.sh` reads it before spawning rigctld; the server reads it during `server/engine/device_config.py:merge_into` to override `audio_device` and `rigctld_port` in `ServerConfig`. Fields and priority:
+
+| Field | Type | Env fallback |
+| --- | --- | --- |
+| `rig_model` | int (hamlib model no.) | `MRRC_FT8_RIG_MODEL` |
+| `rig_device` | str (serial path) | `MRRC_FT8_RIG_DEVICE` |
+| `rig_baud` | int | `MRRC_FT8_RIG_BAUD` |
+| `rigctld_port` | int | `MRRC_FT8_RIGCTLD_PORT` (restart.sh) / `MRRC_FT8_RIGCTLD` host:port (server) |
+| `audio_device` | int or str | `MRRC_FT8_AUDIO_DEVICE` |
+
+Priority: file value > env var > built-in default. The file contains no secrets; file values are round-tripped through `GET /api/v1/devices` and the UI's Settings → Devices tab (desktop + PWA). Atomic writes via tempfile+rename ensure the file is never half-written.
+
 ## 12.7 Backup and Retention
 
 - QSO database and configuration are backup-critical.
@@ -56,4 +68,3 @@ Health reports Caddy-visible application status, worker generation/restarts, dec
 In addition, a **proactive band-switch capture restart** (2026-08-05) prevents the degradation episode before it starts: the FT-710's C-Media USB codec can silently wedge its RX stream when the radio rebuilds its DSP/audio path across a band change (observed live: band switches at 10:25/10:26 produced UTC-ring gaps and a hot-but-zero-decode session that latched AUDIO 60 s later). When `rig_poll` or the band-hunter observes the dial frequency move to a different FT8 band, the capture child is reopened immediately (fresh streams are always clean), at most once per band, deferred while PTT is on. `CaptureProcess.healthy` is now locked against `restart()` so the watchdog can never double-restart behind the teardown→spawn window (field finding 2026-08-05).
 
 Because a fresh stream can still show hot-but-zero-decode slots when the band simply carries no FT8 content (e.g. strong phone traffic on 40 m at night — 2026-08-05 field finding: band switched to 40 m at 22:11, AUDIO latched at 22:12, capture restarted yet still zero decodes until returning to 20 m at 23:39), the automatic recovery now runs a **re-verify window** after each restart: two consecutive hot-and-silent slots on the reopened stream clear the AUDIO fault automatically as a false positive. Operators still re-arm TX manually, so no recovery auto-resumes TX.
-
