@@ -34,7 +34,9 @@ CURATED_RIG_MODELS: list[tuple[int, str]] = [
 
 BAUD_RATES: list[int] = [1200, 2400, 4800, 9600, 19200, 38400, 57600, 115200]
 
-_CONFIG_KEYS = ("rig_model", "rig_device", "rig_baud", "rigctld_port", "audio_device")
+_CONFIG_KEYS = (
+    "rig_model", "rig_device", "rig_baud", "rig_stop_bits", "rigctld_port", "audio_device"
+)
 
 # _ENV_KEY: env names restart.sh evals when launching rigctld (launch vars).
 # _SOURCE_ENV: env names the server actually reads when connecting — the
@@ -46,6 +48,7 @@ _ENV_KEY = {
     "rig_model": "MRRC_FT8_RIG_MODEL",
     "rig_device": "MRRC_FT8_RIG_DEVICE",
     "rig_baud": "MRRC_FT8_RIG_BAUD",
+    "rig_stop_bits": "MRRC_FT8_RIG_STOP_BITS",
     "rigctld_port": "MRRC_FT8_RIGCTLD_PORT",
     "audio_device": "MRRC_FT8_AUDIO_DEVICE",
 }
@@ -54,6 +57,7 @@ _SOURCE_ENV = {
     "rig_model": "MRRC_FT8_RIG_MODEL",
     "rig_device": "MRRC_FT8_RIG_DEVICE",
     "rig_baud": "MRRC_FT8_RIG_BAUD",
+    "rig_stop_bits": "MRRC_FT8_RIG_STOP_BITS",
     "rigctld_port": "MRRC_FT8_RIGCTLD",  # server 实际连接所用 env（host:port）
     "audio_device": "MRRC_FT8_AUDIO_DEVICE",
 }
@@ -118,6 +122,7 @@ def effective_config(
         ("MRRC_FT8_RIG_MODEL", "rig_model"),
         ("MRRC_FT8_RIG_DEVICE", "rig_device"),
         ("MRRC_FT8_RIG_BAUD", "rig_baud"),
+        ("MRRC_FT8_RIG_STOP_BITS", "rig_stop_bits"),
     ):
         value = environ.get(env, "")
         if value:
@@ -194,6 +199,10 @@ def validate(
     if "rig_baud" in cfg:
         if cfg["rig_baud"] not in BAUD_RATES:
             return "rig_baud must be one of " + ", ".join(str(b) for b in BAUD_RATES)
+    if "rig_stop_bits" in cfg:
+        stop = cfg["rig_stop_bits"]
+        if not isinstance(stop, int) or isinstance(stop, bool) or stop not in (1, 2):
+            return "rig_stop_bits must be 1 or 2"
     if "rigctld_port" in cfg:
         port = cfg["rigctld_port"]
         if not isinstance(port, int) or isinstance(port, bool) or not 1024 <= port <= 65535 or port == 8000:

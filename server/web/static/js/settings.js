@@ -324,6 +324,7 @@ export function createSettingsDrawer() {
       rig_model: Number(config.rig_model ?? 1049),
       rig_device: String(config.rig_device ?? ""),
       rig_baud: Number(config.rig_baud ?? 38400),
+      rig_stop_bits: Number(config.rig_stop_bits ?? 1),
       rigctld_port: Number(config.rigctld_port ?? 4532),
       audio_device: config.audio_device ?? null,
     };
@@ -374,6 +375,13 @@ export function createSettingsDrawer() {
         </select>
       </label>
       <label class="setting-row">
+        <span>Stop bits</span>
+        <select data-device-stop>
+          <option value="1" ${form.rig_stop_bits === 1 ? "selected" : ""}>1</option>
+          <option value="2" ${form.rig_stop_bits === 2 ? "selected" : ""}>2</option>
+        </select>
+      </label>
+      <label class="setting-row">
         <span>rigctld port</span>
         <input data-device-port type="number" min="1024" max="65535" value="${form.rigctld_port}">
       </label>
@@ -381,7 +389,7 @@ export function createSettingsDrawer() {
         <span>Audio device</span>
         <select data-device-audio>${audioOptions}</select>
       </label>
-      <p class="drawer-hint dim">Source — ${sourceLine("rig_model")} · ${sourceLine("rig_device")} · ${sourceLine("rig_baud")} · ${sourceLine("rigctld_port")} · ${sourceLine("audio_device")}</p>
+      <p class="drawer-hint dim">Source — ${sourceLine("rig_model")} · ${sourceLine("rig_device")} · ${sourceLine("rig_baud")} · ${sourceLine("rig_stop_bits")} · ${sourceLine("rigctld_port")} · ${sourceLine("audio_device")}</p>
       <div class="device-actions" style="display:flex;gap:8px;margin-top:8px">
         <button data-device-save class="cmd">Save</button>
         <button data-device-apply class="cmd">Apply &amp; Restart</button>
@@ -407,6 +415,7 @@ export function createSettingsDrawer() {
         ? (content.querySelector("[data-device-serial-custom]")?.value ?? "")
         : content.querySelector("[data-device-serial]")?.value ?? ""),
       rig_baud: Number(content.querySelector("[data-device-baud]")?.value ?? 38400),
+      rig_stop_bits: Number(content.querySelector("[data-device-stop]")?.value ?? 1),
       rigctld_port: Number(content.querySelector("[data-device-port]")?.value ?? 4532),
       audio_device: content.querySelector("[data-device-audio]")?.value || null,
     });

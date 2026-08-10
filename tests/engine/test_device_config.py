@@ -110,6 +110,10 @@ def test_validate_accepts_good_config() -> None:
     {"rig_device": "usb"},
     {"rig_device": 5},
     {"rig_baud": 12345},
+    {"rig_stop_bits": 0},
+    {"rig_stop_bits": 3},
+    {"rig_stop_bits": "2"},
+    {"rig_stop_bits": True},
     {"rigctld_port": 80},
     {"rigctld_port": 8000},
     {"audio_device": "Not-There"},
@@ -127,6 +131,11 @@ def test_validate_allows_empty_rig_device_as_unset() -> None:
     assert validate({"rig_device": "  "}, []) is None
 
 
+def test_validate_accepts_stop_bits_1_and_2() -> None:
+    assert validate({"rig_stop_bits": 1}, []) is None
+    assert validate({"rig_stop_bits": 2}, []) is None
+
+
 def test_save_skips_empty_rig_device(tmp_path) -> None:
     path = tmp_path / "device-config.json"
     save_device_config({"rig_device": "", "audio_device": "FT8"}, path)
@@ -138,10 +147,11 @@ def test_validate_allows_unchanged_audio_even_when_absent() -> None:
 
 
 def test_source_of_priority(monkeypatch) -> None:
-    env = {"MRRC_FT8_AUDIO_DEVICE": "USB", "MRRC_FT8_RIG_MODEL": "1049"}
+    env = {"MRRC_FT8_AUDIO_DEVICE": "USB", "MRRC_FT8_RIG_MODEL": "1049", "MRRC_FT8_RIG_STOP_BITS": "2"}
     src = source_of({"audio_device": "Other"}, environ=env)
     assert src["audio_device"] == "file"
     assert src["rig_model"] == "env"
+    assert src["rig_stop_bits"] == "env"
     assert src["rigctld_port"] == "default"
 
     # Server-side env for rigctld_port is MRRC_FT8_RIGCTLD (host:port); the

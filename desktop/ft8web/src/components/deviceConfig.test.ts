@@ -9,12 +9,14 @@ describe('DeviceSettings helpers', () => {
     const f = formFromConfig(undefined);
     expect(f.rig_model).toBe(1049);
     expect(f.rig_baud).toBe(38400);
+    expect(f.rig_stop_bits).toBe(1);
     expect(f.rigctld_port).toBe(4532);
     expect(f.audio_device).toBeNull();
   });
   it('preserves the saved config', () => {
-    const f = formFromConfig({ rig_model: 3073, audio_device: 'USB Audio' });
+    const f = formFromConfig({ rig_model: 3073, audio_device: 'USB Audio', rig_stop_bits: 2 });
     expect(f.rig_model).toBe(3073);
+    expect(f.rig_stop_bits).toBe(2);
     expect(f.audio_device).toBe('USB Audio');
   });
   it('detects custom models', () => {

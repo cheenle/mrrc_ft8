@@ -14,6 +14,7 @@ import asyncio
 import time
 from collections.abc import Callable
 from dataclasses import dataclass
+from typing import Any
 
 import numpy as np
 
@@ -72,9 +73,17 @@ class TxPlayer:
         blocksize: int = 4_096,
     ) -> None:
         if stream_factory is None:
-            import sounddevice
+            # Lazy: importing sounddevice here would hang the server at
+            # startup when CoreAudio device enumeration is wedged (2026-08-10
+            # field: FT8 aggregate referencing a powered-off FT-710).  Defer
+            # the import to the first play() — a broken audio stack then
+            # faults the AUDIO interlock instead of blocking create_server.
+            def _lazy_factory(**kwargs: Any) -> object:
+                import sounddevice
 
-            stream_factory = sounddevice.OutputStream
+                return sounddevice.OutputStream(**kwargs)
+
+            stream_factory = _lazy_factory
         self._factory = stream_factory
         self._device = device
         self._blocksize = blocksize

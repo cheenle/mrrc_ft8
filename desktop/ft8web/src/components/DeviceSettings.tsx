@@ -4,6 +4,7 @@ export interface DeviceForm {
   rig_model: number;
   rig_device: string;
   rig_baud: number;
+  rig_stop_bits: number;
   rigctld_port: number;
   audio_device: string | null;
 }
@@ -17,6 +18,7 @@ export const RIG_MODEL_OPTIONS = [
 export const BAUD_OPTIONS = [
   1200, 2400, 4800, 9600, 19200, 38400, 57600, 115200,
 ];
+export const STOP_BITS_OPTIONS = [1, 2];
 
 export function formFromConfig(
   cfg: Record<string, any> | undefined,
@@ -25,6 +27,8 @@ export function formFromConfig(
     rig_model: typeof cfg?.rig_model === 'number' ? cfg.rig_model : 1049,
     rig_device: typeof cfg?.rig_device === 'string' ? cfg.rig_device : '',
     rig_baud: typeof cfg?.rig_baud === 'number' ? cfg.rig_baud : 38400,
+    rig_stop_bits:
+      typeof cfg?.rig_stop_bits === 'number' ? cfg.rig_stop_bits : 1,
     rigctld_port:
       typeof cfg?.rigctld_port === 'number' ? cfg.rigctld_port : 4532,
     audio_device: cfg?.audio_device ?? null,
@@ -231,6 +235,22 @@ export function DeviceSettings(props: DeviceSettingsProps) {
           {BAUD_OPTIONS.map((b) => (
             <option key={b} value={b}>
               {b}
+            </option>
+          ))}
+        </select>
+      </div>
+
+      <div className="flex flex-col gap-1">
+        <label className="text-[10px] text-text-muted">Stop Bits</label>
+        <select
+          className={selectCls}
+          value={form.rig_stop_bits}
+          disabled={busy}
+          onChange={(e) => set({ rig_stop_bits: Number(e.target.value) })}
+        >
+          {STOP_BITS_OPTIONS.map((s) => (
+            <option key={s} value={s}>
+              {s}
             </option>
           ))}
         </select>

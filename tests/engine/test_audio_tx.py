@@ -227,3 +227,24 @@ def test_write_failure_after_cancel_is_normal_cancellation() -> None:
         assert stream.aborted and stream.closed
 
     run(main())
+
+def test_txplayer_construction_is_lazy_on_sounddevice(monkeypatch) -> None:
+    """构造 TxPlayer 不得导入 sounddevice：CoreAudio 枚举卡死时 server 仍能启动。
+
+    2026-08-10 现场：FT8 聚合设备引用未加电的 FT-710，``import sounddevice``
+    在 PortAudio 枚举处挂起；若 TxPlayer.__init__ 急切导入，create_server 永远
+    卡在 uvicorn.run 之前。
+    """
+
+    import builtins
+
+    real_import = builtins.__import__
+
+    def blocked_import(name, *args, **kwargs):
+        if name == "sounddevice":
+            raise ImportError("blocked sounddevice import (CoreAudio wedged)")
+        return real_import(name, *args, **kwargs)
+
+    monkeypatch.setattr(builtins, "__import__", blocked_import)
+    player = TxPlayer()  # must not raise
+    assert player.playing is False
