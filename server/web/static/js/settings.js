@@ -331,12 +331,12 @@ export function createSettingsDrawer() {
     const modelOptions = curated_rig_models
       .map((m) => `<option value="${m.model}" ${m.model === form.rig_model ? "selected" : ""}>${m.name} (${m.model})</option>`)
       .join("") + `<option value="custom" ${customModel ? "selected" : ""}>Custom…</option>`;
-    const customDeviceOption =
-      form.rig_device && !serial_devices.includes(form.rig_device)
-        ? `<option value="${form.rig_device}" selected>${form.rig_device}</option>` : "";
+    // A device not in the enumeration (e.g. /dev/cu.SLAB_USBtoUART) is
+    // entered manually via the Custom… select option.
+    const serialCustom = form.rig_device && !serial_devices.includes(form.rig_device);
     const serialOptions = serial_devices
       .map((d) => `<option value="${d}" ${d === form.rig_device ? "selected" : ""}>${d}</option>`)
-      .join("") + customDeviceOption;
+      .join("");
     const audioOptions =
       `<option value="">System default</option>` +
       audio_devices
@@ -352,15 +352,21 @@ export function createSettingsDrawer() {
       <div class="device-custom" ${customModel ? "" : "hidden"}>
         <label class="setting-row">
           <span>Custom model number</span>
-          <input data-device-model-custom type="number" min="1" value="${customModel ? form.rig_model : ""}">
+          <input data-device-model-custom type="number" min="1" value="${form.rig_model}">
         </label>
       </div>
       <label class="setting-row">
         <span>CAT serial device</span>
         <select data-device-serial>
-          <option value="">—</option>${serialOptions}
+          <option value="">—</option>${serialOptions}<option value="custom" ${serialCustom ? "selected" : ""}>Custom…</option>
         </select>
       </label>
+      <div class="device-custom-serial" ${serialCustom ? "" : "hidden"}>
+        <label class="setting-row">
+          <span>Custom serial path</span>
+          <input data-device-serial-custom type="text" value="${form.rig_device}">
+        </label>
+      </div>
       <label class="setting-row">
         <span>Baud rate</span>
         <select data-device-baud>
@@ -388,11 +394,18 @@ export function createSettingsDrawer() {
       const custom = e.target.value === "custom";
       if (customWrap) customWrap.hidden = !custom;
     });
+    const serialCustomWrap = content.querySelector(".device-custom-serial");
+    content.querySelector("[data-device-serial]")?.addEventListener("change", (e) => {
+      const custom = e.target.value === "custom";
+      if (serialCustomWrap) serialCustomWrap.hidden = !custom;
+    });
     const readForm = () => ({
-      rig_model: Number(content.querySelector("[data-device-model]")?.value === "custom"
-        ? (content.querySelector("[data-device-model-custom]")?.value ?? 1049)
-        : content.querySelector("[data-device-model]")?.value),
-      rig_device: String(content.querySelector("[data-device-serial]")?.value ?? ""),
+      rig_model: Number((content.querySelector("[data-device-model]")?.value === "custom"
+        ? (content.querySelector("[data-device-model-custom]")?.value || 1049)
+        : content.querySelector("[data-device-model]")?.value) || 1049),
+      rig_device: String(content.querySelector("[data-device-serial]")?.value === "custom"
+        ? (content.querySelector("[data-device-serial-custom]")?.value ?? "")
+        : content.querySelector("[data-device-serial]")?.value ?? ""),
       rig_baud: Number(content.querySelector("[data-device-baud]")?.value ?? 38400),
       rigctld_port: Number(content.querySelector("[data-device-port]")?.value ?? 4532),
       audio_device: content.querySelector("[data-device-audio]")?.value || null,
