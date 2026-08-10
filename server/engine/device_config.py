@@ -35,7 +35,8 @@ CURATED_RIG_MODELS: list[tuple[int, str]] = [
 BAUD_RATES: list[int] = [1200, 2400, 4800, 9600, 19200, 38400, 57600, 115200]
 
 _CONFIG_KEYS = (
-    "rig_model", "rig_device", "rig_baud", "rig_stop_bits", "rigctld_port", "audio_device"
+    "rig_model", "rig_device", "rig_baud", "rig_stop_bits", "rigctld_port",
+    "audio_device", "audio_in_device", "audio_out_device",
 )
 
 # _ENV_KEY: env names restart.sh evals when launching rigctld (launch vars).
@@ -51,6 +52,8 @@ _ENV_KEY = {
     "rig_stop_bits": "MRRC_FT8_RIG_STOP_BITS",
     "rigctld_port": "MRRC_FT8_RIGCTLD_PORT",
     "audio_device": "MRRC_FT8_AUDIO_DEVICE",
+    "audio_in_device": "MRRC_FT8_AUDIO_IN_DEVICE",
+    "audio_out_device": "MRRC_FT8_AUDIO_OUT_DEVICE",
 }
 
 _SOURCE_ENV = {
@@ -60,6 +63,8 @@ _SOURCE_ENV = {
     "rig_stop_bits": "MRRC_FT8_RIG_STOP_BITS",
     "rigctld_port": "MRRC_FT8_RIGCTLD",  # server 实际连接所用 env（host:port）
     "audio_device": "MRRC_FT8_AUDIO_DEVICE",
+    "audio_in_device": "MRRC_FT8_AUDIO_IN_DEVICE",
+    "audio_out_device": "MRRC_FT8_AUDIO_OUT_DEVICE",
 }
 
 
@@ -107,6 +112,30 @@ def shell_env_lines(cfg: dict[str, Any]) -> list[str]:
     return lines
 
 
+def _audio_value(raw: str) -> int | str | None:
+    """Parse an audio-device env value (numeric index or device name)."""
+
+    return int(raw) if raw.isdigit() else raw
+
+
+def _resolve_audio(
+    file_cfg: dict[str, Any] | None, environ: Any, *, direction: str
+) -> Any:
+    """Effective audio device for one direction: file > env > legacy audio_device."""
+
+    key = f"audio_{direction}_device"
+    if file_cfg and key in file_cfg:
+        return file_cfg[key]
+    env_val = environ.get(f"MRRC_FT8_AUDIO_{direction.upper()}_DEVICE", "")
+    if env_val:
+        return _audio_value(env_val)
+    legacy = file_cfg.get("audio_device") if file_cfg else None
+    if legacy is not None:
+        return legacy
+    env_legacy = environ.get("MRRC_FT8_AUDIO_DEVICE", "")
+    return _audio_value(env_legacy) if env_legacy else None
+
+
 def effective_config(
     file_cfg: dict[str, Any] | None, environ: Any = os.environ
 ) -> dict[str, Any]:
@@ -115,7 +144,9 @@ def effective_config(
     cfg: dict[str, Any] = {}
     audio_raw = environ.get("MRRC_FT8_AUDIO_DEVICE", "")
     if audio_raw:
-        cfg["audio_device"] = int(audio_raw) if audio_raw.isdigit() else audio_raw
+        cfg["audio_device"] = _audio_value(audio_raw)
+    cfg["audio_in_device"] = _resolve_audio(file_cfg, environ, direction="in")
+    cfg["audio_out_device"] = _resolve_audio(file_cfg, environ, direction="out")
     _, _, rig_port = environ.get("MRRC_FT8_RIGCTLD", "127.0.0.1:4532").partition(":")
     cfg["rigctld_port"] = int(rig_port or 4532)
     for env, key in (
@@ -133,27 +164,43 @@ def effective_config(
 
 
 def merge_into(config: Any, file_cfg: dict[str, Any] | None) -> Any:
-    """ServerConfig copy with file overrides (audio_device, rigctld_port)."""
+    """ServerConfig copy with file overrides (audio in/out + rigctld port)."""
 
     if not file_cfg:
         return config
     overrides: dict[str, Any] = {}
-    if "audio_device" in file_cfg:
-        overrides["audio_device"] = file_cfg["audio_device"]
+    for key in ("audio_device", "audio_in_device", "audio_out_device"):
+        if key in file_cfg:
+            overrides[key] = file_cfg[key]
     if "rigctld_port" in file_cfg:
         overrides["rigctld_port"] = int(file_cfg["rigctld_port"])
     return dataclasses.replace(config, **overrides)
 
 
-def enumerate_audio_devices() -> list[dict[str, Any]]:
-    """sounddevice devices → [{index, name, max_input, max_output}]; [] on error."""
+def enumerate_audio_devices(timeout: float = 3.0) -> list[dict[str, Any]]:
+    """sounddevice devices → [{index, name, max_input, max_output}]; [] on error.
 
-    try:
+    Timeout-guarded: a wedged CoreAudio (2026-08-10 field: an aggregate
+    referencing a powered-off radio) can block ``import sounddevice`` /
+    ``query_devices`` indefinitely — the API must return an empty list
+    instead of hanging the endpoint thread.
+    """
+
+    import concurrent.futures
+
+    def _query() -> list[Any]:
         import sounddevice
 
-        devices = sounddevice.query_devices()
+        return list(sounddevice.query_devices())
+
+    executor = concurrent.futures.ThreadPoolExecutor(max_workers=1)
+    try:
+        future = executor.submit(_query)
+        devices = future.result(timeout=timeout)
     except Exception:
+        executor.shutdown(wait=False)  # 挂起的导入线程留在后台，不阻塞返回
         return []
+    executor.shutdown(wait=False)
     rows: list[dict[str, Any]] = []
     for index, dev in enumerate(devices):
         rows.append(
@@ -207,17 +254,20 @@ def validate(
         port = cfg["rigctld_port"]
         if not isinstance(port, int) or isinstance(port, bool) or not 1024 <= port <= 65535 or port == 8000:
             return "rigctld_port must be an integer in 1024..65535 (not 8000)"
-    if "audio_device" in cfg and cfg["audio_device"] is not None:
-        wanted = cfg["audio_device"]
-        names = {str(d["name"]) for d in audio_devices}
-        indexes = {d["index"] for d in audio_devices}
-        ok = (isinstance(wanted, str) and wanted in names) or (
-            isinstance(wanted, int) and not isinstance(wanted, bool) and wanted in indexes
-        )
-        if not ok and current_effective is not None and wanted == current_effective:
-            ok = True  # unchanged value passes even while the device is absent
-        if not ok:
-            return "audio_device not found in device list"
+    for key in ("audio_device", "audio_in_device", "audio_out_device"):
+        if key in cfg and cfg[key] is not None:
+            wanted = cfg[key]
+            names = {str(d["name"]) for d in audio_devices}
+            indexes = {d["index"] for d in audio_devices}
+            ok = (isinstance(wanted, str) and wanted in names) or (
+                isinstance(wanted, int) and not isinstance(wanted, bool) and wanted in indexes
+            )
+            # 未变值放行（设备暂时不在枚举里也能保存，如 USB 热插拔间隙）
+            effective = current_effective.get(key) if isinstance(current_effective, dict) else current_effective
+            if not ok and effective is not None and wanted == effective:
+                ok = True
+            if not ok:
+                return f"{key} not found in device list"
     return None
 
 

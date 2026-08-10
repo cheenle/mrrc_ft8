@@ -164,3 +164,22 @@ def test_store_roundtrip_and_spawn_script(tmp_path) -> None:
     store = DeviceConfigStore(tmp_path / "d.json", script="/nonexistent/restart.sh")
     store.save({"rig_model": 3073})
     assert store.load() == {"rig_model": 3073}
+
+
+def test_enumerate_audio_devices_times_out_on_wedged_sounddevice(monkeypatch) -> None:
+    """CoreAudio 卡死（聚合设备引用断电电台）时枚举必须超时返回 []，不能挂死。"""
+
+    import builtins
+    import time as _time
+
+    real_import = builtins.__import__
+
+    def hang_on_sounddevice(name, *args, **kwargs):
+        if name == "sounddevice":
+            _time.sleep(60)  # 模拟 PortAudio 枚举挂起
+        return real_import(name, *args, **kwargs)
+
+    monkeypatch.setattr(builtins, "__import__", hang_on_sounddevice)
+    t0 = _time.monotonic()
+    assert enumerate_audio_devices(timeout=1.0) == []
+    assert _time.monotonic() - t0 < 5

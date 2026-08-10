@@ -88,6 +88,10 @@ class ServerConfig:
     rigctld_host: str = "127.0.0.1"
     rigctld_port: int = 4532
     audio_device: int | str | None = None
+    # 独立输入/输出音频设备（2026-08-10：声卡配置拆 in/out 两个）；
+    # None 时回退 audio_device（旧单一设备语义）。
+    audio_in_device: int | str | None = None
+    audio_out_device: int | str | None = None
     decoder_profile: int = 3
     decoder_threads: int = 0  # 0 = Auto: clamp(cpu_count - 1, 1, 12) (I9, §12.6)
     band_hunt_url: str | None = None  # pskreporter /api/band_hunt; None = feature off
@@ -168,6 +172,8 @@ class ServerConfig:
             rigctld_host=rig_host,
             rigctld_port=int(rig_port or 4532),
             audio_device=audio_device,
+            audio_in_device=audio_device,
+            audio_out_device=audio_device,
             decoder_profile=profile,
             decoder_threads=threads,
             band_hunt_url=band_hunt_url,
@@ -291,7 +297,7 @@ def create_server(
         host=config.rigctld_host, port=config.rigctld_port
     )
     sequencer = Sequencer(my_call=config.my_call, my_grid=config.my_grid)
-    player = TxPlayer(device=config.audio_device)
+    player = TxPlayer(device=config.audio_out_device or config.audio_device)
 
     def on_safety_event(event: Any) -> None:
         # TX arm/key/fault transitions are otherwise invisible outside the
@@ -418,7 +424,9 @@ def create_server(
             for frame in computer.push(samples, epoch):
                 state.waterfall_fanout.publish(frame)
 
-        capture = CaptureProcess(ring, device=config.audio_device, tap=waterfall_tap)
+        capture = CaptureProcess(
+            ring, device=config.audio_in_device or config.audio_device, tap=waterfall_tap
+        )
 
     if start_dsp:
         from .core.models import DecodeConfig, auto_thread_count

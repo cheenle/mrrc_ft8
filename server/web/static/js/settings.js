@@ -327,6 +327,8 @@ export function createSettingsDrawer() {
       rig_stop_bits: Number(config.rig_stop_bits ?? 1),
       rigctld_port: Number(config.rigctld_port ?? 4532),
       audio_device: config.audio_device ?? null,
+      audio_in_device: config.audio_in_device ?? config.audio_device ?? null,
+      audio_out_device: config.audio_out_device ?? config.audio_device ?? null,
     };
     const customModel = !curated_rig_models.some((m) => m.model === form.rig_model);
     const modelOptions = curated_rig_models
@@ -338,11 +340,14 @@ export function createSettingsDrawer() {
     const serialOptions = serial_devices
       .map((d) => `<option value="${d}" ${d === form.rig_device ? "selected" : ""}>${d}</option>`)
       .join("");
-    const audioOptions =
+    const audioOption = (d, current) =>
+      `<option value="${d.name}" ${d.name === current ? "selected" : ""}>${d.name}</option>`;
+    const audioInOptions =
       `<option value="">System default</option>` +
-      audio_devices
-        .map((d) => `<option value="${d.name}" ${d.name === form.audio_device ? "selected" : ""}>${d.name}</option>`)
-        .join("");
+      audio_devices.filter((d) => d.max_input > 0).map((d) => audioOption(d, form.audio_in_device)).join("");
+    const audioOutOptions =
+      `<option value="">System default</option>` +
+      audio_devices.filter((d) => d.max_output > 0).map((d) => audioOption(d, form.audio_out_device)).join("");
     const sourceLine = (key) => `${key}: ${source[key] || "default"}`;
     content.innerHTML = `
       <h3>Devices</h3>
@@ -386,10 +391,14 @@ export function createSettingsDrawer() {
         <input data-device-port type="number" min="1024" max="65535" value="${form.rigctld_port}">
       </label>
       <label class="setting-row">
-        <span>Audio device</span>
-        <select data-device-audio>${audioOptions}</select>
+        <span>Audio input (RX)</span>
+        <select data-device-audio-in>${audioInOptions}</select>
       </label>
-      <p class="drawer-hint dim">Source — ${sourceLine("rig_model")} · ${sourceLine("rig_device")} · ${sourceLine("rig_baud")} · ${sourceLine("rig_stop_bits")} · ${sourceLine("rigctld_port")} · ${sourceLine("audio_device")}</p>
+      <label class="setting-row">
+        <span>Audio output (TX)</span>
+        <select data-device-audio-out>${audioOutOptions}</select>
+      </label>
+      <p class="drawer-hint dim">Source — ${sourceLine("rig_model")} · ${sourceLine("rig_device")} · ${sourceLine("rig_baud")} · ${sourceLine("rig_stop_bits")} · ${sourceLine("rigctld_port")} · ${sourceLine("audio_in_device")} · ${sourceLine("audio_out_device")}</p>
       <div class="device-actions" style="display:flex;gap:8px;margin-top:8px">
         <button data-device-save class="cmd">Save</button>
         <button data-device-apply class="cmd">Apply &amp; Restart</button>
@@ -417,7 +426,8 @@ export function createSettingsDrawer() {
       rig_baud: Number(content.querySelector("[data-device-baud]")?.value ?? 38400),
       rig_stop_bits: Number(content.querySelector("[data-device-stop]")?.value ?? 1),
       rigctld_port: Number(content.querySelector("[data-device-port]")?.value ?? 4532),
-      audio_device: content.querySelector("[data-device-audio]")?.value || null,
+      audio_in_device: content.querySelector("[data-device-audio-in]")?.value || null,
+      audio_out_device: content.querySelector("[data-device-audio-out]")?.value || null,
     });
     content.querySelector("[data-device-save]")?.addEventListener("click", async () => {
       const result = await api.saveDevices(readForm());

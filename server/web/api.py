@@ -976,7 +976,7 @@ def create_router(state: AppState) -> APIRouter:
         audio = await asyncio.to_thread(enumerate_audio_devices)
         effective = effective_config(store.load())
         error = await asyncio.to_thread(
-            validate, body, audio, current_effective=effective.get("audio_device")
+            validate, body, audio, current_effective=effective
         )
         if error:
             return _reject(422, "invalid_device_config", detail=error)

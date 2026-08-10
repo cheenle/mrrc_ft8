@@ -6,7 +6,8 @@ export interface DeviceForm {
   rig_baud: number;
   rig_stop_bits: number;
   rigctld_port: number;
-  audio_device: string | null;
+  audio_in_device: string | null;
+  audio_out_device: string | null;
 }
 
 export const RIG_MODEL_OPTIONS = [
@@ -31,7 +32,8 @@ export function formFromConfig(
       typeof cfg?.rig_stop_bits === 'number' ? cfg.rig_stop_bits : 1,
     rigctld_port:
       typeof cfg?.rigctld_port === 'number' ? cfg.rigctld_port : 4532,
-    audio_device: cfg?.audio_device ?? null,
+    audio_in_device: cfg?.audio_in_device ?? cfg?.audio_device ?? null,
+    audio_out_device: cfg?.audio_out_device ?? cfg?.audio_device ?? null,
   };
 }
 
@@ -270,19 +272,40 @@ export function DeviceSettings(props: DeviceSettingsProps) {
       </div>
 
       <div className="flex flex-col gap-1">
-        <label className="text-[10px] text-text-muted">Audio Device</label>
+        <label className="text-[10px] text-text-muted">Audio Input (RX)</label>
         <select
           className={selectCls}
-          value={form.audio_device ?? ''}
+          value={form.audio_in_device ?? ''}
           disabled={busy}
-          onChange={(e) => set({ audio_device: e.target.value || null })}
+          onChange={(e) => set({ audio_in_device: e.target.value || null })}
         >
           <option value="">System default</option>
-          {audioDevices.map((d) => (
-            <option key={d.index} value={d.name}>
-              {d.name}
-            </option>
-          ))}
+          {audioDevices
+            .filter((d) => d.max_input > 0)
+            .map((d) => (
+              <option key={d.index} value={d.name}>
+                {d.name}
+              </option>
+            ))}
+        </select>
+      </div>
+
+      <div className="flex flex-col gap-1">
+        <label className="text-[10px] text-text-muted">Audio Output (TX)</label>
+        <select
+          className={selectCls}
+          value={form.audio_out_device ?? ''}
+          disabled={busy}
+          onChange={(e) => set({ audio_out_device: e.target.value || null })}
+        >
+          <option value="">System default</option>
+          {audioDevices
+            .filter((d) => d.max_output > 0)
+            .map((d) => (
+              <option key={d.index} value={d.name}>
+                {d.name}
+              </option>
+            ))}
         </select>
       </div>
 
@@ -290,8 +313,9 @@ export function DeviceSettings(props: DeviceSettingsProps) {
         Source — model: {sourceLabel(source, 'rig_model')} · serial:{' '}
         {sourceLabel(source, 'rig_device')} · baud:{' '}
         {sourceLabel(source, 'rig_baud')} · port:{' '}
-        {sourceLabel(source, 'rigctld_port')} · audio:{' '}
-        {sourceLabel(source, 'audio_device')}
+        {sourceLabel(source, 'rigctld_port')} · audio-in:{' '}
+        {sourceLabel(source, 'audio_in_device')} · audio-out:{' '}
+        {sourceLabel(source, 'audio_out_device')}
       </p>
 
       {restarting && (
