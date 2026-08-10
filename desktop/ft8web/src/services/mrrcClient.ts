@@ -110,4 +110,10 @@ export const mrrc = {
   settings: () => request('/settings'),
   putSetting: (k: string, v: unknown) =>
     request('/settings', { method: 'PUT', idempotencyKey: key(), body: { [k]: v } }),
+
+  devices: () => request('/devices'),
+  saveDevices: (cfg: Record<string, unknown>) =>
+    request('/devices', { method: 'PUT', idempotencyKey: key(), body: cfg }),
+  applyDevices: () =>
+    request('/devices/apply', { method: 'POST', idempotencyKey: key() }),
 };

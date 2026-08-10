@@ -35,4 +35,22 @@ describe('mrrcClient', () => {
     await mrrc.state();
     expect(onUnauthorized).toHaveBeenCalledTimes(1);
   });
+
+  it('saveDevices sends a PUT with an idempotency key', async () => {
+    vi.stubGlobal('fetch', mockFetch(200, { ok: true, saved: true }));
+    await mrrc.saveDevices({ rig_model: 1049 });
+    const [url, init] = (globalThis.fetch as any).mock.calls[0];
+    expect(url).toBe('/api/v1/devices');
+    expect(init.method).toBe('PUT');
+    expect(init.headers['idempotency-key']).toBeTruthy();
+    expect(JSON.parse(init.body).rig_model).toBe(1049);
+  });
+
+  it('applyDevices posts to /devices/apply', async () => {
+    vi.stubGlobal('fetch', mockFetch(202, { ok: true, restarting: true }));
+    await mrrc.applyDevices();
+    const [url, init] = (globalThis.fetch as any).mock.calls[0];
+    expect(url).toBe('/api/v1/devices/apply');
+    expect(init.method).toBe('POST');
+  });
 });

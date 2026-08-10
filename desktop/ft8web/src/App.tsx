@@ -1,4 +1,5 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import type React from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { Activity, Settings, X, HelpCircle, Square } from 'lucide-react';
 
 import { LogBookViewer } from './components/LogBookViewer';
@@ -9,6 +10,7 @@ import { CHANGELOG, LATEST_UPDATE, type ChangelogEntry } from './changelog';
 import { extractTransmitterCallsign } from './services/pskReporterSpot';
 import { mrrc, type DecodeCandidate } from './services/mrrcClient';
 import { useServerFT8 } from './services/useServerFT8';
+import { DeviceSettings, type DeviceForm } from './components/DeviceSettings';
 import type { ServerDecodeMessage } from './services/mrrcStreams';
 
 export interface FT8DecodedMessage {
@@ -351,6 +353,10 @@ export default function App() {
   // settings (decoder_profile/decoder_threads) with 409 tx_active during TX, so
   // the change must surface instead of silently dropping while the modal closes.
   const [settingsError, setSettingsError] = useState<string | null>(null);
+  // Device configuration (spec 2026-08-10) — station hardware, server-managed.
+  const [deviceData, setDeviceData] = useState<Record<string, any> | null>(null);
+  const [deviceSaving, setDeviceSaving] = useState(false);
+  const [deviceBusy, setDeviceBusy] = useState(false);
   const [showAbout, setShowAbout] = useState(false);
   const [whatsNewEntries, setWhatsNewEntries] = useState<ChangelogEntry[]>([]);
 
@@ -777,6 +783,8 @@ export default function App() {
     setDecoderThreads(typeof s.decoder_threads === 'number' ? s.decoder_threads : 0);
     if (typeof s.auto_call_new_dxcc === 'boolean') setAutoSequence(s.auto_call_new_dxcc);
     if (typeof s.auto_band_hunt === 'boolean') setAutoBandHunt(s.auto_band_hunt);
+    const devicesRes = await mrrc.devices();
+    if (devicesRes.ok) setDeviceData(devicesRes.body);
   }, []);
 
   const saveSettings = useCallback(async () => {
@@ -808,6 +816,38 @@ export default function App() {
     setSettingsError(null);
     setShowSettings(false);
   }, [decodeDepth, decoderThreads, autoSequence, autoBandHunt]);
+
+  const saveDeviceConfig = useCallback(async (form: DeviceForm): Promise<string | null> => {
+    setDeviceSaving(true);
+    try {
+      const res = await mrrc.saveDevices(form as unknown as Record<string, unknown>);
+      if (!res.ok) {
+        return res.reason === 'tx_active'
+          ? 'Devices locked during TX'
+          : `Save rejected: ${res.reason ?? res.status}`;
+      }
+      const refreshed = await mrrc.devices();
+      if (refreshed.ok) setDeviceData(refreshed.body);
+      return null;
+    } finally {
+      setDeviceSaving(false);
+    }
+  }, []);
+
+  const applyDeviceConfig = useCallback(async (): Promise<string | null> => {
+    setDeviceBusy(true);
+    try {
+      const res = await mrrc.applyDevices();
+      if (!res.ok) {
+        return res.reason === 'tx_active'
+          ? 'Devices locked during TX'
+          : `Apply rejected: ${res.reason ?? res.status}`;
+      }
+      return null;
+    } finally {
+      setDeviceBusy(false);
+    }
+  }, []);
 
   // Sync Interval Management & Animation Frame — UTC clock, slot window progress,
   // and the waterfall only. The decode trigger, queued-TX start, FSM drive, and
@@ -1348,6 +1388,18 @@ export default function App() {
             </div>
             
             <div className="space-y-4">
+              {deviceData && (
+                <DeviceSettings
+                  config={deviceData.config}
+                  source={deviceData.source}
+                  audioDevices={deviceData.audio_devices ?? []}
+                  serialDevices={deviceData.serial_devices ?? []}
+                  busy={deviceSaving || deviceBusy}
+                  onSave={saveDeviceConfig}
+                  onApply={applyDeviceConfig}
+                />
+              )}
+
               {/* Station identity — read-only from the server snapshot (Task 13).
                   Callsign/grid are configured on the station (server). */}
               <div className="flex flex-col gap-1">
