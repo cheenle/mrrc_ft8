@@ -1376,12 +1376,10 @@ git commit -m "feat(desktop): device settings section (hamlib rig + audio, save/
     const modelOptions = curated_rig_models
       .map((m) => `<option value="${m.model}" ${m.model === form.rig_model ? "selected" : ""}>${m.name} (${m.model})</option>`)
       .join("") + `<option value="custom" ${customModel ? "selected" : ""}>Custom…</option>`;
-    const customDeviceOption =
-      form.rig_device && !serial_devices.includes(form.rig_device)
-        ? `<option value="${form.rig_device}" selected>${form.rig_device}</option>` : "";
+    const serialCustom = form.rig_device && !serial_devices.includes(form.rig_device);
     const serialOptions = serial_devices
       .map((d) => `<option value="${d}" ${d === form.rig_device ? "selected" : ""}>${d}</option>`)
-      .join("") + customDeviceOption;
+      .join("");
     const audioOptions =
       `<option value="">System default</option>` +
       audio_devices
@@ -1397,15 +1395,22 @@ git commit -m "feat(desktop): device settings section (hamlib rig + audio, save/
       <div class="device-custom" ${customModel ? "" : "hidden"}>
         <label class="setting-row">
           <span>Custom model number</span>
-          <input data-device-model-custom type="number" min="1" value="${customModel ? form.rig_model : ""}">
+          <input data-device-model-custom type="number" min="1" value="${form.rig_model}">
         </label>
       </div>
       <label class="setting-row">
         <span>CAT serial device</span>
         <select data-device-serial>
           <option value="">—</option>${serialOptions}
+          <option value="custom" ${serialCustom ? "selected" : ""}>Custom…</option>
         </select>
       </label>
+      <div class="device-custom-serial" ${serialCustom ? "" : "hidden"}>
+        <label class="setting-row">
+          <span>Custom serial path</span>
+          <input data-device-serial-custom type="text" value="${form.rig_device}">
+        </label>
+      </div>
       <label class="setting-row">
         <span>Baud rate</span>
         <select data-device-baud>
@@ -1429,17 +1434,26 @@ git commit -m "feat(desktop): device settings section (hamlib rig + audio, save/
         server — about 20 seconds of disconnect, then log in again.</p>`;
 
     const customWrap = content.querySelector(".device-custom");
+    const serialCustomWrap = content.querySelector(".device-custom-serial");
     content.querySelector("[data-device-model]")?.addEventListener("change", (e) => {
       const custom = e.target.value === "custom";
       if (customWrap) customWrap.hidden = !custom;
     });
+    content.querySelector("[data-device-serial]")?.addEventListener("change", (e) => {
+      const custom = e.target.value === "custom";
+      if (serialCustomWrap) serialCustomWrap.hidden = !custom;
+    });
     const readForm = () => ({
-      rig_model: Number(content.querySelector("[data-device-model]")?.value === "custom"
-        ? (content.querySelector("[data-device-model-custom]")?.value ?? 1049)
-        : content.querySelector("[data-device-model]")?.value),
-      rig_device: String(content.querySelector("[data-device-serial]")?.value ?? ""),
-      rig_baud: Number(content.querySelector("[data-device-baud]")?.value ?? 38400),
-      rigctld_port: Number(content.querySelector("[data-device-port]")?.value ?? 4532),
+      rig_model: Number((content.querySelector("[data-device-model]")?.value === "custom"
+        ? content.querySelector("[data-device-model-custom]")?.value
+        : content.querySelector("[data-device-model]")?.value) || 1049),
+      rig_device: (() => {
+        const sel = content.querySelector("[data-device-serial]")?.value;
+        if (sel === "custom") return String(content.querySelector("[data-device-serial-custom]")?.value ?? "");
+        return String(sel ?? "");
+      })(),
+      rig_baud: Number(content.querySelector("[data-device-baud]")?.value || 38400),
+      rigctld_port: Number(content.querySelector("[data-device-port]")?.value || 4532),
       audio_device: content.querySelector("[data-device-audio]")?.value || null,
     });
     content.querySelector("[data-device-save]")?.addEventListener("click", async () => {
