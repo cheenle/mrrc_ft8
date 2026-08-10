@@ -343,3 +343,27 @@ def test_start_cq_resets_tx_frequency_to_default() -> None:
     seq.reply_to(parse_message("CQ K1ABC FN42"), snr_db=-10, tx_frequency=843.0)
     seq.start_cq()
     assert seq.tx_frequency == DEFAULT_TX_AUDIO_FREQUENCY
+
+
+def test_operator_clicked_reply_keeps_retrying_when_partner_turns_away() -> None:
+    """A manually-clicked reply must NOT auto-stop when the partner calls
+    another station — it keeps retrying within the NFR-055 budget (field
+    request 2026-08-10: the reply was being killed by PARTNER_LOST the moment
+    the target worked someone else in a pileup)."""
+
+    seq = make()
+    seq.reply_to(parse_message("CQ K1ABC FN42"), snr_db=-10)
+    assert seq.state == QSOState.REPLYING
+
+    # The target calls a third station (not us) — must NOT disarm.
+    feed(seq, "W9XYZ K1ABC FN42")
+    assert seq.state == QSOState.REPLYING
+    assert seq.tx_enabled is True
+    assert seq.disarm_reason is None
+
+    # The reply keeps being scheduled within the retransmission budget.
+    reply_text = f"K1ABC {MY_CALL} {MY_GRID}"
+    for _ in range(4):  # NFR-055: one initial send plus three retransmissions
+        assert seq.next_tx_message() == reply_text
+    assert seq.next_tx_message() is None  # budget exhausted
+    assert seq.disarm_reason == DisarmReason.RETRY_EXHAUSTED

@@ -115,6 +115,11 @@ class Sequencer:
     tx_frequency: float = DEFAULT_TX_AUDIO_FREQUENCY  # audio offset (UC-003)
     _tx_count: int = field(default=0, repr=False)
     _signoff_sent: bool = field(default=False, repr=False)
+    # Anti-QRM auto-stop on the partner turning to another station.  CQ-sourced
+    # QSOs keep it (the answering station lost interest); an operator-clicked
+    # reply (reply_to) disables it — the reply keeps retrying within the
+    # NFR-055 budget until the partner answers or the operator stops it.
+    _partner_loss_stop: bool = field(default=True, repr=False)
     clock: Callable[[], float] = time.time
     context: Callable[[], QsoContext] = lambda: QsoContext()
     on_qso: Callable[[QSORecord], None] | None = None
@@ -140,6 +145,7 @@ class Sequencer:
         self.state = QSOState.CALLING
         self.tx_frequency = tx_frequency
         self.tx_enabled = True
+        self._partner_loss_stop = True  # CQ-sourced: stop when they turn away
 
     def reply_to(
         self,
@@ -170,6 +176,9 @@ class Sequencer:
         self.report_sent = snr_db
         self.state = QSOState.REPLYING
         self.tx_enabled = True
+        # Operator intent: a targeted reply persists even when the partner
+        # turns to another station (2026-08-10 field request).
+        self._partner_loss_stop = False
 
     def stop(self, reason: DisarmReason = DisarmReason.MANUAL) -> None:
         """Disarm TX immediately; the partner context is retained."""
@@ -190,9 +199,11 @@ class Sequencer:
             return
         if not addressed_to(msg, self.my_call):
             # Partner turned to call someone else: anti-QRM auto-stop, the
-            # mainwindow auto_sequence rule.
+            # mainwindow auto_sequence rule.  Disabled for operator-clicked
+            # replies — the operator wants to keep calling that station.
             if (
-                self.dx_call
+                self._partner_loss_stop
+                and self.dx_call
                 and msg.from_call
                 and msg.to_call
                 and base_call(msg.from_call) == base_call(self.dx_call)

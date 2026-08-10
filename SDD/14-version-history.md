@@ -11,6 +11,7 @@
 - **SDD discipline**：AD-008 保持"rigctld 是串口唯一 owner"不变；新增的只是"rigctld 参数由配置文件驱动、UI 可改"。
 - Regressions: `tests/engine/test_device_config.py`（读写/优先级/枚举/校验/来源/merge/shell_env_lines/DeviceConfigStore）；`tests/web/test_devices.py`（CRUD + apply + TX-409 + restarting 202 + 未认证 401）；`tests/web/test_static.py`（PWA Devices 标签页结构）。全量套件绿（809 passed, 1 pre-existing harness version assertion）。
 - **测试环境**：本机 macOS（USB Audio Device + FT-710 / rigctld 配置场景）；新增单测 mock 硬件枚举，无实机依赖。
+- **定向回复不再因对方改呼别人而停（2026-08-10 追加）**：手动点击（`reply_to`）的目标回复关闭 `PARTNER_LOST` 自动停——对方在堆叠中呼叫其他台时，回复仍按 NFR-055 预算（1 次首发 + 3 次重试）继续发射，直到对方应答或手动 STOP；CQ 来源（`start_cq`）的 QSO 保留原自动停行为。
 - **rig_mode 默认模式（同日追加）**：设备配置新增 `rig_mode`（默认 `USB`，大写 hamlib 模式 token，校验 `[A-Z0-9]{1,16}`）；server 启动时对电台 best-effort 应用一次（电台未开机时按轮询节奏重试，不 fault 不阻塞）。桌面/PWA Devices 表单加 Rig Mode 下拉（USB/LSB/AM/FM/CW/RTTY）。
 - **音频 in/out 拆分（同日追加）**：声卡配置由单一 `audio_device` 拆为 `audio_in_device`/`audio_out_device` 两个独立选择（capture=in、TxPlayer=out；旧 `audio_device` 保留为双向回退）。`enumerate_audio_devices` 加 3 s 超时（CoreAudio 聚合设备引用断电电台会卡死 `import sounddevice`——现场复现）；`TxPlayer` 的 sounddevice 导入改为惰性（server 启动不再被卡死，AUDIO fault 而非整体挂起）。
 - **部署配套（restart.sh 共享 daemon 保活）**：`restart.sh` 现在只清理本站 rigctld（按监听端口 `-t $RIGCTLD_PORT` 区分），其余 rigctld（旧 MRRC 项目共用机器的 IC-M710@4531 等共享 daemon）在重启前快照启动命令、本站 rigctld 就绪后原样恢复——重启不再打掉其他电台的 CAT。实机验证：IC-M710 daemon 自动恢复到 4531 并正常应答；`data/device-config.json` 的 `audio_device: "FT8"`（in/out 双工聚合设备）经真实重启生效（server 启动日志 `device config file overrides: ['audio_device']`），capture 崩溃循环消除。
