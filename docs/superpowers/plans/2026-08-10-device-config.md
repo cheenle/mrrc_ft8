@@ -529,6 +529,12 @@ def test_server_config_merges_device_file(tmp_path) -> None:
         device_config=DeviceConfigStore(),
 ```
 
+4. `server/web/api.py` 的 `AppState` 加字段（**计划修正**：原计划归 Task 3，但本任务接线与冒烟即需要它，提前到此；Task 3 勿重复添加）：
+
+```python
+    device_config: Any = None  # DeviceConfigStore when wired
+```
+
 - [ ] **步骤 4：运行测试验证通过**
 
 运行：`venv/bin/python -m pytest tests/engine/test_rig.py tests/web/test_main.py -v`
@@ -740,6 +746,8 @@ from .engine.device_config import (
 ```python
     device_config: Any = None  # DeviceConfigStore when wired
 ```
+
+> **注意：** 若 Task 2 已提前添加该字段（计划修正），此处跳过，不要重复。
 
 3. settings 段之后、`return router` 之前加：
 
