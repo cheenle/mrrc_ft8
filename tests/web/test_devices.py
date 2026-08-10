@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import sys
 from types import SimpleNamespace
 
@@ -66,6 +67,7 @@ def test_devices_view_reports_config_source_and_enums(client, monkeypatch) -> No
     assert body["audio_devices"][0]["name"] == "USB Audio"
     assert body["serial_devices"] == ["/dev/cu.usbserial-0121DB3A0"]
     assert body["rig_status"]["port"] == 4532
+    assert body["ok"] is True  # PWA api.js relies on the payload ok flag
     assert body["curated_rig_models"][0]["model"] == 1020
     assert body["baud_rates"] == [1200, 2400, 4800, 9600, 19200, 38400, 57600, 115200]
     assert body["source"]["audio_device"] == "default"
@@ -85,6 +87,25 @@ def test_devices_put_saves_file(client, tmp_path, monkeypatch) -> None:
     assert res.status_code == 200, res.text
     assert res.json()["saved"] is True
     assert (tmp_path / "device-config.json").exists()
+
+
+def test_devices_put_allows_empty_rig_device_as_unset(client, tmp_path, monkeypatch) -> None:
+    """UI 表单总是提交 rig_device（本站串口在 restart.sh 默认里，server 无值）；空串口应放行且不落盘。"""
+
+    session_id = login(client)
+    monkeypatch.setitem(sys.modules, "sounddevice", SimpleNamespace(query_devices=lambda: [
+        {"name": "USB Audio", "max_input_channels": 2, "max_output_channels": 2},
+    ]))
+    res = client.put(
+        "/api/v1/devices",
+        json={"rig_model": 1049, "rig_device": "", "rig_baud": 38400,
+              "rigctld_port": 4532, "audio_device": "USB Audio"},
+        headers=auth_headers(session_id),
+    )
+    assert res.status_code == 200, res.text
+    saved = json.loads((tmp_path / "device-config.json").read_text())
+    assert "rig_device" not in saved
+    assert saved["audio_device"] == "USB Audio"
 
 
 def test_devices_put_rejects_invalid(client, monkeypatch) -> None:

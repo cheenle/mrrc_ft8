@@ -75,7 +75,7 @@ def load_device_config(path: str | Path = DEFAULT_CONFIG_PATH) -> dict[str, Any]
 def save_device_config(cfg: dict[str, Any], path: str | Path = DEFAULT_CONFIG_PATH) -> None:
     """Atomic write (tmp + os.replace); only known keys are persisted."""
 
-    payload = {k: cfg[k] for k in _CONFIG_KEYS if k in cfg and cfg[k] is not None}
+    payload = {k: cfg[k] for k in _CONFIG_KEYS if k in cfg and cfg[k] not in (None, "")}
     path = Path(path)
     path.parent.mkdir(parents=True, exist_ok=True)
     fd, tmp = tempfile.mkstemp(dir=path.parent, prefix="device-config-", suffix=".tmp")
@@ -184,8 +184,11 @@ def validate(
             return "rig_model must be a positive integer"
     if "rig_device" in cfg:
         device = cfg["rig_device"]
-        if not isinstance(device, str) or not device.strip().startswith("/dev/"):
-            return "rig_device must be an absolute /dev/... path"
+        # 空/空白串口 = "不改动"（本站串口可能只在 restart.sh 默认值里，UI 表单
+        # 总是提交该字段）；非空才要求绝对 /dev/ 路径。
+        if device and device.strip():
+            if not isinstance(device, str) or not device.strip().startswith("/dev/"):
+                return "rig_device must be an absolute /dev/... path"
     if "rig_baud" in cfg:
         if cfg["rig_baud"] not in BAUD_RATES:
             return "rig_baud must be one of " + ", ".join(str(b) for b in BAUD_RATES)

@@ -942,7 +942,7 @@ def create_router(state: AppState) -> APIRouter:
         file_cfg = store.load() if store else None
         audio = await asyncio.to_thread(enumerate_audio_devices)
         serial = await asyncio.to_thread(enumerate_serial_devices)
-        return JSONResponse(
+        return _ok(
             {
                 "config": effective_config(file_cfg),
                 "source": source_of(file_cfg),

@@ -108,6 +108,7 @@ def test_validate_accepts_good_config() -> None:
     {"rig_model": 0},
     {"rig_model": "x"},
     {"rig_device": "usb"},
+    {"rig_device": 5},
     {"rig_baud": 12345},
     {"rigctld_port": 80},
     {"rigctld_port": 8000},
@@ -117,6 +118,19 @@ def test_validate_accepts_good_config() -> None:
 ])
 def test_validate_rejects(bad: dict) -> None:
     assert validate(bad, [{"index": 0, "name": "USB"}]) is not None
+
+
+def test_validate_allows_empty_rig_device_as_unset() -> None:
+    """空串口 = 不改动（UI 表单总是提交该字段，本站串口只在 restart.sh 默认里）。"""
+
+    assert validate({"rig_device": ""}, []) is None
+    assert validate({"rig_device": "  "}, []) is None
+
+
+def test_save_skips_empty_rig_device(tmp_path) -> None:
+    path = tmp_path / "device-config.json"
+    save_device_config({"rig_device": "", "audio_device": "FT8"}, path)
+    assert json.loads(path.read_text()) == {"audio_device": "FT8"}
 
 
 def test_validate_allows_unchanged_audio_even_when_absent() -> None:
