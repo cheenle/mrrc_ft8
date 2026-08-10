@@ -896,8 +896,9 @@ save_device_config(cfg, 'data/device-config.json')
 print('\n'.join(shell_env_lines(cfg)))
 "
 ```
-预期：`syntax OK` + 四行 `KEY=value`。随后人工验证 restart.sh 的 eval 段真实生效（不杀进程）：
+预期：`syntax OK` + 四行 `KEY=value`。随后人工验证 restart.sh 的 eval 段真实生效（不杀进程）：用与 restart.sh 相同的 python 片段生成 env 文件并 source：
 ```bash
+venv/bin/python -c "import json,pathlib;cfg=json.loads(pathlib.Path('data/device-config.json').read_text());print('MRRC_FT8_RIG_MODEL=%s' % cfg['rig_model'])" > /tmp/mrrc-rig.env
 bash -c 'source /tmp/mrrc-rig.env && echo "model=$MRRC_FT8_RIG_MODEL"'
 ```
 预期：`model=1049`
