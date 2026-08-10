@@ -11,7 +11,7 @@ cd "$(dirname "$0")"
 # data/device-config.json（server UI 可写，spec 2026-08-10）存在时覆盖
 # rigctld 拉起参数；env 仍是回退。rigctld 仍为串口唯一 owner（AD-008）。
 if [ -f "data/device-config.json" ]; then
-    eval "$(venv/bin/python -c '
+	eval "$(venv/bin/python -c '
 import json, pathlib
 cfg = json.loads(pathlib.Path("data/device-config.json").read_text())
 for env, key in (("MRRC_FT8_RIG_MODEL", "rig_model"),
@@ -31,74 +31,91 @@ RIGCTLD_PORT="${MRRC_FT8_RIGCTLD_PORT:-4532}"
 RIGCTLD_LOG="/tmp/mrrc-rigctld.err.log"
 RIG_START_ATTEMPTS=3
 
+# rigctld 绝对路径：apply 由 launchd 派生时 PATH 不含 /opt/local/bin
+# （2026-08-10 现场：apply 重启时 `nohup: rigctld: No such file or directory`）。
+if command -v rigctld >/dev/null 2>&1; then
+	RIGCTLD_BIN="$(command -v rigctld)"
+else
+	RIGCTLD_BIN="/opt/local/bin/rigctld"
+fi
+
 # ═══ 共享 rigctld 保活（2026-08-10，设备配置部署配套）═══════════════
 # 本机可能同时跑其他电台的 rigctld（旧 MRRC 项目共用机器的 IC-M710@4531）。
 # restart.sh 只负责自己拉起的 rigctld（-t $RIGCTLD_PORT）；其余是共享 daemon，
 # 快照其启动命令，在本站 rigctld 就绪后原样恢复，避免重启打掉别的电台 CAT。
 PRESERVE_RIGCTLD=()
 snapshot_shared_rigctld() {
-    local pid args
-    while read -r pid; do
-        [ -z "$pid" ] && continue
-        args="$(ps -o args= -p "$pid" 2>/dev/null | tr -d '\n')"
-        case "$args" in
-            *"-t $RIGCTLD_PORT"*) ;;                  # 本站 rigctld → 清理
-            *rigctld*) PRESERVE_RIGCTLD+=("$args") ;; # 共享 daemon → 保活
-        esac
-    done < <(pgrep -x rigctld 2>/dev/null || true)
+	local pid args
+	while read -r pid; do
+		[ -z "$pid" ] && continue
+		args="$(ps -o args= -p "$pid" 2>/dev/null | tr -d '\n')"
+		case "$args" in
+		*"-t $RIGCTLD_PORT"*) ;;                  # 本站 rigctld → 清理
+		*rigctld*) PRESERVE_RIGCTLD+=("$args") ;; # 共享 daemon → 保活
+		esac
+	done < <(pgrep -x rigctld 2>/dev/null || true)
 }
 relaunch_shared_rigctld() {
-    local args
-    for args in "${PRESERVE_RIGCTLD[@]}"; do
-        echo "Relaunching shared rigctld: $args"
-        nohup $args >> "$RIGCTLD_LOG" 2>&1 &
-    done
+	local args
+	for args in "${PRESERVE_RIGCTLD[@]}"; do
+		# ps 输出的命令首 token 可能是相对 "rigctld"，替换为绝对路径
+		# （launchd 派生环境无 PATH，2026-08-10 apply 现场）。
+		case "$args" in
+		rigctld*) args="$RIGCTLD_BIN${args#rigctld}" ;;
+		esac
+		echo "Relaunching shared rigctld: $args"
+		nohup $args >>"$RIGCTLD_LOG" 2>&1 &
+	done
 }
 
 # Find every running server instance: the :8000 LISTEN socket owner plus any
 # `python -m server.main` process. A survivor sharing the audio device leaves
 # the next server's capture session permanently degraded, so none may remain.
 old_server_pids() {
-    { lsof -iTCP:8000 -sTCP:LISTEN -t 2>/dev/null || true;
-      pgrep -f "server\.main" 2>/dev/null || true; } | sort -u
+	{
+		lsof -iTCP:8000 -sTCP:LISTEN -t 2>/dev/null || true
+		pgrep -f "server\.main" 2>/dev/null || true
+	} | sort -u
 }
 
 # Find every running rigctld: exact process-name match plus the loopback
 # listener.  A stale rigctld holds a serial fd that goes dead when the radio
 # power-cycles (macOS "Device not configured"), so it is always restarted.
 old_rigctld_pids() {
-    { pgrep -x rigctld 2>/dev/null || true;
-      lsof -iTCP:"$RIGCTLD_PORT" -sTCP:LISTEN -t 2>/dev/null || true; } | sort -u
+	{
+		pgrep -x rigctld 2>/dev/null || true
+		lsof -iTCP:"$RIGCTLD_PORT" -sTCP:LISTEN -t 2>/dev/null || true
+	} | sort -u
 }
 
 kill_pids() {
-    local name="$1" qfn="$2" pids
-    pids="$($qfn)"
-    if [ -z "$pids" ]; then
-        echo "$name 未在运行"
-        return 0
-    fi
-    echo "Killing $name (PID: $(echo "$pids" | tr '\n' ' '))..."
-    echo "$pids" | xargs kill 2>/dev/null || true
-    for _ in $(seq 1 20); do
-        pids="$($qfn)"
-        [ -z "$pids" ] && break
-        sleep 0.5
-    done
-    if [ -n "$pids" ]; then
-        echo "Force killing $name..."
-        echo "$pids" | xargs kill -9 2>/dev/null || true
-        for _ in $(seq 1 10); do
-            pids="$($qfn)"
-            [ -z "$pids" ] && break
-            sleep 0.5
-        done
-    fi
-    if [ -n "$pids" ]; then
-        echo "✗ 无法停止 $name，请手动检查" >&2
-        return 1
-    fi
-    echo "✓ $name 已停止"
+	local name="$1" qfn="$2" pids
+	pids="$($qfn)"
+	if [ -z "$pids" ]; then
+		echo "$name 未在运行"
+		return 0
+	fi
+	echo "Killing $name (PID: $(echo "$pids" | tr '\n' ' '))..."
+	echo "$pids" | xargs kill 2>/dev/null || true
+	for _ in $(seq 1 20); do
+		pids="$($qfn)"
+		[ -z "$pids" ] && break
+		sleep 0.5
+	done
+	if [ -n "$pids" ]; then
+		echo "Force killing $name..."
+		echo "$pids" | xargs kill -9 2>/dev/null || true
+		for _ in $(seq 1 10); do
+			pids="$($qfn)"
+			[ -z "$pids" ] && break
+			sleep 0.5
+		done
+	fi
+	if [ -n "$pids" ]; then
+		echo "✗ 无法停止 $name，请手动检查" >&2
+		return 1
+	fi
+	echo "✓ $name 已停止"
 }
 
 # ─── 1. 停止残留进程 ─────────────────────────────────────────────────
@@ -124,53 +141,56 @@ sleep 8
 # rig 轮询 90% 超时持续 4 小时）。发现冲突即拒绝启动并列出持有者；
 # MRRC_FT8_SKIP_SERIAL_GUARD=1 可强制跳过（应急/已知冲突场景）。
 serial_guard() {
-    command -v lsof >/dev/null 2>&1 || return 0
-    local holders owner
-    holders="$(lsof -t "$RIG_DEVICE" 2>/dev/null || true)"
-    [ -z "$holders" ] && return 0
-    for pid in $holders; do
-        owner="$(ps -o command= -p "$pid" 2>/dev/null | head -1)"
-        echo "✗ CAT 串口被非 rigctld 进程占用 (PID $pid): $owner" >&2
-    done
-    echo "✗ 串口唯一 owner 是 rigctld（AD-008）：请先停掉冲突进程后重跑本脚本；" >&2
-    echo "  或确认冲突已清理后 MRRC_FT8_SKIP_SERIAL_GUARD=1 强制启动" >&2
-    return 1
+	command -v lsof >/dev/null 2>&1 || return 0
+	local holders owner
+	holders="$(lsof -t "$RIG_DEVICE" 2>/dev/null || true)"
+	[ -z "$holders" ] && return 0
+	for pid in $holders; do
+		owner="$(ps -o command= -p "$pid" 2>/dev/null | head -1)"
+		echo "✗ CAT 串口被非 rigctld 进程占用 (PID $pid): $owner" >&2
+	done
+	echo "✗ 串口唯一 owner 是 rigctld（AD-008）：请先停掉冲突进程后重跑本脚本；" >&2
+	echo "  或确认冲突已清理后 MRRC_FT8_SKIP_SERIAL_GUARD=1 强制启动" >&2
+	return 1
 }
 
 if [ -n "${MRRC_FT8_SKIP_SERIAL_GUARD:-}" ]; then
-    echo "（MRRC_FT8_SKIP_SERIAL_GUARD 已设置，跳过串口占用守卫）"
+	echo "（MRRC_FT8_SKIP_SERIAL_GUARD 已设置，跳过串口占用守卫）"
 else
-    serial_guard || exit 1
+	serial_guard || exit 1
 fi
 
 # ─── 2. 启动 rigctld 并等待就绪 ──────────────────────────────────────
 start_rigctld() {
-    echo "Starting rigctld ($RIG_DEVICE @ $RIG_BAUD, model $RIG_MODEL, port $RIGCTLD_PORT)..."
-    nohup rigctld -m "$RIG_MODEL" -r "$RIG_DEVICE" -s "$RIG_BAUD" \
-        -T 127.0.0.1 -t "$RIGCTLD_PORT" -vvv >> "$RIGCTLD_LOG" 2>&1 &
-    local rig_pid=$!
-    for _ in $(seq 1 20); do
-        if lsof -iTCP:"$RIGCTLD_PORT" -sTCP:LISTEN -t 2>/dev/null | grep -q .; then
-            echo "rigctld ready (PID: $rig_pid)"
-            return 0
-        fi
-        kill -0 "$rig_pid" 2>/dev/null || break   # 进程已退出 → 启动失败
-        sleep 0.5
-    done
-    echo "✗ rigctld 启动失败" >&2
-    tail -20 "$RIGCTLD_LOG" >&2 || true
-    return 1
+	echo "Starting rigctld ($RIG_DEVICE @ $RIG_BAUD, model $RIG_MODEL, port $RIGCTLD_PORT)..."
+	nohup "$RIGCTLD_BIN" -m "$RIG_MODEL" -r "$RIG_DEVICE" -s "$RIG_BAUD" \
+		-T 127.0.0.1 -t "$RIGCTLD_PORT" -vvv >>"$RIGCTLD_LOG" 2>&1 &
+	local rig_pid=$!
+	for _ in $(seq 1 20); do
+		if lsof -iTCP:"$RIGCTLD_PORT" -sTCP:LISTEN -t 2>/dev/null | grep -q .; then
+			echo "rigctld ready (PID: $rig_pid)"
+			return 0
+		fi
+		kill -0 "$rig_pid" 2>/dev/null || break # 进程已退出 → 启动失败
+		sleep 0.5
+	done
+	echo "✗ rigctld 启动失败" >&2
+	tail -20 "$RIGCTLD_LOG" >&2 || true
+	return 1
 }
 
 RIG_UP=false
 for _ in $(seq 1 "$RIG_START_ATTEMPTS"); do
-    if start_rigctld; then RIG_UP=true; break; fi
-    echo "  重试（串口可能仍在枚举）..."
-    sleep 2
+	if start_rigctld; then
+		RIG_UP=true
+		break
+	fi
+	echo "  重试（串口可能仍在枚举）..."
+	sleep 2
 done
 if ! $RIG_UP; then
-    echo "✗ rigctld 未能启动 — server 无法控制电台（CAT 将显示红）" >&2
-    exit 1
+	echo "✗ rigctld 未能启动 — server 无法控制电台（CAT 将显示红）" >&2
+	exit 1
 fi
 
 # 恢复共享 rigctld（其他电台的 daemon 不归本站管，原样拉起）
@@ -178,17 +198,17 @@ relaunch_shared_rigctld
 
 # ─── 3. 启动 server ──────────────────────────────────────────────────
 echo "Starting server..."
-MRRC_FT8_LOG_LEVEL="${MRRC_FT8_LOG_LEVEL:-DEBUG}" nohup venv/bin/python -m server.main > /tmp/mrrc-ft8.out.log 2> /tmp/mrrc-ft8.err.log &
+MRRC_FT8_LOG_LEVEL="${MRRC_FT8_LOG_LEVEL:-DEBUG}" nohup venv/bin/python -m server.main >/tmp/mrrc-ft8.out.log 2>/tmp/mrrc-ft8.err.log &
 NEW_PID=$!
 echo "Started (PID: $NEW_PID)"
 
 for _ in $(seq 1 20); do
-    if lsof -iTCP:8000 -sTCP:LISTEN -t 2>/dev/null | grep -q "^$NEW_PID$"; then
-        echo "Server running on http://127.0.0.1:8000"
-        exit 0
-    fi
-    kill -0 $NEW_PID 2>/dev/null || break
-    sleep 0.5
+	if lsof -iTCP:8000 -sTCP:LISTEN -t 2>/dev/null | grep -q "^$NEW_PID$"; then
+		echo "Server running on http://127.0.0.1:8000"
+		exit 0
+	fi
+	kill -0 $NEW_PID 2>/dev/null || break
+	sleep 0.5
 done
 echo "FAILED - check logs:"
 tail -20 /tmp/mrrc-ft8.err.log
