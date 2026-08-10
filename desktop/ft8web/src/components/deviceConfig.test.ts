@@ -18,7 +18,7 @@ describe("DeviceSettings helpers", () => {
 		expect(f.rig_model).toBe(1049);
 		expect(f.rig_baud).toBe(38400);
 		expect(f.rig_stop_bits).toBe(1);
-		expect(f.rig_mode).toBe('USB');
+		expect(f.rig_mode).toBe("USB");
 		expect(f.rigctld_port).toBe(4532);
 		expect(f.audio_in_device).toBeNull();
 		expect(f.audio_out_device).toBeNull();
@@ -26,21 +26,26 @@ describe("DeviceSettings helpers", () => {
 	it("preserves the saved config", () => {
 		const f = formFromConfig({
 			rig_model: 3073,
-			audio_in_device: "USB In",
-			audio_out_device: "USB Out",
+			audio_in_device: 3,
+			audio_out_device: 2,
 			rig_mode: "LSB",
 			rig_stop_bits: 2,
 		});
 		expect(f.rig_model).toBe(3073);
 		expect(f.rig_stop_bits).toBe(2);
 		expect(f.rig_mode).toBe("LSB");
-		expect(f.audio_in_device).toBe("USB In");
-		expect(f.audio_out_device).toBe("USB Out");
+		expect(f.audio_in_device).toBe(3);
+		expect(f.audio_out_device).toBe(2);
 	});
-	it("falls back to the legacy single audio_device", () => {
+	it("coerces numeric-string audio values to indexes", () => {
+		const f = formFromConfig({ audio_in_device: "3", audio_out_device: "2" });
+		expect(f.audio_in_device).toBe(3);
+		expect(f.audio_out_device).toBe(2);
+	});
+	it("drops legacy non-numeric audio names (index-based UI)", () => {
 		const f = formFromConfig({ audio_device: "FT8" });
-		expect(f.audio_in_device).toBe("FT8");
-		expect(f.audio_out_device).toBe("FT8");
+		expect(f.audio_in_device).toBeNull();
+		expect(f.audio_out_device).toBeNull();
 	});
 	it("detects custom models", () => {
 		expect(isCustomModel(formFromConfig({ rig_model: 9999 }))).toBe(true);

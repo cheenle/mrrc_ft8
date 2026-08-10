@@ -7,8 +7,8 @@ export interface DeviceForm {
 	rig_stop_bits: number;
 	rig_mode: string;
 	rigctld_port: number;
-	audio_in_device: string | null;
-	audio_out_device: string | null;
+	audio_in_device: number | null;
+	audio_out_device: number | null;
 }
 
 export const RIG_MODEL_OPTIONS = [
@@ -26,6 +26,11 @@ export const RIG_MODE_OPTIONS = ["USB", "LSB", "AM", "FM", "CW", "RTTY"];
 export function formFromConfig(
 	cfg: Record<string, any> | undefined,
 ): DeviceForm {
+	// 音频设备用 index（重名设备按 name 会歧义）；兼容旧字符串名→null。
+	const audioVal = (v: any): number | null =>
+		typeof v === "number" ? v
+		: typeof v === "string" && /^\d+$/.test(v) ? Number(v)
+		: null;
 	return {
 		rig_model: typeof cfg?.rig_model === "number" ? cfg.rig_model : 1049,
 		rig_device: typeof cfg?.rig_device === "string" ? cfg.rig_device : "",
@@ -35,8 +40,8 @@ export function formFromConfig(
 		rig_mode: typeof cfg?.rig_mode === "string" ? cfg.rig_mode : "USB",
 		rigctld_port:
 			typeof cfg?.rigctld_port === "number" ? cfg.rigctld_port : 4532,
-		audio_in_device: cfg?.audio_in_device ?? cfg?.audio_device ?? null,
-		audio_out_device: cfg?.audio_out_device ?? cfg?.audio_device ?? null,
+		audio_in_device: audioVal(cfg?.audio_in_device ?? cfg?.audio_device),
+		audio_out_device: audioVal(cfg?.audio_out_device ?? cfg?.audio_device),
 	};
 }
 
@@ -294,15 +299,17 @@ export function DeviceSettings(props: DeviceSettingsProps) {
 				<label className="text-[10px] text-text-muted">Audio Input (RX)</label>
 				<select
 					className={selectCls}
-					value={form.audio_in_device ?? ""}
+					value={form.audio_in_device != null ? String(form.audio_in_device) : ""}
 					disabled={busy}
-					onChange={(e) => set({ audio_in_device: e.target.value || null })}
+					onChange={(e) =>
+						set({ audio_in_device: e.target.value ? Number(e.target.value) : null })
+					}
 				>
 					<option value="">System default</option>
 					{audioDevices
 						.filter((d) => d.max_input > 0)
 						.map((d) => (
-							<option key={d.index} value={d.name}>
+							<option key={d.index} value={d.index}>
 								{d.name}
 							</option>
 						))}
@@ -313,15 +320,17 @@ export function DeviceSettings(props: DeviceSettingsProps) {
 				<label className="text-[10px] text-text-muted">Audio Output (TX)</label>
 				<select
 					className={selectCls}
-					value={form.audio_out_device ?? ""}
+					value={form.audio_out_device != null ? String(form.audio_out_device) : ""}
 					disabled={busy}
-					onChange={(e) => set({ audio_out_device: e.target.value || null })}
+					onChange={(e) =>
+						set({ audio_out_device: e.target.value ? Number(e.target.value) : null })
+					}
 				>
 					<option value="">System default</option>
 					{audioDevices
 						.filter((d) => d.max_output > 0)
 						.map((d) => (
-							<option key={d.index} value={d.name}>
+							<option key={d.index} value={d.index}>
 								{d.name}
 							</option>
 						))}

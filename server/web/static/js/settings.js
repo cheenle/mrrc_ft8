@@ -394,7 +394,7 @@ export function createSettingsDrawer() {
 			)
 			.join("");
 		const audioOption = (d, current) =>
-			`<option value="${d.name}" ${d.name === current ? "selected" : ""}>${d.name}</option>`;
+			`<option value="${d.index}" ${String(d.index) === String(current ?? "") ? "selected" : ""}>${d.name}</option>`;
 		const audioInOptions =
 			`<option value="">System default</option>` +
 			audio_devices
@@ -448,8 +448,12 @@ export function createSettingsDrawer() {
       <label class="setting-row">
         <span>Rig mode</span>
         <select data-device-mode>
-          ${["USB", "LSB", "AM", "FM", "CW", "RTTY"].map((m) =>
-            `<option value="${m}" ${m === form.rig_mode ? "selected" : ""}>${m}</option>`).join("")}
+          ${["USB", "LSB", "AM", "FM", "CW", "RTTY"]
+						.map(
+							(m) =>
+								`<option value="${m}" ${m === form.rig_mode ? "selected" : ""}>${m}</option>`,
+						)
+						.join("")}
         </select>
       </label>
       <label class="setting-row">
@@ -510,9 +514,9 @@ export function createSettingsDrawer() {
 				content.querySelector("[data-device-port]")?.value ?? 4532,
 			),
 			audio_in_device:
-				content.querySelector("[data-device-audio-in]")?.value || null,
+				Number(content.querySelector("[data-device-audio-in]")?.value) || null,
 			audio_out_device:
-				content.querySelector("[data-device-audio-out]")?.value || null,
+				Number(content.querySelector("[data-device-audio-out]")?.value) || null,
 		});
 		content
 			.querySelector("[data-device-save]")
