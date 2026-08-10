@@ -504,10 +504,10 @@ RUMLOG_COLUMNS = """
 """
 
 
-def make_rumlog_db(path: Path, rows: list[dict[str, object]]) -> None:
+def _make_rumlog_db(path: Path, rows: list[dict[str, object]]) -> None:
     """Create a CoreQsoModel_1.sqlite-shaped db; rows use unix-style ZDATETIME.
 
-    Callers pass ``unix_epoch`` values; the fixture converts to Core Data
+    Callers pass ``unix_epoch`` values; the helper converts to Core Data
     seconds so mapper tests stay readable.
     """
 
@@ -525,6 +525,13 @@ def make_rumlog_db(path: Path, rows: list[dict[str, object]]) -> None:
         )
     con.commit()
     con.close()
+
+
+@pytest.fixture
+def make_rumlog_db():
+    """Fixture exposing the simulated-RUMLogNG-db builder."""
+
+    return _make_rumlog_db
 
 
 @pytest.fixture
@@ -561,13 +568,12 @@ import pytest
 
 from rumlog_sync.rumlog_reader import RUMlogReader, SchemaMismatch
 
-from .conftest import make_rumlog_db
-
 
 def _rows(sample: dict[str, object]) -> list[dict[str, object]]:
     rows = []
     for pk, suffix in ((27137, ""), (27139, "B")):
         row = dict(sample)
+        row["Z_PK"] = pk
         row["ZCALLSIGN"] = "TL8GD" + suffix
         rows.append(row)
     return rows
@@ -588,7 +594,9 @@ def test_reader_detects_missing_columns(tmp_path: Path, sample_rumlog_row) -> No
         RUMlogReader(db)
 
 
-def test_fetch_since_returns_only_new_rows(tmp_path: Path, sample_rumlog_row) -> None:
+def test_fetch_since_returns_only_new_rows(
+    tmp_path: Path, sample_rumlog_row, make_rumlog_db
+) -> None:
     db = tmp_path / "log.sqlite"
     make_rumlog_db(db, _rows(sample_rumlog_row))
     reader = RUMlogReader(db)
@@ -733,13 +741,13 @@ def test_build_qso_logged_format() -> None:
     payload = build_qso_logged(fields)
     text = payload.decode("ascii")
     assert text.startswith("<MessageType:10>QSO_LOGGED")
-    assert "<ADIF:148>" in text  # length prefix matches record below
     assert "<CALL:5>TL8GD" in text
     assert "<EOR>" in text
     assert payload.endswith(b"\x00")
     # Length prefix must equal the record length between <ADIF:N> and <EOR>.
     record = text.split("<ADIF:", 1)[1].split(">", 1)[1]
-    assert len(record) == 148
+    assert len(record) == 161
+    assert f"<ADIF:{len(record)}>" in text
 
 
 def test_send_payload_uses_injected_socket() -> None:
@@ -791,7 +799,9 @@ def build_heartbeat(udp_id: str, *, dial_freq_hz: int = 14_074_000) -> bytes:
     body = (
         _MESSAGE_TYPE_HEARTBEAT
         + _adif_field("Id", udp_id)
-        + _adif_field("DialFrequency", str(dial_freq_hz))
+        # DialFrequency uses WSJT-X's fixed 11-digit width (UInt64), not
+        # len(value) — RUMLogNG parses this exact form.
+        + f"<DialFrequency:11>{dial_freq_hz}"
         # Remaining WSJT-X heartbeat fields are zero/empty in our usage.
         + "<ConfigurationName:0><TxMessage:0><TxFreq:0><DeDup:0><SubTxMessage:0>"
         + "<RxDF:0><TxDF:0><TRPeriod:0><ModulationType:0><DXCall:0><DXGrid:0>"
@@ -863,7 +873,13 @@ import pytest
 from rumlog_sync.ft8_db import Ft8Db
 
 
-def _record(dx_call: str = "TL8GD", epoch: float = 1_795_384_049.0, band: str = "20m"):
+def _record(
+    dx_call: str = "TL8GD",
+    epoch: float = 1_795_384_049.0,
+    band: str = "20m",
+    rumlog_uuid: str = "",
+    source: str = "rumlog",
+):
     return {
         "my_call": "BG1SB",
         "my_grid": "ON80DA",
@@ -877,8 +893,8 @@ def _record(dx_call: str = "TL8GD", epoch: float = 1_795_384_049.0, band: str = 
         "band": band,
         "status": "completed",
         "completed_epoch": epoch,
-        "rumlog_uuid": "",
-        "source": "rumlog",
+        "rumlog_uuid": rumlog_uuid,
+        "source": source,
     }
 
 
@@ -938,7 +954,7 @@ def test_update_from_rumlog_overwrites_fields(ft8_db_path) -> None:
 def test_push_state_machine(ft8_db_path) -> None:
     db = Ft8Db(ft8_db_path)
     db.ensure_schema()
-    qso_id = db.insert_record(_record())
+    qso_id = db.insert_record(_record(source="live"))  # needs a push
     assert db.pending_push() == [qso_id]
     db.mark_pushed(qso_id)
     assert db.pending_push() == []
@@ -965,18 +981,6 @@ def test_audit_recorded(ft8_db_path) -> None:
     assert rows == [("rumlog_pull", "inserted=2 skipped=1")]
 ```
 
-注意：`_record` 需接受 `rumlog_uuid` 关键字；`get_record` 返回 dict。修正 `_record` 签名：
-
-```python
-def _record(dx_call: str = "TL8GD", epoch: float = 1_795_384_049.0,
-            band: str = "20m", rumlog_uuid: str = ""):
-    return {
-        ...,
-        "rumlog_uuid": rumlog_uuid,
-        "source": "rumlog",
-    }
-```
-
 - [ ] **步骤 2：运行测试验证失败**
 
 运行：`venv/bin/python -m pytest tests/rumlog_sync/test_ft8_db.py -v`
@@ -991,8 +995,8 @@ The server's Repository keeps its own explicit-column queries, so adding
 ``rumlog_uuid`` / ``pushed_to_rumlog`` columns is backward compatible.
 Migrations are idempotent (PRAGMA probe + ADD COLUMN).  Push state uses a
 per-record attempt counter in ``rumlog_sync_state`` (JSON map keyed by qso
-id): ``reset_unconfirmed`` requeues records whose unconfirmed pushes have
-reached ``confirm_retries``.
+id): ``tick_unconfirmed`` ages the counters and requeues records whose
+unconfirmed pushes have reached ``confirm_retries``.
 """
 
 from __future__ import annotations
@@ -1055,17 +1059,19 @@ class Ft8Db:
     # ---- writes ---------------------------------------------------------
 
     def insert_record(self, rec: dict[str, object]) -> int:
+        # Records pulled from RUMLogNG already exist there → never re-push.
+        pushed = 1 if rec.get("source") == "rumlog" else 0
         cur = self._con.execute(
             "INSERT INTO qso (my_call, my_grid, dx_call, dx_grid, report_sent,"
             " report_rcvd, started_utc, mode, freq_hz, band, status,"
-            " completed_epoch, rumlog_uuid, source)"
-            " VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+            " completed_epoch, rumlog_uuid, source, pushed_to_rumlog)"
+            " VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
             (
                 rec["my_call"], rec["my_grid"], rec["dx_call"], rec["dx_grid"],
                 rec["report_sent"], rec["report_rcvd"], rec["started_utc"],
                 rec["mode"], rec["freq_hz"], rec["band"], rec["status"],
                 rec["completed_epoch"], rec.get("rumlog_uuid", ""),
-                rec.get("source", "rumlog"),
+                rec.get("source", "rumlog"), pushed,
             ),
         )
         return int(cur.lastrowid)
@@ -1142,9 +1148,12 @@ class Ft8Db:
         self.state_set(PUSH_PENDING_KEY, json.dumps(pending))
         return requeued
 
-    def confirm_uuid(self, qso_id: int) -> None:
-        """Push confirmed (RUMLogNG row observed); drop pending counter."""
+    def confirm_pushed(self, qso_id: int) -> None:
+        """RUMLogNG now holds this QSO: mark pushed and clear pending."""
 
+        self._con.execute(
+            "UPDATE qso SET pushed_to_rumlog = 1 WHERE id = ?", (qso_id,)
+        )
         pending = json.loads(self.state_get(PUSH_PENDING_KEY) or "{}")
         pending.pop(str(qso_id), None)
         self.state_set(PUSH_PENDING_KEY, json.dumps(pending))
@@ -1211,12 +1220,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from rumlog_sync.ft8_db import Ft8Db
-from rumlog_sync.mapper import CORE_DATA_EPOCH_OFFSET, to_unix
-from rumlog_sync.rumlog_reader import RUMlogReader
-from rumlog_sync.sync import SyncReport, run_sync_once
-from rumlog_sync.wsjt_udp import build_heartbeat, build_qso_logged
-
-from .conftest import make_rumlog_db
+from rumlog_sync.sync import run_sync_once
 
 
 @dataclass
@@ -1256,7 +1260,9 @@ def _rumlog_row(callsign: str, pk: int, unix_epoch: float, band: str = "20m"):
     }
 
 
-def test_full_merge_then_incremental(ft8_db_path, tmp_path: Path) -> None:
+def test_full_merge_then_incremental(
+    ft8_db_path, tmp_path: Path, make_rumlog_db
+) -> None:
     rumlog = tmp_path / "log.sqlite"
     make_rumlog_db(
         rumlog,
@@ -1279,7 +1285,8 @@ def test_full_merge_then_incremental(ft8_db_path, tmp_path: Path) -> None:
         ("TL8GD", f"{27139:032x}".upper()),
         ("BI4QMU", f"{27140:032x}".upper()),
     ]
-    assert all(r["pushed_to_rumlog"] == 0 for r in rows)
+    # Pulled records already exist in RUMLogNG → never queued for push.
+    assert all(r["pushed_to_rumlog"] == 1 for r in rows)
     # Nothing pushed: pulled records are already on the RUMLogNG side.
     assert sender.payloads == []
     # Second round is a no-op (cursor advanced).
@@ -1288,7 +1295,9 @@ def test_full_merge_then_incremental(ft8_db_path, tmp_path: Path) -> None:
     assert report2.inserted == 0
 
 
-def test_conflict_resolution_prefers_rumlog(ft8_db_path, tmp_path: Path) -> None:
+def test_conflict_resolution_prefers_rumlog(
+    ft8_db_path, tmp_path: Path, make_rumlog_db
+) -> None:
     # Pre-existing FT8 record (from jtdx import) with different grid/RST.
     db = Ft8Db(ft8_db_path)
     db.ensure_schema()
@@ -1312,9 +1321,13 @@ def test_conflict_resolution_prefers_rumlog(ft8_db_path, tmp_path: Path) -> None
     assert row["dx_grid"] == "PM02"
     assert row["report_sent"] == -12
     assert row["rumlog_uuid"] == f"{27139:032x}".upper()
+    # Matched record exists in RUMLogNG → confirmed, not queued for push.
+    assert row["pushed_to_rumlog"] == 1
 
 
-def test_push_new_ft8_record_and_confirm_next_round(ft8_db_path, tmp_path: Path) -> None:
+def test_push_new_ft8_record_and_confirm_next_round(
+    ft8_db_path, tmp_path: Path, make_rumlog_db
+) -> None:
     db = Ft8Db(ft8_db_path)
     db.ensure_schema()
     db.insert_record(
@@ -1357,7 +1370,9 @@ def test_push_new_ft8_record_and_confirm_next_round(ft8_db_path, tmp_path: Path)
     assert json.loads(db.state_get("push_pending") or "{}") == {}
 
 
-def test_unconfirmed_push_requeued_after_retries(ft8_db_path, tmp_path: Path) -> None:
+def test_unconfirmed_push_requeued_after_retries(
+    ft8_db_path, tmp_path: Path, make_rumlog_db
+) -> None:
     db = Ft8Db(ft8_db_path)
     db.ensure_schema()
     db.insert_record(
@@ -1434,7 +1449,7 @@ def run_sync_once(cfg: dict[str, object], *, sender: Sender = send_payload) -> S
     ft8.ensure_schema()
     try:
         reader = RUMlogReader(str(cfg["rumlog_db"]))
-    except OSError as exc:
+    except (OSError, RuntimeError) as exc:  # open failure / schema mismatch
         report.errors.append(f"cannot open RUMLogNG db: {exc}")
         ft8.close()
         return report
@@ -1461,12 +1476,10 @@ def run_sync_once(cfg: dict[str, object], *, sender: Sender = send_payload) -> S
                 # RUMLogNG wins on its fields; keep FT8 completion times.
                 merged = dict(rec)
                 ft8.update_from_rumlog(existing, merged)
+                # The QSO exists in RUMLogNG → never push it back; confirm.
+                ft8.confirm_pushed(existing)
                 report.updated += 1
                 log.info("updated QSO %s from RUMLogNG", rec["dx_call"])
-                # Push confirmation: RUMLogNG now holds this QSO.
-                existing_row = ft8.get_record(existing)
-                if existing_row and existing_row["pushed_to_rumlog"] == 1:
-                    ft8.confirm_uuid(existing)
             report.pulled += 1
             last_pk = max(last_pk, pk)
         ft8.state_set("last_seen_pk", str(last_pk))
@@ -1504,12 +1517,12 @@ def run_sync_once(cfg: dict[str, object], *, sender: Sender = send_payload) -> S
     return report
 ```
 
-注意：`send_payload` 签名是 `(payload, host, port, *, sock=None)`，与 `Sender` 类型 `Callable[[bytes, str, int], None]` 兼容（关键字 sock 默认）；推送统一走注入的 `sender`（测试用 CapturedSend 捕获）。`tick_unconfirmed` 在推送前调用，超限记录本轮 requeue 并重推；Step 1 命中已推送记录时调 `confirm_uuid` 完成闭环确认。
+注意：`send_payload` 签名是 `(payload, host, port, *, sock=None)`，与 `Sender` 类型 `Callable[[bytes, str, int], None]` 兼容（关键字 sock 默认）；推送统一走注入的 `sender`（测试用 CapturedSend 捕获）。`tick_unconfirmed` 在推送前调用，超限记录本轮 requeue 并重推；Step 1 更新分支无条件 `confirm_pushed`（RUMLogNG 里有该记录就确认，绝不反向推回）。从 RUMLogNG 拉取插入的记录在 `insert_record` 中直接 `pushed_to_rumlog=1`（已在 RUMLogNG，无需推送）。
 
 - [ ] **步骤 4：运行测试验证通过**
 
 运行：`venv/bin/python -m pytest tests/rumlog_sync/ -v`
-预期：PASS（含前 4 任务共 26 passed）
+预期：PASS（6 个任务共 30 passed）
 
 - [ ] **步骤 5：Commit**
 
@@ -1553,9 +1566,12 @@ def _write_config(tmp_path: Path) -> Path:
     return cfg
 
 
-def test_run_cli_missing_config_uses_defaults(tmp_path: Path) -> None:
-    code = run_cli(["--config", str(tmp_path / "nope.json")], cwd=str(tmp_path))
-    assert code == 0  # RUMLogNG open failure is a soft error, exit 0
+def test_run_cli_soft_error_on_missing_rumlog_db(tmp_path: Path) -> None:
+    # Explicit config avoids touching the real RUMLogNG store; its
+    # rumlog_db points at a missing file → soft error, exit 0.
+    cfg = _write_config(tmp_path)
+    code = run_cli(["--config", str(cfg)], cwd=str(tmp_path))
+    assert code == 0
 
 
 def test_run_cli_bad_config_exits_nonzero(tmp_path: Path) -> None:
@@ -1906,4 +1922,4 @@ git commit -m "docs: RUMLogNG sync deploy guide (crontab + first-run + smoke)"
 ## 自检记录
 
 - **规格覆盖度**：§3.1 形态→任务 1/7；§3.2 流程→任务 6；§4 映射→任务 2；§5 去重→任务 2/5；§6 UDP→任务 4/7(--smoke)；§7 错误处理→任务 6（软错误+audit）+任务 7（退出码）；§8 迁移→任务 5；§9 测试→任务 2–7；§10 文档同步→任务 8；§11 部署→任务 9。§12 范围外未实现（符合 YAGNI）。
-- **类型一致性**：`record dict` 键名（dx_call/band/completed_epoch/rumlog_uuid…）在 mapper/ft8_db/sync 三处一致；`Sender` 签名 `(payload, host, port)` 与 `send_payload(payload, host, port, *, sock=None)` 兼容，推送统一走注入 `sender`（测试可捕获）；推送状态机统一为 `mark_pushed` / `tick_unconfirmed(confirm_retries)` / `confirm_uuid`（任务 5 定义，任务 6 使用），`pending_push_records` 含 `id` 列；`Ft8Db.rollback` 在任务 5 定义、任务 6 使用；确认闭环：Step 1 更新分支命中 `pushed_to_rumlog=1` 记录时调 `confirm_uuid`。
+- **类型一致性**：`record dict` 键名（dx_call/band/completed_epoch/rumlog_uuid…）在 mapper/ft8_db/sync 三处一致；`Sender` 签名 `(payload, host, port)` 与 `send_payload(payload, host, port, *, sock=None)` 兼容，推送统一走注入 `sender`（测试可捕获）；推送状态机统一为 `mark_pushed` / `tick_unconfirmed(confirm_retries)` / `confirm_pushed`（任务 5 定义，任务 6 使用），`pending_push_records` 含 `id` 列；`Ft8Db.rollback` 在任务 5 定义、任务 6 使用。**反向推回防护**：`insert_record` 对 `source='rumlog'` 的记录直接 `pushed_to_rumlog=1`；Step 1 更新分支无条件 `confirm_pushed`（记录在 RUMLogNG 存在即确认），从 RUMLogNG 拉取的记录绝不推回 RUMLogNG。
