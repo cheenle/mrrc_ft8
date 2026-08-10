@@ -112,6 +112,8 @@ def test_validate_accepts_good_config() -> None:
     {"rigctld_port": 80},
     {"rigctld_port": 8000},
     {"audio_device": "Not-There"},
+    {"rig_model": True},
+    {"audio_device": True},
 ])
 def test_validate_rejects(bad: dict) -> None:
     assert validate(bad, [{"index": 0, "name": "USB"}]) is not None

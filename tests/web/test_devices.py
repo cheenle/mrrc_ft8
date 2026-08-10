@@ -137,6 +137,17 @@ def test_devices_apply_locked_during_tx(client, tmp_path) -> None:
     assert res.json()["reason"] == "tx_active"
 
 
+@pytest.mark.parametrize("method,path", [
+    ("get", "/api/v1/devices"),
+    ("put", "/api/v1/devices"),
+    ("post", "/api/v1/devices/apply"),
+])
+def test_devices_require_session(client, method, path) -> None:
+    kwargs = {"json": {}} if method != "get" else {}
+    res = getattr(client, method)(path, **kwargs)
+    assert res.status_code == 401
+
+
 def test_devices_apply_spawns_restart(client, tmp_path) -> None:
     save_device_config({"rigctld_port": 4532}, tmp_path / "device-config.json")
     session_id = login(client)

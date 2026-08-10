@@ -79,6 +79,7 @@ export function DeviceSettings(props: DeviceSettingsProps) {
     setForm(next);
     setCustomModel(String(next.rig_model));
     setModelIsCustom(isCustomModel(next));
+    setCustomDevice(String(next.rig_device ?? ''));
     setDeviceIsCustom(
       !!(next.rig_device && !serialDevices.includes(next.rig_device)),
     );
