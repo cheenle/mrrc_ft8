@@ -673,7 +673,7 @@ def test_devices_put_rejects_invalid(client, monkeypatch) -> None:
 
 def test_devices_put_locked_during_tx(client, tmp_path, monkeypatch) -> None:
     session_id = login(client)
-    acquire_lease(client, session_id)
+    acquire_lease(client)
     client.post("/api/v1/operation/cq", headers=auth_headers(session_id))
     res = client.put(
         "/api/v1/devices", json={"rigctld_port": 4533}, headers=auth_headers(session_id)
@@ -692,7 +692,7 @@ def test_devices_apply_requires_saved_config(client) -> None:
 def test_devices_apply_locked_during_tx(client, tmp_path) -> None:
     save_device_config({"rigctld_port": 4532}, tmp_path / "device-config.json")
     session_id = login(client)
-    acquire_lease(client, session_id)
+    acquire_lease(client)
     client.post("/api/v1/operation/cq", headers=auth_headers(session_id))
     res = client.post("/api/v1/devices/apply", headers=auth_headers(session_id))
     assert res.status_code == 409
