@@ -7,6 +7,23 @@ cd "$(dirname "$0")"
 # FT-710 实测参数; 换电台/串口时覆盖环境变量即可:
 #   MRRC_FT8_RIG_MODEL / MRRC_FT8_RIG_DEVICE / MRRC_FT8_RIG_BAUD / MRRC_FT8_RIGCTLD_PORT
 # rigctld 监听端口必须与 server 的 MRRC_FT8_RIGCTLD（默认 127.0.0.1:4532）一致。
+
+# data/device-config.json（server UI 可写，spec 2026-08-10）存在时覆盖
+# rigctld 拉起参数；env 仍是回退。rigctld 仍为串口唯一 owner（AD-008）。
+if [ -f "data/device-config.json" ]; then
+    eval "$(venv/bin/python -c '
+import json, pathlib
+cfg = json.loads(pathlib.Path("data/device-config.json").read_text())
+for env, key in (("MRRC_FT8_RIG_MODEL", "rig_model"),
+                 ("MRRC_FT8_RIG_DEVICE", "rig_device"),
+                 ("MRRC_FT8_RIG_BAUD", "rig_baud"),
+                 ("MRRC_FT8_RIGCTLD_PORT", "rigctld_port")):
+    v = cfg.get(key)
+    if v is not None:
+        print(f"{env}={v!r}")
+')"
+fi
+
 RIG_MODEL="${MRRC_FT8_RIG_MODEL:-1049}"
 RIG_DEVICE="${MRRC_FT8_RIG_DEVICE:-/dev/cu.usbserial-0121DB3A0}"
 RIG_BAUD="${MRRC_FT8_RIG_BAUD:-38400}"
