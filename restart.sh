@@ -31,6 +31,30 @@ RIGCTLD_PORT="${MRRC_FT8_RIGCTLD_PORT:-4532}"
 RIGCTLD_LOG="/tmp/mrrc-rigctld.err.log"
 RIG_START_ATTEMPTS=3
 
+# ═══ 共享 rigctld 保活（2026-08-10，设备配置部署配套）═══════════════
+# 本机可能同时跑其他电台的 rigctld（旧 MRRC 项目共用机器的 IC-M710@4531）。
+# restart.sh 只负责自己拉起的 rigctld（-t $RIGCTLD_PORT）；其余是共享 daemon，
+# 快照其启动命令，在本站 rigctld 就绪后原样恢复，避免重启打掉别的电台 CAT。
+PRESERVE_RIGCTLD=()
+snapshot_shared_rigctld() {
+    local pid args
+    while read -r pid; do
+        [ -z "$pid" ] && continue
+        args="$(ps -o args= -p "$pid" 2>/dev/null | tr -d '\n')"
+        case "$args" in
+            *"-t $RIGCTLD_PORT"*) ;;                  # 本站 rigctld → 清理
+            *rigctld*) PRESERVE_RIGCTLD+=("$args") ;; # 共享 daemon → 保活
+        esac
+    done < <(pgrep -x rigctld 2>/dev/null || true)
+}
+relaunch_shared_rigctld() {
+    local args
+    for args in "${PRESERVE_RIGCTLD[@]}"; do
+        echo "Relaunching shared rigctld: $args"
+        nohup $args >> "$RIGCTLD_LOG" 2>&1 &
+    done
+}
+
 # Find every running server instance: the :8000 LISTEN socket owner plus any
 # `python -m server.main` process. A survivor sharing the audio device leaves
 # the next server's capture session permanently degraded, so none may remain.
@@ -78,10 +102,12 @@ kill_pids() {
 }
 
 # ─── 1. 停止残留进程 ─────────────────────────────────────────────────
+snapshot_shared_rigctld
 OLD_SERVER=$(old_server_pids)
 [ -n "$OLD_SERVER" ] && kill_pids "existing server" old_server_pids
 
-# rigctld 也要重启: radio 电源循环后其串口 fd 失效, 必须重新打开设备
+# 本站 rigctld 重启（radio 电源循环后其串口 fd 失效, 必须重新打开设备）；
+# 共享 daemon 已在 snapshot_shared_rigctld 里快照，稍后恢复。
 OLD_RIGCTLD=$(old_rigctld_pids)
 [ -n "$OLD_RIGCTLD" ] && kill_pids "existing rigctld" old_rigctld_pids
 
@@ -146,6 +172,9 @@ if ! $RIG_UP; then
     echo "✗ rigctld 未能启动 — server 无法控制电台（CAT 将显示红）" >&2
     exit 1
 fi
+
+# 恢复共享 rigctld（其他电台的 daemon 不归本站管，原样拉起）
+relaunch_shared_rigctld
 
 # ─── 3. 启动 server ──────────────────────────────────────────────────
 echo "Starting server..."
