@@ -965,7 +965,7 @@ git commit -m "feat(deploy): restart.sh reads data/device-config.json for rigctl
 
 ```tsx
 // desktop/ft8web/src/components/DeviceSettings.tsx
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 
 export interface DeviceForm {
   rig_model: number;
@@ -1016,19 +1016,26 @@ export function DeviceSettings(props: DeviceSettingsProps) {
   const [form, setForm] = useState<DeviceForm>(() => formFromConfig(config));
   const [customModel, setCustomModel] = useState('');
   const [customDevice, setCustomDevice] = useState('');
+  const [deviceIsCustom, setDeviceIsCustom] = useState(() =>
+    !!(form.rig_device && !serialDevices.includes(form.rig_device)),
+  );
   const [error, setError] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
   const [restarting, setRestarting] = useState(false);
+  // The form last saved to the server: a config refresh triggered by the save
+  // itself must not reset `saved` (otherwise Apply is permanently unreachable).
+  const savedFormRef = useRef<DeviceForm | null>(null);
 
   useEffect(() => {
-    setForm(formFromConfig(config));
-    setSaved(false);
+    const next = formFromConfig(config);
+    setForm(next);
+    const s = savedFormRef.current;
+    setSaved(Boolean(s) && JSON.stringify(s) === JSON.stringify(next));
   }, [config]);
 
   const modelIsCustom = useMemo(() => isCustomModel(form), [form]);
   const effectiveCustomModel = modelIsCustom ? String(form.rig_model) : customModel;
-  const effectiveCustomDevice =
-    form.rig_device && !serialDevices.includes(form.rig_device) ? form.rig_device : customDevice;
+  const effectiveCustomDevice = deviceIsCustom ? customDevice : '';
 
   const set = (patch: Partial<DeviceForm>) => setForm(f => ({ ...f, ...patch }));
 
@@ -1040,10 +1047,16 @@ export function DeviceSettings(props: DeviceSettingsProps) {
       if (!Number.isInteger(n) || n <= 0) { setError('Custom rig model must be a positive integer'); return; }
       next.rig_model = n;
     }
-    if (effectiveCustomDevice && !next.rig_device) next.rig_device = effectiveCustomDevice;
+    if (deviceIsCustom) {
+      if (!effectiveCustomDevice.trim().startsWith('/dev/')) {
+        setError('Custom serial device must be an absolute /dev/... path');
+        return;
+      }
+      next.rig_device = effectiveCustomDevice;
+    }
     const err = await onSave(next);
     if (err) setError(err);
-    else setSaved(true);
+    else { savedFormRef.current = next; setSaved(true); }
   };
 
   const handleApply = async () => {
@@ -1091,9 +1104,14 @@ export function DeviceSettings(props: DeviceSettingsProps) {
         <label className="text-[10px] text-text-muted">CAT Serial Device</label>
         <select
           className={selectCls}
-          value={form.rig_device}
+          value={deviceIsCustom ? 'custom' : form.rig_device}
           onChange={e => {
-            if (e.target.value === 'custom') { setCustomDevice(form.rig_device); return; }
+            if (e.target.value === 'custom') {
+              setDeviceIsCustom(true);
+              setCustomDevice(form.rig_device);
+              return;
+            }
+            setDeviceIsCustom(false);
             set({ rig_device: e.target.value });
           }}
           disabled={busy}
@@ -1102,10 +1120,10 @@ export function DeviceSettings(props: DeviceSettingsProps) {
           {serialDevices.map(d => <option key={d} value={d}>{d}</option>)}
           <option value="custom">Custom…</option>
         </select>
-        {effectiveCustomDevice && !serialDevices.includes(form.rig_device) && (
+        {deviceIsCustom && (
           <input
             className={selectCls} value={effectiveCustomDevice}
-            onChange={e => setCustomDevice(e.target.value)}
+            onChange={e => { setCustomDevice(e.target.value); set({ rig_device: e.target.value }); }}
           />
         )}
       </div>
