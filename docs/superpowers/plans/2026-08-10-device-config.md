@@ -965,7 +965,7 @@ git commit -m "feat(deploy): restart.sh reads data/device-config.json for rigctl
 
 ```tsx
 // desktop/ft8web/src/components/DeviceSettings.tsx
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 
 export interface DeviceForm {
   rig_model: number;
@@ -1014,8 +1014,9 @@ export interface DeviceSettingsProps {
 export function DeviceSettings(props: DeviceSettingsProps) {
   const { config, source, audioDevices, serialDevices, busy, onSave, onApply } = props;
   const [form, setForm] = useState<DeviceForm>(() => formFromConfig(config));
-  const [customModel, setCustomModel] = useState('');
+  const [customModel, setCustomModel] = useState(() => String(form.rig_model));
   const [customDevice, setCustomDevice] = useState('');
+  const [modelIsCustom, setModelIsCustom] = useState(() => isCustomModel(form));
   const [deviceIsCustom, setDeviceIsCustom] = useState(() =>
     !!(form.rig_device && !serialDevices.includes(form.rig_device)),
   );
@@ -1029,12 +1030,13 @@ export function DeviceSettings(props: DeviceSettingsProps) {
   useEffect(() => {
     const next = formFromConfig(config);
     setForm(next);
+    setCustomModel(String(next.rig_model));
+    setModelIsCustom(isCustomModel(next));
+    setDeviceIsCustom(!!(next.rig_device && !serialDevices.includes(next.rig_device)));
     const s = savedFormRef.current;
     setSaved(Boolean(s) && JSON.stringify(s) === JSON.stringify(next));
   }, [config]);
 
-  const modelIsCustom = useMemo(() => isCustomModel(form), [form]);
-  const effectiveCustomModel = modelIsCustom ? String(form.rig_model) : customModel;
   const effectiveCustomDevice = deviceIsCustom ? customDevice : '';
 
   const set = (patch: Partial<DeviceForm>) => setForm(f => ({ ...f, ...patch }));
@@ -1043,7 +1045,7 @@ export function DeviceSettings(props: DeviceSettingsProps) {
     setError(null);
     const next: DeviceForm = { ...form };
     if (modelIsCustom) {
-      const n = Number(effectiveCustomModel);
+      const n = Number(customModel);
       if (!Number.isInteger(n) || n <= 0) { setError('Custom rig model must be a positive integer'); return; }
       next.rig_model = n;
     }
@@ -1081,7 +1083,8 @@ export function DeviceSettings(props: DeviceSettingsProps) {
           className={selectCls}
           value={modelIsCustom ? 'custom' : form.rig_model}
           onChange={e => {
-            if (e.target.value === 'custom') { setCustomModel(String(form.rig_model)); return; }
+            if (e.target.value === 'custom') { setModelIsCustom(true); setCustomModel(String(form.rig_model)); return; }
+            setModelIsCustom(false);
             set({ rig_model: Number(e.target.value) });
           }}
           disabled={busy}
@@ -1094,7 +1097,7 @@ export function DeviceSettings(props: DeviceSettingsProps) {
         {modelIsCustom && (
           <input
             type="number" min={1} className={selectCls}
-            value={effectiveCustomModel}
+            value={customModel}
             onChange={e => setCustomModel(e.target.value)}
           />
         )}
