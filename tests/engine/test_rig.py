@@ -659,3 +659,11 @@ def test_close_is_idempotent(rig: FakeRigctld) -> None:
         await rig.stop()
 
     run(main())
+
+
+def test_rig_client_exposes_host_and_port() -> None:
+    from server.engine.rig import RigClient
+
+    rig = RigClient(host="127.0.0.2", port=4533)
+    assert rig.host == "127.0.0.2"
+    assert rig.port == 4533

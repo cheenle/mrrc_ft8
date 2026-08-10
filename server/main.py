@@ -48,6 +48,7 @@ from .engine.sequencer import (
 from .engine.bands import band_from_freq_hz
 from .engine.audio_tx import TxPlayer
 from .engine.waterfall import SpectrumComputer, SpectrumFanout
+from .engine.device_config import DeviceConfigStore, load_device_config, merge_into
 from .web.api import AppState, create_app, _fresh_dxcc_cache, _snapshot
 from .web.auth import AuthService
 from .web.lease import LeaseEventKind, LeaseService
@@ -311,6 +312,7 @@ def create_server(
         rig=rig_client,
         allowed_hosts=config.allowed_hosts,
         band_hunt_url=config.band_hunt_url,
+        device_config=DeviceConfigStore(),
         state_broadcast=StateBroadcaster(),
         decode_broadcast=DecodeBroadcaster(),
         waterfall_fanout=SpectrumFanout(),
@@ -1051,6 +1053,10 @@ def main() -> None:
         return
 
     config = ServerConfig.from_env()
+    device_file = load_device_config()
+    if device_file:
+        config = merge_into(config, device_file)
+        log.info("device config file overrides: %s", sorted(device_file))
     app = create_server(config)
     uvicorn.run(app, host="127.0.0.1", port=8000)
 

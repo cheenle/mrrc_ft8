@@ -175,6 +175,14 @@ class RigClient:
 
         return self._writer is not None
 
+    @property
+    def host(self) -> str:
+        return self._host
+
+    @property
+    def port(self) -> int:
+        return self._port
+
     async def connect(self) -> None:
         """Open the rigctld session; idempotent when already connected."""
 

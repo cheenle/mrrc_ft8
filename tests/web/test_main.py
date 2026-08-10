@@ -574,3 +574,18 @@ def test_desktop_mount_serves_client() -> None:
         response = client.get("/desktop/")
         assert response.status_code == 200
         assert "MRRC-FT8 Desktop" in response.text
+
+
+def test_server_config_merges_device_file(tmp_path) -> None:
+    from server.engine.device_config import load_device_config, merge_into, save_device_config
+    from server.main import ServerConfig
+
+    path = tmp_path / "device-config.json"
+    save_device_config({"audio_device": "USB Audio", "rigctld_port": 4533}, path)
+    base = ServerConfig(
+        password_hash="h", my_call="M0XX", my_grid="IO91",
+        allowed_hosts=frozenset({"localhost"}),
+    )
+    config = merge_into(base, load_device_config(path))
+    assert config.audio_device == "USB Audio"
+    assert config.rigctld_port == 4533

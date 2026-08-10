@@ -162,6 +162,7 @@ class AppState:
     dxcc_cache: Any = None  # cached DxccSummary; rebuilt when repository.dxcc_dirty
     band_hunt_url: str | None = None  # pskreporter /api/band_hunt (NFR-088); None = off
     band_hunt_cache: _BandHuntCache = field(default_factory=_BandHuntCache)
+    device_config: Any = None  # DeviceConfigStore when wired
 
     def bump(self) -> int:
         self.revision += 1
