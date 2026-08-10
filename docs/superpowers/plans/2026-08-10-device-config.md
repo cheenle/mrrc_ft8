@@ -234,6 +234,17 @@ _ENV_KEY = {
     "audio_device": "MRRC_FT8_AUDIO_DEVICE",
 }
 
+# source_of 的 env 检测用 server 侧语义：rigctld_port 的 server 连接变量是
+# ``MRRC_FT8_RIGCTLD``（host:port），restart.sh 拉起变量是
+# ``MRRC_FT8_RIGCTLD_PORT``（仅端口）——两者用途不同，分开维护。
+_SOURCE_ENV = {
+    "rig_model": "MRRC_FT8_RIG_MODEL",
+    "rig_device": "MRRC_FT8_RIG_DEVICE",
+    "rig_baud": "MRRC_FT8_RIG_BAUD",
+    "rigctld_port": "MRRC_FT8_RIGCTLD",  # server 实际连接所用 env（host:port）
+    "audio_device": "MRRC_FT8_AUDIO_DEVICE",
+}
+
 
 def load_device_config(path: str | Path = DEFAULT_CONFIG_PATH) -> dict[str, Any] | None:
     """Return the saved device config, or None when absent/corrupt."""
@@ -389,7 +400,7 @@ def source_of(file_cfg: dict[str, Any] | None, environ: Any = os.environ) -> dic
     for key in _CONFIG_KEYS:
         if file_cfg and key in file_cfg:
             source[key] = "file"
-        elif environ.get(_ENV_KEY[key]):
+        elif environ.get(_SOURCE_ENV[key]):
             source[key] = "env"
         else:
             source[key] = "default"
