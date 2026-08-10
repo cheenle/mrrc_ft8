@@ -308,3 +308,81 @@ def test_on_transmitted_not_fired_on_refusal() -> None:
     sequencer.start_cq()
     run(driver.on_slot_start(0))
     assert recorded == []
+
+
+class SlowEncoder(FakeEncoder):
+    """FakeEncoder whose encode() advances the clock by TX_ENCODE_SECONDS —
+    simulates the real DSP worker round-trip the fit guard must reserve."""
+
+    def __init__(self, clock) -> None:
+        super().__init__()
+        self._clock = clock
+
+    async def encode(self, message: str, frequency: float, *, slot_id: int) -> np.ndarray:
+        self._clock.t += 0.5
+        return await super().encode(message, frequency, slot_id=slot_id)
+
+
+def test_reply_past_fit_caches_waveform_for_next_slot() -> None:
+    """A reply armed in the window but past the honest fit deadline is
+    pre-encoded once and cached; the next eligible slot transmits the cached
+    waveform WITHOUT a second encode round-trip.
+
+    Field 2026-08-10: the boundary path used to re-encode (~+0.65 s lag) and
+    the fit check ignored the encode time (silent overrun for clicks in the
+    last ~0.5 s of the window).
+    """
+
+    sequencer = Sequencer(my_call="M0XX", my_grid="IO91")
+    clock = FakeClock(31.9)
+    encoder, safety = SlowEncoder(clock), FakeSafety()
+
+    async def window_sleep(delay: float) -> None:
+        clock.t += delay
+        sequencer.reply_to(parse_message("CQ K1ABC FN42"), -10, tx_phase=0)
+
+    driver = TxDriver(
+        sequencer, encoder, safety,  # type: ignore[arg-type]
+        clock=clock, sleep=window_sleep,
+    )
+    run(driver.on_slot_start(2))  # slot 2 = 30..45 s
+    # The arm lands at ~32.0 s; the encode advances the clock to ~32.5 s, past
+    # the honest deadline (44.94) — the waveform is cached, not transmitted.
+    assert len(encoder.calls) == 1
+    assert driver._pending is not None and driver._pending[0] == "K1ABC M0XX IO91"
+    assert safety.transmissions == []
+
+    # Next eligible (even) slot: transmit the cached waveform, no re-encode.
+    clock.t = 60.0
+    run(driver.on_slot_start(4))
+    assert len(encoder.calls) == 1
+    assert len(safety.transmissions) == 1
+    assert driver._pending is None
+
+
+def test_pending_cache_dropped_when_message_changes() -> None:
+    """A stale cached waveform must not fire after the target changes."""
+
+    sequencer = Sequencer(my_call="M0XX", my_grid="IO91")
+    clock = FakeClock(31.9)
+    encoder, safety = SlowEncoder(clock), FakeSafety()
+
+    async def window_sleep(delay: float) -> None:
+        clock.t += delay
+        sequencer.reply_to(parse_message("CQ K1ABC FN42"), -10, tx_phase=0)
+
+    driver = TxDriver(
+        sequencer, encoder, safety,  # type: ignore[arg-type]
+        clock=clock, sleep=window_sleep,
+    )
+    run(driver.on_slot_start(2))
+    assert driver._pending is not None and driver._pending[0] == "K1ABC M0XX IO91"
+
+    # Operator re-targets before the next slot: the cached waveform is stale.
+    clock.t = 60.0
+    sequencer.stop()
+    sequencer.reply_to(parse_message("CQ K2XYZ FN12"), -8, tx_phase=0)
+    run(driver.on_slot_start(4))
+    assert driver._pending is None  # stale cache dropped
+    assert len(encoder.calls) == 2  # re-encoded for the new target
+    assert len(safety.transmissions) == 1  # the NEW reply still goes out

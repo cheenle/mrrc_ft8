@@ -31,7 +31,7 @@ from ..engine.msgparse import ParsedMessage
 from ..engine.orchestrator import FT8_PERIOD_SECONDS
 from ..engine.repository import Repository, VoidWindowExpired
 from ..engine.safety import Interlock, SafetyController, TxRefused
-from ..engine.tx_driver import TX_FIT_MARGIN_SECONDS, TX_WAVEFORM_SECONDS
+from ..engine.tx_driver import TX_ENCODE_SECONDS, TX_FIT_MARGIN_SECONDS, TX_WAVEFORM_SECONDS
 from ..engine.tx_frequency import FrequencyOccupancy
 from ..engine.sequencer import DEFAULT_TX_AUDIO_FREQUENCY, DisarmReason, Sequencer
 from ..engine.device_config import (
@@ -1096,7 +1096,11 @@ def _scheduled_tx(tx_phase: int) -> dict[str, Any]:
     period = FT8_PERIOD_SECONDS
     cur = int(now // period)
     cur_start = cur * period
-    fit_deadline = cur_start + period - TX_WAVEFORM_SECONDS - TX_FIT_MARGIN_SECONDS
+    # The encode round-trip is reserved: the driver encodes at arm time and
+    # only transmits if the waveform fits AFTER the encode (honest fit).
+    fit_deadline = (
+        cur_start + period - TX_WAVEFORM_SECONDS - TX_FIT_MARGIN_SECONDS - TX_ENCODE_SECONDS
+    )
     if tx_phase == cur % 2 and now <= fit_deadline:
         return {
             "slot_id": cur,

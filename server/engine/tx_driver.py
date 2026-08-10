@@ -49,7 +49,11 @@ DEFAULT_TX_PERIOD_SECONDS = 15.0  # FT8 slot; slot_start = slot_id * period
 # to the next eligible slot instead of overrunning.
 TX_DECISION_CUTOFF_SECONDS = 5.0
 TX_WAVEFORM_SECONDS = 12.64  # MAX_TX_SAMPLES / 48 kHz
-TX_FIT_MARGIN_SECONDS = 0.2  # encode + start ramp before the waveform
+# Encode round-trip to the DSP worker; the fit guard reserves it so a click
+# inside the window never overruns the slot (field 2026-08-10: the check used
+# to pass at ~2.0 s and the waveform then started 0.5 s later — overrun).
+TX_ENCODE_SECONDS = 0.5
+TX_FIT_MARGIN_SECONDS = 0.1  # encode + start ramp before the waveform
 TX_POLL_SECONDS = 0.1
 
 
@@ -78,6 +82,13 @@ class TxDriver:
     # transmitted message live).  Fired only after a successful transmit.
     on_transmitted: Callable[[int, str, float], None] | None = None
     _tx_in_flight: bool = field(default=False, repr=False)
+    # Pre-encoded waveform cache (2026-08-10): a reply armed in the decision
+    # window is encoded immediately; if the current slot can no longer fit it
+    # (past the fit deadline), the waveform is kept here and transmitted at
+    # the next eligible slot boundary without re-encoding — the boundary TX
+    # path shrinks from ~+0.65 s to ~+0.1 s, and the fit check is honest
+    # (the waveform's true length is known, not an estimate).
+    _pending: tuple[str, Any] | None = field(default=None, repr=False)
 
     async def on_slot_start(self, slot_id: int) -> None:
         """Handle one orchestrator slot-start announcement."""
@@ -93,6 +104,19 @@ class TxDriver:
         # window open instead of rejecting the slot on the default phase.
         if self.sequencer.tx_enabled and slot_id % 2 != self.sequencer.tx_phase:
             return
+
+        # A pre-encoded waveform from a deferred reply: transmit it now if the
+        # sequencer still wants the same message (no encode round-trip).
+        if self._pending is not None:
+            pending_msg, waveform = self._pending
+            self._pending = None
+            if pending_msg == self.sequencer.next_tx_message():
+                _log.debug(
+                    "tx slot %d: transmitting pre-encoded %r", slot_id, pending_msg
+                )
+                await self._transmit(slot_id, pending_msg, waveform=waveform)
+                return
+            _log.debug("tx slot %d: pending message changed, dropping cache", slot_id)
 
         message = self.sequencer.next_tx_message()
         if message is not None:
@@ -125,24 +149,43 @@ class TxDriver:
                         "tx window slot %d: armed reply targets the other parity", slot_id
                     )
                     return
-                _log.debug(
-                    "tx window slot %d: reply armed at +%.2f s, transmitting",
-                    slot_id, now - slot_start,
+                # Encode immediately so the fit check is honest (the
+                # waveform's true start time is known) and, if this slot is
+                # already too late, the waveform is cached for the next
+                # eligible boundary instead of being re-encoded there.
+                waveform = await self.encoder.encode(
+                    message, self.sequencer.tx_frequency, slot_id=slot_id
                 )
-                await self._transmit(slot_id, message)
+                if self.clock() + TX_WAVEFORM_SECONDS + TX_FIT_MARGIN_SECONDS < slot_end:
+                    _log.debug(
+                        "tx window slot %d: reply armed at +%.2f s, transmitting",
+                        slot_id, now - slot_start,
+                    )
+                    await self._transmit(slot_id, message, waveform=waveform)
+                    return
+                self._pending = (message, waveform)
+                _log.debug(
+                    "tx window slot %d: past fit deadline — waveform cached for "
+                    "the next eligible slot",
+                    slot_id,
+                )
                 return
             await self.sleep(min(TX_POLL_SECONDS, max(0.0, deadline - now)))
 
-    async def _transmit(self, slot_id: int, message: str) -> None:
+    async def _transmit(
+        self, slot_id: int, message: str, *, waveform: Any | None = None
+    ) -> None:
         self.counters["tx_attempts"] += 1
         self._tx_in_flight = True
         try:
             # UC-003: encode on the sequencer's audio offset — the partner's
             # decoded offset for a Reply, the station default for a CQ — so
-            # the partner's receiver pairs the transmission.
-            waveform = await self.encoder.encode(
-                message, self.sequencer.tx_frequency, slot_id=slot_id
-            )
+            # the partner's receiver pairs the transmission.  A pre-encoded
+            # waveform (deferred-reply cache) skips the worker round-trip.
+            if waveform is None:
+                waveform = await self.encoder.encode(
+                    message, self.sequencer.tx_frequency, slot_id=slot_id
+                )
             await self.safety.transmit(waveform)
             if self.on_transmitted is not None:
                 self.on_transmitted(slot_id, message, self.sequencer.tx_frequency)
