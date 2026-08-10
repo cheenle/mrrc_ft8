@@ -84,11 +84,12 @@ def save_device_config(cfg: dict[str, Any], path: str | Path = DEFAULT_CONFIG_PA
             json.dump(payload, fh, indent=2, ensure_ascii=False)
             fh.write("\n")
         os.replace(tmp, path)
-    except BaseException:
+    except BaseException as exc:
         try:
             os.unlink(tmp)
         except OSError:
             pass
+        log.error("device config write failed: %s", exc)
         raise
 
 
@@ -239,6 +240,7 @@ class DeviceConfigStore:
         """Detached restart.sh run; survives this process being killed."""
 
         if not self.script.exists():
+            log.error("restart script missing: %s", self.script)
             raise FileNotFoundError(f"restart script missing: {self.script}")
         log_path = Path("/tmp/mrrc-ft8-restart.log")
         with log_path.open("ab") as fh:
