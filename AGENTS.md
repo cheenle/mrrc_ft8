@@ -31,7 +31,7 @@ venv/bin/python -m pytest tests/
 ## 模块表
 
 | 路径 | 职责 |
-|---|---|
+| --- | --- |
 | `dsp/` | Fortran shim + CMake → `wsjt_core` 共享库（FT8/FT4 解码/编码） |
 | `dsp/ft8_stdcall.f90` | 从 WSJT-X `lib/qra/q65/q65_set_list.f90:66-97` 等价提取的标准呼号判定；隔离无关 Q65 链；由 `test_ft8_encode.py` fresh-build 回归 |
 | `dsp/cmake/improved-ft8.cmake` | Improved `ft8var` 的显式、无 glob 最小源清单 |
@@ -49,6 +49,7 @@ venv/bin/python -m pytest tests/
 | `desktop/ft8web/` | 桌面客户端（ft8web 壳 + 服务器大脑，GPL v3 派生）：React 19 + Vite + Tailwind；**浏览器零 DSP/音频/PTT** — 解码/waterfall/收发/日志全部走服务器 REST + 三路 WS（`/api/v1`、`/ws/v1/{state,decodes,waterfall}`）；适配层 `mrrcClient.ts`/`mrrcStreams.ts`/`useServerFT8.ts`（隐式控制租约 + 5 s 心跳对齐 §15.4）；登录门 + `last_tx` 快照显示发出的消息。`dist/` 与 `node_modules/` gitignore — **电台部署须本地 `npm run build`**（见其 README）。单击解码行=select（永不发射）、双击=回复（移动 PWA 惯例） |
 | `deploy/` | Caddyfile（模板+live 实例）、Caddy root LaunchDaemon、systemd unit、macOS LaunchAgent（密码哈希经 `python -m server.main --hash-password` bootstrap）；`restart.sh` 串口占用守卫（AD-008：rigctld 启动前检测非 rigctld 持有者，冲突 fail-fast，`MRRC_FT8_SKIP_SERIAL_GUARD=1` 应急跳过）；注意 `restart.sh` 会杀掉本站 `rigctld`（`pgrep -x rigctld`）但会**自动保活其他电台的共享 daemon**（按 `-t $RIGCTLD_PORT` 区分：非本站 rigctld 快照命令、本站 rigctld 就绪后原样恢复，如旧 MRRC 项目共用的 IC-M710@4531）；启动前读 `data/device-config.json`（存在时覆盖 RIG_* 参数） |
 | `acceptance/` | 硬件验收脚本（FT-710 real-radio：preflight/monitor/`--tx`，不进 pytest） |
+| `rumlog_sync/` | 独立 QSO 双向同步（AD-016）：FT8 db ↔ RUMLogNG；WSJT-X UDP 2237 推送 + 只读 Core Data 轮询；Z_PK 游标、rumlog_uuid 幂等、120 s 去重窗口、RUMLogNG 为准、推送闭环重推；`python -m rumlog_sync` + crontab `*/5` + flock |
 | `wsjtx-3.0.2/` | vendor 参考源码（只读，禁止修改；gitignore，仅本地构建/校验用，不入库） |
 | `tests/` | pytest；ft8sim/ft4sim 合成信号回归 |
 
@@ -68,7 +69,7 @@ venv/bin/python -m pytest tests/
 ## Vendor 补丁副本登记
 
 | 本地文件 | Origin / revision | 唯一差异 | 原因 | 回归 |
-|---|---|---|---|---|
+| --- | --- | --- | --- | --- |
 | `dsp/patched/encode174_91var.f90` | WSJT-X Improved 3.0.2 `lib/ft8var/encode174_91var.f90` | 一处 `include '/lib/ft8/ldpc_174_91_c_generator.f90'` 改为相对 include | relocatable headless build | `test_vendor_policy.py` 逆替换 byte-identical + Improved synthetic profiles |
 | `dsp/patched/osd174_91var.f90` | WSJT-X Improved 3.0.2 `lib/ft8var/osd174_91var.f90` | 相对 LDPC include；将 `first_osd` 检查完整置于 named critical 内 | relocatable build；并发只初始化一次生成矩阵 | 精确正/逆变换 + 并发 profile stress |
 | `dsp/patched/four2avar.f90` | WSJT-X Improved 3.0.2 `lib/ft8var/four2avar.f90` | 相对 FFTW include；plan registry 设为 `THREADPRIVATE` | relocatable FFTW；线程私有 plan/address cache | 精确正/逆变换 + 重复并发 region stress |

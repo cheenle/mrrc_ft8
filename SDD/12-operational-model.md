@@ -61,6 +61,8 @@ Priority: file value > env var > built-in default. The file contains no secrets;
 - QSO data has no automatic expiration.
 - Diagnostic archives are raw and user-controlled; the UI warns before creation/download.
 
+**12.7.1 RUMLogNG sync state** — rumlog_sync（AD-016）在 qso 表维护 `rumlog_uuid`（RUMLogNG 侧 UUID）与 `pushed_to_rumlog`（推送状态），`rumlog_sync_state` 表存 Z_PK 游标与未确认推送计数；迁移幂等（PRAGMA 探测 + ADD COLUMN），与服务器 Repository 显式列查询向后兼容。
+
 ## 12.8 Operations and Troubleshooting
 
 Health reports Caddy-visible application status, worker generation/restarts, decode latency/misses, audio overrun/underflow, waterfall drops, clock health, rig connection, PTT, lease and sequencer state. Operators resolve a fault, verify monitor state, reacquire the lease and manually re-arm; no recovery auto-resumes TX. The one automatic recovery is RX-side and monitor-only: a capture session that keeps the band hot yet decodes nothing for four consecutive slots (a silently degraded USB audio session never heals itself — 2026-08-02 field finding) is latched as an AUDIO fault and the capture stream is reopened automatically, at most three times per episode.
@@ -68,4 +70,3 @@ Health reports Caddy-visible application status, worker generation/restarts, dec
 In addition, a **proactive band-switch capture restart** (2026-08-05) prevents the degradation episode before it starts: the FT-710's C-Media USB codec can silently wedge its RX stream when the radio rebuilds its DSP/audio path across a band change (observed live: band switches at 10:25/10:26 produced UTC-ring gaps and a hot-but-zero-decode session that latched AUDIO 60 s later). When `rig_poll` or the band-hunter observes the dial frequency move to a different FT8 band, the capture child is reopened immediately (fresh streams are always clean), at most once per band, deferred while PTT is on. `CaptureProcess.healthy` is now locked against `restart()` so the watchdog can never double-restart behind the teardown→spawn window (field finding 2026-08-05).
 
 Because a fresh stream can still show hot-but-zero-decode slots when the band simply carries no FT8 content (e.g. strong phone traffic on 40 m at night — 2026-08-05 field finding: band switched to 40 m at 22:11, AUDIO latched at 22:12, capture restarted yet still zero decodes until returning to 20 m at 23:39), the automatic recovery now runs a **re-verify window** after each restart: two consecutive hot-and-silent slots on the reopened stream clear the AUDIO fault automatically as a false positive. Operators still re-arm TX manually, so no recovery auto-resumes TX.
-

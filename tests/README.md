@@ -245,3 +245,12 @@ Later implementation milestones will add coverage for:
 - Linux synthetic audio and mocked rigctld service acceptance.
 
 Real FT-710 tests are an explicit macOS release checklist and are not part of the hardware-free pytest run.
+
+The RUMLogNG sync suite (`tests/rumlog_sync/`) covers config loading,
+Core Data → FT8 mapping (timestamp offset, RST parsing, UUID hex), the
+120 s dedupe predicate, read-only schema probe (missing-column rejection),
+WSJT-X UDP message construction (HEARTBEAT + QSO_LOGGED with exact length
+prefix and null terminator, injected fake socket — no real packets), the
+idempotent qso-column migration, push state machine (mark/confirm/requeue),
+and a full one-round integration (pull → merge → push → confirm). The
+real-RUMLogNG smoke path is opt-in (`--smoke`, manual QSO + delete).
