@@ -35,13 +35,7 @@ venv/bin/python -m rumlog_sync --smoke   # 推一条标记 QSO（N0SMK, 1970 UTC
 
 ## 已知注意事项
 
-- **RUMLogNG 侧重复清理**：2026-08-11 首次同步期间，FT8 db 的历史重复行（JTDX 导入遗留，
-  如 LU1ETR/CX1FK/BG2KUD 各 5 份相同记录）曾全部推入 RUMLogNG，造成 RUMLogNG 侧部分记录
-  重复（如 BG2KUD 20m 2023-03-22 13 份）。代码已修复（推送前去重 + 拉取确认时全量确认），
-  但 RUMLogNG 侧既有的重复需在 RUMLogNG UI 手动清理（呼号/时间排序后删除多余行；禁写 Core Data）。
-  后续新 QSO 不会再有此问题。
-- **FT8 db 重复历史**：JTDX 导入遗留的重复行保留在 FT8 db（已全部确认，不会再推）；
-  如需清理需在服务器侧处理（同步程序不删除服务器记录）。
-- **AppleScript 依赖**：推送要求 RUMLogNG 正在运行且 macOS 允许 `osascript` 控制
-  （首次可能弹出自动化权限确认，允许后即可）。
+- **RUMLogNG 侧重复已清理（2026-08-11）**：首次同步期间 FT8 db 的历史重复行（JTDX 导入遗留）曾全量推入 RUMLogNG。已备份并直接清理 Core Data（重复 125 条 + 测试记录 4 条 → 14886 条，重复 0）；清理为一次性运维操作（用户指示），同步程序本身仍只读 RUMLogNG（AD-016）。后续新 QSO 不会再有此问题（推送前去重 + 拉取确认时全量确认）。
+- **FT8 db 重复历史**：JTDX 导入遗留的重复行保留在 FT8 db（已全部确认，不会再推）；如需清理需在服务器侧处理（同步程序不删除服务器记录）。
+- **AppleScript 依赖**：推送要求 RUMLogNG 正在运行且 macOS 允许 `osascript` 控制（首次可能弹出自动化权限确认，允许后即可）。
 - **禁写 RUMLogNG 数据库**（AD-016）：同步程序只读 RUMLogNG 的 Core Data SQLite。

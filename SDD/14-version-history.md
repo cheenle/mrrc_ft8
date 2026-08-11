@@ -1,5 +1,8 @@
 # 14. Version History
 
+## Unreleased — 2026-08-11 — RUMLogNG sync: first-run merge + cleanup (AD-016 follow-up)
+
+首轮全量合并已执行并验证：RUMLogNG 14750 条并入 FT8 db（SSB/FT4 落 qso 表，以 RUMLogNG 为准覆盖字段）；FT8 db 独有历史经 AppleScript 分批推入 RUMLogNG，闭环确认全部完成。过程中发现并修复两处设计缺陷：①RUMLogNG 6.5 未激活 WSJT-X UDP 2237 解析（socket 收包不处理，HEARTBEAT 无响应）→ 推送通道改为 RUMLogNG 官方 AppleScript API（kHz/UTC，15 条/批）；②FT8 db 历史重复行（JTDX 导入遗留 5 份相同）会重复推入 → 推送前去重 + 拉取确认时全量确认（find_all_existing）。运维（用户指示、一次性、已备份 /tmp/CoreQsoModel_1-backup-*）：清理 RUMLogNG 侧重复 125 条 + AppleScript 验证测试记录 4 条，RUMLogNG 15005→14886 条；同步程序保持只读 RUMLogNG。crontab `*/5` 已安装（flock 防重入）。
 ## Unreleased — 2026-08-11 — RUMLogNG bidirectional QSO sync (AD-016)
 
 独立 `rumlog_sync` 包：RUMLogNG 官方 AppleScript 推送（application 属性 + logQSO，kHz/UTC，15 条/批）+ 只读 Core Data 轮询；Z_PK 游标增量、rumlog_uuid 幂等、120 s 去重窗口（推送前去重 + 确认时全量确认，防历史重复行无限 requeue）、以 RUMLogNG 为准的字段冲突规则、推送闭环确认与超轮重推；crontab */5 驱动 + flock 防重入；qso 表新增 rumlog_uuid/pushed_to_rumlog 列（幂等迁移）。WSJT-X UDP 2237 实现保留为备用（实测 RUMLogNG 6.5 未激活 UDP 解析）。规格：docs/superpowers/specs/2026-08-11-rumlogng-sync-design.md。
