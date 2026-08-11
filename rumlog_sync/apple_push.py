@@ -19,6 +19,9 @@ from typing import Any, Protocol
 log = logging.getLogger(__name__)
 
 _OSASCRIPT = "/usr/bin/osascript"
+# RUMLogNG's AppleScript handler is slow (seconds per QSO); keep each
+# osascript invocation small so a batch fits well inside the timeout.
+DEFAULT_BATCH = 15
 
 
 class _Proc(Protocol):
@@ -101,31 +104,40 @@ def push_via_applescript(
     records: list[dict[str, object]],
     *,
     runner: _Runner | None = None,
-) -> int:
-    """Log every record via one osascript call; returns the record count.
+    batch_size: int = DEFAULT_BATCH,
+) -> list[dict[str, object]]:
+    """Log records via osascript batches; returns the successfully pushed ones.
 
-    Failures are logged and return 0 so a round never crashes; the caller
-    keeps the records queued for the next round (spec §7).
+    Records are pushed in small batches (each its own osascript subprocess)
+    because RUMLogNG processes each QSO slowly.  A failed batch is logged and
+    its records are omitted from the result so the caller keeps them queued
+    for the next round (spec §7).
     """
 
     if not records:
-        return 0
-    script = build_applescript(records)
+        return []
     run = runner if runner is not None else subprocess.run
-    try:
-        proc = run(
-            [_OSASCRIPT, "-e", script],
-            capture_output=True,
-            text=True,
-            timeout=60,
-        )
-    except (OSError, subprocess.TimeoutExpired):
-        log.exception("osascript push failed for %d record(s)", len(records))
-        return 0
-    if proc.returncode != 0:
-        log.error(
-            "osascript push failed (%d): %s", proc.returncode, (proc.stderr or "").strip()
-        )
-        return 0
-    log.info("applescript push ok: %d record(s)", len(records))
-    return len(records)
+    pushed: list[dict[str, object]] = []
+    for start in range(0, len(records), batch_size):
+        batch = records[start : start + batch_size]
+        script = build_applescript(batch)
+        try:
+            proc = run(
+                [_OSASCRIPT, "-e", script],
+                capture_output=True,
+                text=True,
+                timeout=60,
+            )
+        except (OSError, subprocess.TimeoutExpired):
+            log.exception("osascript push failed for %d record(s)", len(batch))
+            continue
+        if proc.returncode != 0:
+            log.error(
+                "osascript push failed (%d): %s",
+                proc.returncode,
+                (proc.stderr or "").strip(),
+            )
+            continue
+        pushed.extend(batch)
+    log.info("applescript push ok: %d/%d record(s)", len(pushed), len(records))
+    return pushed

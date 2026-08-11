@@ -13,14 +13,16 @@ from rumlog_sync.sync import run_sync_once
 
 @dataclass
 class FakePusher:
-    """Records every push batch; returns the batch size unless ``ok`` is off."""
+    """Records every push batch; returns the batch unless ``ok`` is off."""
 
     calls: list[list[dict[str, object]]] = field(default_factory=list)
     ok: bool = True
 
-    def __call__(self, records: list[dict[str, object]]) -> int:
+    def __call__(
+        self, records: list[dict[str, object]]
+    ) -> list[dict[str, object]]:
         self.calls.append(records)
-        return len(records) if self.ok else 0
+        return records if self.ok else []
 
 
 def _cfg(ft8_path: Path, rumlog_path: Path, retries: int = 3) -> RumlogConfig:
@@ -155,7 +157,7 @@ def test_push_new_ft8_record_and_confirm_next_round(
     db.ensure_schema()
     row = db.get_record(1)
     assert row is not None
-    assert row["pushed_to_rumlog"] == 1
+    assert row["pushed_to_rumlog"] == 1  # marked pushed after round 1
     db.close()
     # Round 2: RUMLogNG now contains the QSO → uuid backfilled, confirmed.
     make_rumlog_db(

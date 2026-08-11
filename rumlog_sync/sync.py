@@ -13,7 +13,7 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass, field
-from typing import Callable
+from typing import Any, Callable
 
 from .apple_push import push_via_applescript
 from .config import RumlogConfig
@@ -23,7 +23,19 @@ from .rumlog_reader import RUMlogReader
 
 log = logging.getLogger(__name__)
 
-Pusher = Callable[[list[dict[str, object]]], int]
+Pusher = Callable[[list[dict[str, object]]], list[dict[str, object]]]
+
+
+def _qso_id(rec: dict[str, object]) -> int:
+    """Coerce a record's sqlite ``id`` value to int (DB rows are ints)."""
+
+    value: Any = rec.get("id")
+    if value is None:
+        raise ValueError(f"record without id: {rec}")
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        raise ValueError(f"record id is not an int: {value!r}") from None
 
 
 @dataclass
@@ -85,14 +97,15 @@ def run_sync_once(
         report.requeued = ft8.tick_unconfirmed(cfg["confirm_retries"])
         pending = ft8.pending_push_records()
         if pending:
-            pushed = pusher(pending)
-            if pushed > 0:
-                for rec in pending[:pushed]:
-                    ft8.mark_pushed(int(rec["id"]))
-                report.pushed = pushed
-            else:
+            pushed_records = pusher(pending)
+            for rec in pushed_records:
+                ft8.mark_pushed(_qso_id(rec))
+            report.pushed = len(pushed_records)
+            if len(pushed_records) < len(pending):
                 log.warning(
-                    "push failed; %d record(s) stay queued", len(pending)
+                    "push partial: %d/%d record(s) stay queued",
+                    len(pending) - len(pushed_records),
+                    len(pending),
                 )
 
         ft8.record_audit(

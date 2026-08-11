@@ -53,21 +53,34 @@ def test_push_via_applescript_success() -> None:
         captured["cmd"] = cmd
         return FakeProc(0)
 
-    assert push_via_applescript([REC], runner=runner) == 1
+    assert push_via_applescript([REC], runner=runner) == [REC]
     assert captured["cmd"][0] == "/usr/bin/osascript"
     assert "logQSO" in captured["cmd"][2]
+
+
+def test_push_via_applescript_batches() -> None:
+    calls: list[list[str]] = []
+
+    def runner(cmd, *, capture_output, text, timeout):
+        calls.append(cmd)
+        return FakeProc(0)
+
+    records = [REC] * 20
+    pushed = push_via_applescript(records, runner=runner, batch_size=15)
+    assert len(pushed) == 20
+    assert len(calls) == 2  # 15 + 5
 
 
 def test_push_via_applescript_failure_and_empty() -> None:
     def fail_runner(cmd, *, capture_output, text, timeout):
         return FakeProc(1, "error: boom")
 
-    assert push_via_applescript([REC], runner=fail_runner) == 0
-    assert push_via_applescript([], runner=fail_runner) == 0  # nothing to do
+    assert push_via_applescript([REC], runner=fail_runner) == []
+    assert push_via_applescript([], runner=fail_runner) == []  # nothing to do
 
 
 def test_push_via_applescript_handles_runner_exception() -> None:
     def boom(cmd, *, capture_output, text, timeout):
         raise OSError("osascript missing")
 
-    assert push_via_applescript([REC], runner=boom) == 0
+    assert push_via_applescript([REC], runner=boom) == []
