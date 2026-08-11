@@ -4,7 +4,7 @@
 
 `crontab -e` 添加（每 5 分钟一轮；`flock` 防重入）：
 
-```
+```bash
 */5 * * * * cd /Users/cheenle/HAM/ft8 && flock -n data/rumlog-sync.lock venv/bin/python -m rumlog_sync >> data/rumlog-sync.log 2>&1
 ```
 
