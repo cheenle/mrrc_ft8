@@ -13,6 +13,7 @@ export interface ServerDecodeMessage {
   to_me: boolean;
   mine: boolean;
   is_new_dxcc: boolean;
+  entity: string;
 }
 
 export interface ServerDecodeBatch {

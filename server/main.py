@@ -128,11 +128,23 @@ class ServerConfig:
         rig_host, _, rig_port = os.environ.get(
             "MRRC_FT8_RIGCTLD", "127.0.0.1:4532"
         ).partition(":")
+        try:
+            rigctld_port = int(rig_port or 4532)
+        except ValueError:
+            rigctld_port = 4532
         jtdx_log_path = os.environ.get("MRRC_FT8_JTDX_LOG_PATH", "").strip() or None
         audio_raw = os.environ.get("MRRC_FT8_AUDIO_DEVICE", "")
         audio_device: int | str | None = None
         if audio_raw:
-            audio_device = int(audio_raw) if audio_raw.isdigit() else audio_raw
+            try:
+                audio_device = int(audio_raw) if audio_raw.isdigit() else audio_raw
+            except ValueError:
+                audio_device = audio_raw  # non-numeric garbage → treat as device name
+        channel_raw = os.environ.get("MRRC_FT8_AUDIO_IN_CHANNEL", "0") or "0"
+        try:
+            audio_in_channel = int(channel_raw)
+        except ValueError:
+            audio_in_channel = 0
         try:
             profile = int(os.environ.get("MRRC_FT8_DECODER_PROFILE", "3"))
         except ValueError:
@@ -172,12 +184,12 @@ class ServerConfig:
             ),
             jtdx_log_path=jtdx_log_path,
             rigctld_host=rig_host,
-            rigctld_port=int(rig_port or 4532),
+            rigctld_port=rigctld_port,
             rig_mode=os.environ.get("MRRC_FT8_RIG_MODE", "USB").upper() or "USB",
             audio_device=audio_device,
             audio_in_device=audio_device,
             audio_out_device=audio_device,
-            audio_in_channel=int(os.environ.get("MRRC_FT8_AUDIO_IN_CHANNEL", "0") or 0),
+            audio_in_channel=audio_in_channel,
             decoder_profile=profile,
             decoder_threads=threads,
             band_hunt_url=band_hunt_url,
@@ -189,9 +201,14 @@ class ServerConfig:
 
 
 def decode_message_view(
-    message: Any, my_call: str = "", *, is_new_dxcc: bool = False
+    message: Any, my_call: str = "", *, is_new_dxcc: bool = False, entity: str = ""
 ) -> dict[str, Any]:
-    """One decode message → wire payload (Band Activity columns)."""
+    """One decode message → wire payload (Band Activity columns).
+
+    ``entity`` is the DXCC entity name (cty.dat) for the originating call,
+    filled by the caller via ``get_cty_database().lookup``; empty for own
+    echoes and unknown calls.  Front ends append it after the message text.
+    """
 
     from .engine.msgparse import addressed_to, base_call
 
@@ -210,6 +227,7 @@ def decode_message_view(
         and bool(my_call)
         and base_call(parsed.from_call) == base_call(my_call),
         "is_new_dxcc": is_new_dxcc,
+        "entity": entity,
     }
 
 
@@ -387,7 +405,7 @@ def create_server(
 
     def cq_loop_idle_timeout() -> int:
         value = repository.get_setting("cq_loop_idle_timeout_s")
-        return int(value) if isinstance(value, int) else DEFAULT_IDLE_TIMEOUT_S
+        return value if isinstance(value, int) else DEFAULT_IDLE_TIMEOUT_S
 
     def cq_loop_audit(operation: str, detail: str) -> None:
         schedule(
@@ -497,13 +515,14 @@ def create_server(
                 Interlock.AUDIO,
                 "degraded capture session: hot band, zero decodes",
             )
-            if capture_bounces <= MAX_CAPTURE_BOUNCES:
+            cap = capture  # local alias so pyright narrows past the closure
+            if cap is not None and capture_bounces <= MAX_CAPTURE_BOUNCES:
                 log.critical(
                     "restarting capture process (%d/%d)",
                     capture_bounces,
                     MAX_CAPTURE_BOUNCES,
                 )
-                await asyncio.to_thread(capture.restart)
+                await asyncio.to_thread(cap.restart)
                 _restart_verify["slots_left"] = VERIFY_SLOTS
                 _restart_verify["hot_silent"] = 0
             else:
@@ -655,9 +674,13 @@ def create_server(
                 # included — the offset genuinely carries our signal) so CQ
                 # calling picks an unoccupied offset near 1500 Hz.
                 state.occupancy.note(view["freq"])
-                if view["call"] and not view["mine"] and worked_dxcc is not None:
+                if view["call"] and not view["mine"]:
                     entity = get_cty_database().lookup(view["call"])
-                    view["is_new_dxcc"] = bool(entity) and entity[0] not in worked_dxcc
+                    view["entity"] = entity[0] if entity else ""
+                    if worked_dxcc is not None:
+                        view["is_new_dxcc"] = (
+                            bool(entity) and entity[0] not in worked_dxcc
+                        )
                 views.append(view)
             batch = {
                 "slot_id": slot_decode.slot_id,
@@ -679,6 +702,7 @@ def create_server(
                     )
             # Auto-call (decision A): first new-DXCC CQ when idle and the
             # backend switch is on; never interrupts a QSO or a manual pick.
+            # pi-lens-ignore: no-identity-operator-on-literals
             auto_enabled = repository.get_setting("auto_call_new_dxcc") is True
             if auto_enabled and sequencer.state is QSOState.IDLE and state.selected is None:
                 for view in views:
@@ -706,6 +730,13 @@ def create_server(
                     )
                 )
 
+        # Per-slot TX tasks are intentionally untracked and uncancelled:
+        # the TX lifecycle is owned by the Sequencer (HaltTx / slot
+        # timeout), not by task bookkeeping here.
+
+        def _on_slot_start(slot_id: int) -> None:
+            asyncio.create_task(state.tx_driver.on_slot_start(slot_id))
+
         orchestrator = Orchestrator(
             supervisor_decoder,
             read_slot_logged,
@@ -714,12 +745,7 @@ def create_server(
             on_decode_error=lambda slot_id, error: report_dsp_fault(
                 f"decode slot {slot_id}", error
             ),
-            # Per-slot TX tasks are intentionally untracked and uncancelled:
-            # the TX lifecycle is owned by the Sequencer (HaltTx / slot
-            # timeout), not by task bookkeeping here.
-            on_slot_start=lambda slot_id: asyncio.create_task(
-                state.tx_driver.on_slot_start(slot_id)
-            ),
+            on_slot_start=_on_slot_start,
         )
         state.orchestrator = orchestrator
     else:
@@ -859,6 +885,7 @@ def create_server(
                     if state.dxcc_cache is None:
                         log.debug("band_hunt: worked set unknown — skip")
                         continue  # worked set unknown — never switch blindly
+                    # pi-lens-ignore: no-identity-operator-on-literals
                     auto_on = repository.get_setting("auto_band_hunt") is True
                     log.debug(
                         "band_hunt tick: auto=%s seq=%s selected=%s armed=%s",

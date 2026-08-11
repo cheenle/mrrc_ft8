@@ -29,6 +29,8 @@ export interface FT8DecodedMessage {
   isCq?: boolean;
   slotId?: number;
   isNewDxcc?: boolean;
+  // DXCC entity name (cty.dat) appended after the message text.
+  entity?: string;
 }
 
 // --- Server decode → row mapping (Task 7) ------------------------------------
@@ -56,6 +58,7 @@ function serverMessageToRow(m: ServerDecodeMessage, slotId: number): FT8DecodedM
     isCq: m.is_cq,
     slotId,
     isNewDxcc: m.is_new_dxcc,
+    entity: m.entity || '',
   };
 }
 
@@ -1123,6 +1126,11 @@ export default function App() {
                       <span className="text-blue-400">{log.freq}Hz</span>
                       <span className="text-text-main group-hover:text-text-highlight font-bold flex items-center flex-wrap">
                         {log.message}
+                        {log.entity && (
+                          <span className="ml-1 text-zinc-400 font-normal text-[10px] uppercase tracking-wide">
+                            {log.entity}
+                          </span>
+                        )}
                         <DxccBadges call={log.call} isNewDxcc={log.isNewDxcc} workedCalls={snapshot.station.worked_calls} />
                       </span>
                     </div>

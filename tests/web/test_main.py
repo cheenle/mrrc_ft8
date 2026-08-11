@@ -444,6 +444,21 @@ def test_decode_message_view_not_new_when_entity_worked() -> None:
     assert item["is_new_dxcc"] is False
 
 
+def test_decode_message_view_carries_entity_name() -> None:
+    from server.main import decode_message_view
+
+    item = decode_message_view(FakeSlotMessage(), "M0XX", entity="Japan")
+    assert item["entity"] == "Japan"
+
+
+def test_decode_message_view_entity_defaults_empty() -> None:
+    from server.main import decode_message_view
+
+    # Unknown calls / own echoes yield no entity name (empty, not None).
+    item = decode_message_view(FakeSlotMessage(), "M0XX")
+    assert item["entity"] == ""
+
+
 # ---- auto_call_candidate 矩阵（决策 A/B）---------------------------------
 
 

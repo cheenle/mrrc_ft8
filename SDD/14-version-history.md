@@ -1,5 +1,12 @@
 # 14. Version History
 
+## Unreleased — 2026-08-11 — Decode rows show DXCC entity (country) + wider Band Activity
+
+- **服务器**：`decode_message_view` 新增 `entity` 字段（英文 DXCC 实体名，来自仓库 cty.dat）；`on_decode` 对每个非 mine 且含呼号的解码行做 lookup（独立于 DXCC cache 就绪状态），unknown/own-echo 为空字符串。`is_new_dxcc` 判定不变。
+- **移动 PWA**：`candidates.js` 解码行在消息文本后追加国家（`CQ BG1SB ON80 China`）；解码栏宽度 320px → 368px（+15%，`app.css` cockpit 网格）。
+- **桌面客户端**：`mrrcStreams.ts` 透传 `entity`；`App.tsx` Band Activity 行消息后显示国家（淡色小字）；左侧日志栏 `lg:col-span-5 → 6`（解码区更宽，网格取整 +20%）。
+- 顺带修复 server/main.py 预存健壮性问题：`MRRC_FT8_RIGCTLD` 端口/`AUDIO_IN_CHANNEL`/`AUDIO_DEVICE` 的 int 转换加保护、`cq_loop_idle_timeout` 冗余 int、`recover_capture` 的 capture 空值窄化、`on_slot_start` 回调改为显式命名函数（原 lambda 返回 Task 与签名不符）。
+- Regressions: `tests/web/test_main.py` 新增 `entity` 字段断言（透传 + 默认空）；全量 880 passed；桌面 `tsc --noEmit` 与 `npm run build` 通过。
 ## Unreleased — 2026-08-11 — RUMLogNG sync: first-run merge + cleanup (AD-016 follow-up)
 
 首轮全量合并已执行并验证：RUMLogNG 14750 条并入 FT8 db（SSB/FT4 落 qso 表，以 RUMLogNG 为准覆盖字段）；FT8 db 独有历史经 AppleScript 分批推入 RUMLogNG，闭环确认全部完成。过程中发现并修复两处设计缺陷：①RUMLogNG 6.5 未激活 WSJT-X UDP 2237 解析（socket 收包不处理，HEARTBEAT 无响应）→ 推送通道改为 RUMLogNG 官方 AppleScript API（kHz/UTC，15 条/批）；②FT8 db 历史重复行（JTDX 导入遗留 5 份相同）会重复推入 → 推送前去重 + 拉取确认时全量确认（find_all_existing）。运维（用户指示、一次性、已备份 /tmp/CoreQsoModel_1-backup-*）：清理 RUMLogNG 侧重复 125 条 + AppleScript 验证测试记录 4 条，RUMLogNG 15005→14886 条；同步程序保持只读 RUMLogNG。crontab `*/5` 已安装（flock 防重入）。
