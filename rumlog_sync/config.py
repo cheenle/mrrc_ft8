@@ -6,12 +6,28 @@ import json
 import logging
 from collections.abc import Callable
 from pathlib import Path
+from typing import TypedDict, cast
 
 log = logging.getLogger(__name__)
 
 Validator = Callable[[object], bool] | type
 
-DEFAULT_CONFIG: dict[str, object] = {
+
+class RumlogConfig(TypedDict):
+    """Validated sync configuration (spec §3.1)."""
+
+    ft8_db: str
+    rumlog_db: str
+    my_call: str
+    my_grid: str
+    udp_host: str
+    udp_port: int
+    udp_id: str
+    confirm_retries: int
+    lock_path: str
+
+
+DEFAULT_CONFIG: RumlogConfig = {
     "ft8_db": "data/mrrc-ft8.db",
     "rumlog_db": (
         "/Users/cheenle/Library/Containers/de.dl2rum.RUMlogNG/Data/Library/"
@@ -39,7 +55,7 @@ _VALIDATORS: dict[str, Validator] = {
 }
 
 
-def validate_config(cfg: dict[str, object]) -> dict[str, object]:
+def validate_config(cfg: dict[str, object]) -> RumlogConfig:
     """Reject unknown keys and out-of-range values; return a safe copy."""
 
     unknown = set(cfg) - set(DEFAULT_CONFIG)
@@ -53,15 +69,15 @@ def validate_config(cfg: dict[str, object]) -> dict[str, object]:
                 raise ValueError(f"config {key}: expected {check.__name__}, got {value!r}")
         elif not check(value):
             raise ValueError(f"config {key}: invalid value {value!r}")
-    return merged
+    return cast(RumlogConfig, merged)
 
 
-def load_config(path: str | Path) -> dict[str, object]:
+def load_config(path: str | Path) -> RumlogConfig:
     """Load JSON config over defaults; missing file is not an error."""
 
     p = Path(path)
     if not p.exists():
-        return dict(DEFAULT_CONFIG)
+        return cast(RumlogConfig, dict(DEFAULT_CONFIG))
     try:
         raw = json.loads(p.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError) as exc:

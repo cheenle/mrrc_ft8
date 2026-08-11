@@ -51,6 +51,7 @@ def _make_rumlog_db(path: Path, rows: list[dict[str, Any]]) -> None:
     """
 
     con = sqlite3.connect(path)
+    con.execute("DROP TABLE IF EXISTS ZCORE_QSO")
     con.execute(f"CREATE TABLE ZCORE_QSO ({RUMLOG_COLUMNS})")
     for row in rows:
         data = dict(row)
