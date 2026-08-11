@@ -98,6 +98,21 @@ class Ft8Db:
         ).fetchone()
         return row["id"] if row else None
 
+    def find_all_existing(self, dx_call: str, band: str, epoch: float) -> list[int]:
+        """Every qso id matching dx_call+band in the 120 s window.
+
+        Duplicate historical rows (JTDX re-imports) must all be confirmed
+        when a RUMLogNG row matches, or the extras would requeue forever.
+        """
+
+        rows = self._con.execute(
+            "SELECT id FROM qso WHERE dx_call = ? AND band = ?"
+            " AND status = 'completed' AND abs(completed_epoch - ?) <= 120"
+            " ORDER BY id",
+            (dx_call, band, epoch),
+        ).fetchall()
+        return [r["id"] for r in rows]
+
     def find_by_uuid(self, uuid_hex: str) -> int | None:
         row = self._con.execute(
             "SELECT id FROM qso WHERE rumlog_uuid = ?", (uuid_hex,)

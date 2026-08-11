@@ -2,7 +2,7 @@
 
 ## Unreleased — 2026-08-11 — RUMLogNG bidirectional QSO sync (AD-016)
 
-独立 `rumlog_sync` 包：WSJT-X UDP 2237 推送（HEARTBEAT+QSO_LOGGED）+ 只读 Core Data 轮询；Z_PK 游标增量、rumlog_uuid 幂等、120 s 去重窗口、以 RUMLogNG 为准的字段冲突规则、推送闭环确认与超轮重推；crontab */5 驱动 + flock 防重入；qso 表新增 rumlog_uuid/pushed_to_rumlog 列（幂等迁移）。规格：docs/superpowers/specs/2026-08-11-rumlogng-sync-design.md。
+独立 `rumlog_sync` 包：RUMLogNG 官方 AppleScript 推送（application 属性 + logQSO，kHz/UTC，15 条/批）+ 只读 Core Data 轮询；Z_PK 游标增量、rumlog_uuid 幂等、120 s 去重窗口（推送前去重 + 确认时全量确认，防历史重复行无限 requeue）、以 RUMLogNG 为准的字段冲突规则、推送闭环确认与超轮重推；crontab */5 驱动 + flock 防重入；qso 表新增 rumlog_uuid/pushed_to_rumlog 列（幂等迁移）。WSJT-X UDP 2237 实现保留为备用（实测 RUMLogNG 6.5 未激活 UDP 解析）。规格：docs/superpowers/specs/2026-08-11-rumlogng-sync-design.md。
 
 ## Unreleased — 2026-08-10 — Station Device Configuration (HAMLIB Rig + Audio, Save/Apply-Restart)
 

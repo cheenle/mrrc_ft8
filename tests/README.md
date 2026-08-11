@@ -249,8 +249,10 @@ Real FT-710 tests are an explicit macOS release checklist and are not part of th
 The RUMLogNG sync suite (`tests/rumlog_sync/`) covers config loading,
 Core Data → FT8 mapping (timestamp offset, RST parsing, UUID hex), the
 120 s dedupe predicate, read-only schema probe (missing-column rejection),
-WSJT-X UDP message construction (HEARTBEAT + QSO_LOGGED with exact length
-prefix and null terminator, injected fake socket — no real packets), the
-idempotent qso-column migration, push state machine (mark/confirm/requeue),
-and a full one-round integration (pull → merge → push → confirm). The
+AppleScript push generation (kHz frequency, UTC logDateTime, batching,
+escaping) with a mock osascript runner, the idempotent qso-column
+migration, push state machine (mark/confirm/requeue), duplicate-row
+confirmation via find_all_existing, and a full one-round integration
+(pull → merge → push → confirm). The WSJT-X UDP 2237 builders remain as a
+backup module (RUMLogNG 6.5 does not activate that parser). The
 real-RUMLogNG smoke path is opt-in (`--smoke`, manual QSO + delete).

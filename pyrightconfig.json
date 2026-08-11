@@ -1,0 +1,5 @@
+{
+  "venvPath": ".",
+  "venv": "venv",
+  "exclude": ["venv", "wsjtx-3.0.2", "dsp/build", "desktop/ft8web/node_modules"]
+}
