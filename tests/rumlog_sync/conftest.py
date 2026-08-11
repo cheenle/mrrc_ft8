@@ -81,7 +81,7 @@ def make_rumlog_db():
 def sample_rumlog_row() -> dict[str, object]:
     return {
         "ZCALLSIGN": "TL8GD",
-        "unix_epoch": 1_795_384_049.0,  # 2026-08-10 23:23:29 UTC
+        "unix_epoch": 1_786_404_209.0,  # 2026-08-10 23:23:29 UTC
         "ZQRG": 14.074684,
         "ZBAND": "20m",
         "ZMODE": "FT8",

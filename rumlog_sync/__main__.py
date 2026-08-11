@@ -69,10 +69,9 @@ def run_cli(argv: list[str], *, cwd: str | None = None) -> int:
 
 
 def _run_smoke(cfg: RumlogConfig) -> None:
-    """Development validation: push a marker QSO to RUMLogNG (spec §6)."""
+    """Development validation: log a marker QSO via AppleScript (spec §6)."""
 
-    from .mapper import build_push_adif_fields
-    from .wsjt_udp import build_heartbeat, build_qso_logged, send_payload
+    from .apple_push import push_via_applescript
 
     rec = {
         "dx_call": "N0SMK",
@@ -86,17 +85,13 @@ def _run_smoke(cfg: RumlogConfig) -> None:
         "completed_epoch": 0.0,
         "my_call": cfg["my_call"],
     }
-    # completed_epoch=0 renders an ADIF date of 1970 — RUMLogNG accepts
-    # but this is a marker; delete it manually after validation.
-    send_payload(
-        build_heartbeat(cfg["udp_id"]), cfg["udp_host"], cfg["udp_port"]
-    )
-    send_payload(
-        build_qso_logged(build_push_adif_fields(rec)),
-        cfg["udp_host"],
-        cfg["udp_port"],
-    )
-    log.warning("smoke QSO sent to RUMLogNG — delete it manually after validation")
+    # completed_epoch=0 renders a 1970 UTC timestamp — a clear marker;
+    # delete it manually after validation.
+    pushed = push_via_applescript([rec])
+    if pushed:
+        log.warning("smoke QSO sent to RUMLogNG — delete it manually after validation")
+    else:
+        log.error("smoke push failed")
 
 
 if __name__ == "__main__":

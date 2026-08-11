@@ -15,15 +15,15 @@ import logging
 from dataclasses import dataclass, field
 from typing import Callable
 
+from .apple_push import push_via_applescript
 from .config import RumlogConfig
 from .ft8_db import Ft8Db
 from .mapper import build_push_adif_fields, map_rumlog_row
 from .rumlog_reader import RUMlogReader
-from .wsjt_udp import build_heartbeat, build_qso_logged, send_payload
 
 log = logging.getLogger(__name__)
 
-Sender = Callable[[bytes, str, int], None]
+Pusher = Callable[[list[dict[str, object]]], int]
 
 
 @dataclass
@@ -37,7 +37,7 @@ class SyncReport:
 
 
 def run_sync_once(
-    cfg: RumlogConfig, *, sender: Sender = send_payload
+    cfg: RumlogConfig, *, pusher: Pusher = push_via_applescript
 ) -> SyncReport:
     """Execute one full pull+merge+push round; returns a report."""
 
@@ -85,17 +85,15 @@ def run_sync_once(
         report.requeued = ft8.tick_unconfirmed(cfg["confirm_retries"])
         pending = ft8.pending_push_records()
         if pending:
-            sender(
-                build_heartbeat(cfg["udp_id"]),
-                cfg["udp_host"],
-                cfg["udp_port"],
-            )
-        for rec in pending:
-            payload = build_qso_logged(build_push_adif_fields(rec))
-            sender(payload, cfg["udp_host"], cfg["udp_port"])
-            ft8.mark_pushed(int(rec["id"]))
-            report.pushed += 1
-            log.info("pushed QSO %s to RUMLogNG", rec["dx_call"])
+            pushed = pusher(pending)
+            if pushed > 0:
+                for rec in pending[:pushed]:
+                    ft8.mark_pushed(int(rec["id"]))
+                report.pushed = pushed
+            else:
+                log.warning(
+                    "push failed; %d record(s) stay queued", len(pending)
+                )
 
         ft8.record_audit(
             "rumlog_sync",

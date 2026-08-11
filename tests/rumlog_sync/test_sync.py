@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import json
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 
 from rumlog_sync.config import RumlogConfig
@@ -12,11 +12,15 @@ from rumlog_sync.sync import run_sync_once
 
 
 @dataclass
-class CapturedSend:
-    payloads: list[bytes]
+class FakePusher:
+    """Records every push batch; returns the batch size unless ``ok`` is off."""
 
-    def __call__(self, payload: bytes, host: str, port: int, *, sock=None) -> None:
-        self.payloads.append(payload)
+    calls: list[list[dict[str, object]]] = field(default_factory=list)
+    ok: bool = True
+
+    def __call__(self, records: list[dict[str, object]]) -> int:
+        self.calls.append(records)
+        return len(records) if self.ok else 0
 
 
 def _cfg(ft8_path: Path, rumlog_path: Path, retries: int = 3) -> RumlogConfig:
@@ -59,8 +63,8 @@ def test_full_merge_then_incremental(
             _rumlog_row("BI4QMU", 27140, 1_795_384_100.0, band="40m"),
         ],
     )
-    sender = CapturedSend([])
-    report = run_sync_once(_cfg(ft8_db_path, rumlog), sender=sender)
+    pusher = FakePusher()
+    report = run_sync_once(_cfg(ft8_db_path, rumlog), pusher=pusher)
     assert report.pulled == 2
     assert report.inserted == 2
     db = Ft8Db(ft8_db_path)
@@ -76,9 +80,9 @@ def test_full_merge_then_incremental(
     # Pulled records already exist in RUMLogNG → never queued for push.
     assert all(r["pushed_to_rumlog"] == 1 for r in rows)
     # Nothing pushed: pulled records are already on the RUMLogNG side.
-    assert sender.payloads == []
+    assert pusher.calls == []
     # Second round is a no-op (cursor advanced).
-    report2 = run_sync_once(_cfg(ft8_db_path, rumlog), sender=sender)
+    report2 = run_sync_once(_cfg(ft8_db_path, rumlog), pusher=pusher)
     assert report2.pulled == 0
     assert report2.inserted == 0
 
@@ -104,7 +108,9 @@ def test_conflict_resolution_prefers_rumlog(
     make_rumlog_db(
         rumlog, [_rumlog_row("TL8GD", 27139, 1_795_384_049.0)]
     )
-    report = run_sync_once(_cfg(ft8_db_path, rumlog), sender=CapturedSend([]))
+    report = run_sync_once(
+        _cfg(ft8_db_path, rumlog), pusher=FakePusher()
+    )
     assert report.inserted == 0
     assert report.updated == 1
     db = Ft8Db(ft8_db_path)
@@ -137,12 +143,14 @@ def test_push_new_ft8_record_and_confirm_next_round(
     db.close()  # release the write lock before round 1 runs
     rumlog = tmp_path / "log.sqlite"
     make_rumlog_db(rumlog, [])  # RUMLogNG empty for round 1
-    sender = CapturedSend([])
-    report = run_sync_once(_cfg(ft8_db_path, rumlog), sender=sender)
+    pusher = FakePusher()
+    report = run_sync_once(_cfg(ft8_db_path, rumlog), pusher=pusher)
     assert report.pushed == 1
-    assert sender.payloads[0].startswith(b"<MessageType:9>HEARTBEAT")
-    assert b"QSO_LOGGED" in sender.payloads[1]
-    assert b"<CALL:4>V85T" in sender.payloads[1]
+    assert len(pusher.calls) == 1
+    pushed_rec = pusher.calls[0][0]
+    assert pushed_rec["dx_call"] == "V85T"
+    assert pushed_rec["completed_epoch"] == 1_753_351_889.0
+    assert pushed_rec["band"] == "20m"
     db = Ft8Db(ft8_db_path)
     db.ensure_schema()
     row = db.get_record(1)
@@ -162,7 +170,7 @@ def test_push_new_ft8_record_and_confirm_next_round(
             }
         ],
     )
-    report2 = run_sync_once(_cfg(ft8_db_path, rumlog), sender=sender)
+    report2 = run_sync_once(_cfg(ft8_db_path, rumlog), pusher=pusher)
     assert report2.updated == 1  # conflict-resolved (same record) → uuid backfill
     db = Ft8Db(ft8_db_path)
     db.ensure_schema()
@@ -194,7 +202,7 @@ def test_unconfirmed_push_requeued_after_retries(
     make_rumlog_db(rumlog, [])
     cfg = _cfg(ft8_db_path, rumlog, retries=2)
     for _ in range(3):
-        run_sync_once(cfg, sender=CapturedSend([]))
+        run_sync_once(cfg, pusher=FakePusher())
     # retries=2: round 2 ages the counter, round 3 requeues and re-pushes.
     db = Ft8Db(ft8_db_path)
     db.ensure_schema()
@@ -206,9 +214,38 @@ def test_unconfirmed_push_requeued_after_retries(
     db.close()
 
 
+def test_push_failure_keeps_records_queued(
+    ft8_db_path, tmp_path: Path, make_rumlog_db
+) -> None:
+    db = Ft8Db(ft8_db_path)
+    db.ensure_schema()
+    db.insert_record(
+        {
+            "my_call": "BG1SB", "my_grid": "ON80DA", "dx_call": "K1BZ",
+            "dx_grid": "", "report_sent": None, "report_rcvd": None,
+            "started_utc": "235930", "mode": "FT8", "freq_hz": 21_074_000,
+            "band": "12m", "status": "completed",
+            "completed_epoch": 1_728_063_570.0, "rumlog_uuid": "", "source": "live",
+        }
+    )
+    db.commit()
+    db.close()
+    rumlog = tmp_path / "log.sqlite"
+    make_rumlog_db(rumlog, [])
+    pusher = FakePusher(ok=False)  # osascript unavailable
+    report = run_sync_once(_cfg(ft8_db_path, rumlog), pusher=pusher)
+    assert report.pushed == 0
+    db = Ft8Db(ft8_db_path)
+    db.ensure_schema()
+    row = db.get_record(1)
+    assert row is not None
+    assert row["pushed_to_rumlog"] == 0  # stays queued for the next round
+    db.close()
+
+
 def test_soft_error_when_rumlog_db_missing(ft8_db_path, tmp_path: Path) -> None:
     report = run_sync_once(
-        _cfg(ft8_db_path, tmp_path / "missing.sqlite"), sender=CapturedSend([])
+        _cfg(ft8_db_path, tmp_path / "missing.sqlite"), pusher=FakePusher()
     )
     assert report.pulled == 0
     assert report.errors  # recorded, not raised
