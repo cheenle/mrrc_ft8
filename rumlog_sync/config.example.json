@@ -1,0 +1,11 @@
+{
+  "ft8_db": "data/mrrc-ft8.db",
+  "rumlog_db": "/Users/cheenle/Library/Containers/de.dl2rum.RUMlogNG/Data/Library/Application Support/RUMLogNG/CoreQsoModel_1.sqlite",
+  "my_call": "BG1SB",
+  "my_grid": "ON80DA",
+  "udp_host": "127.0.0.1",
+  "udp_port": 2237,
+  "udp_id": "MRRC-FT8-SYNC",
+  "confirm_retries": 3,
+  "lock_path": "data/rumlog-sync.lock"
+}
