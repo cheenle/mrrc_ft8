@@ -171,6 +171,21 @@ def test_default_library_path_is_project_build_for_platform() -> None:
     assert default_library_path() == ROOT / "dsp" / "build" / f"libwsjt_core{suffix}"
 
 
+def test_default_library_path_win32_source(monkeypatch) -> None:
+    monkeypatch.setattr("server.core.worker.sys.platform", "win32")
+    from server.core.worker import default_library_path
+    assert default_library_path().name == "wsjt_core.dll"
+
+
+def test_default_library_path_frozen_uses_app_root(monkeypatch) -> None:
+    monkeypatch.setattr("server.core.worker.sys.platform", "win32")
+    monkeypatch.setattr(sys, "frozen", True, raising=False)
+    import server.core.paths as paths
+    monkeypatch.setattr(paths.sys, "_MEIPASS", "/virtual/_internal", raising=False)
+    from server.core.worker import default_library_path
+    assert str(default_library_path()) == "/virtual/_internal/wsjt_core.dll"
+
+
 def test_spawned_worker_sends_no_ready_and_matches_ping_and_shutdown(
     worker_library_path: Path,
 ) -> None:

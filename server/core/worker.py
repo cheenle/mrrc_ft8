@@ -24,10 +24,21 @@ class _RequestError(Exception):
 
 
 def default_library_path() -> Path:
-    """Return the conventional in-tree CMake output for this platform."""
+    """Return the DSP library path for this platform / mode.
 
-    suffix = ".dylib" if sys.platform == "darwin" else ".so"
-    return Path(__file__).resolve().parents[2] / "dsp" / "build" / f"libwsjt_core{suffix}"
+    Frozen installers bundle ``wsjt_core.dll`` and its runtime DLLs at the
+    PyInstaller ``_internal`` root; source builds keep the conventional
+    ``dsp/build`` CMake output.
+    """
+    if getattr(sys, "frozen", False):
+        from server.core.paths import app_root
+        return app_root() / "wsjt_core.dll"
+    base = Path(__file__).resolve().parents[2] / "dsp" / "build"
+    if sys.platform == "darwin":
+        return base / "libwsjt_core.dylib"
+    if sys.platform == "win32":
+        return base / "wsjt_core.dll"
+    return base / "libwsjt_core.so"
 
 
 def _expected_shm_size(logical_nbytes: int) -> int:
