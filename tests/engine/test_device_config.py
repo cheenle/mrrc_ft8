@@ -203,6 +203,27 @@ def test_store_roundtrip_and_spawn_script(tmp_path) -> None:
     assert store.load() == {"rig_model": 3073}
 
 
+def test_spawn_restart_windows_uses_powershell(monkeypatch, tmp_path) -> None:
+    monkeypatch.setattr("server.engine.device_config.os.name", "nt")
+    script = tmp_path / "restart.ps1"
+    script.write_text("")
+    captured: list[list[str]] = []
+
+    def fake_popen(cmd, **kwargs):
+        captured.append(cmd)
+        class P:
+            pass
+        return P()
+
+    monkeypatch.setattr("server.engine.device_config.subprocess.Popen", fake_popen)
+    monkeypatch.setattr("server.engine.device_config.os.environ", {"LOCALAPPDATA": str(tmp_path)})
+    from server.engine.device_config import DeviceConfigStore
+    store = DeviceConfigStore(tmp_path / "device-config.json", script=script)
+    store.spawn_restart()
+    assert captured and captured[0][0].lower() == "powershell"
+    assert str(script) in captured[0]
+
+
 def test_enumerate_audio_devices_times_out_on_wedged_sounddevice(monkeypatch) -> None:
     """CoreAudio 卡死（聚合设备引用断电电台）时枚举必须超时返回 []，不能挂死。"""
 

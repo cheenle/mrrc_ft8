@@ -25,6 +25,13 @@ log = logging.getLogger("mrrc-ft8.device-config")
 
 DEFAULT_CONFIG_PATH = Path("data/device-config.json")
 
+# Py>=3.13 pathlib.Path() is a flavor dispatcher keyed to the *current*
+# os.name at call time, so snapshot the host's concrete class. Filesystem
+# paths built here stay native even when os.name is faked (tests simulating
+# Windows on POSIX with monkeypatched "nt" would otherwise yield WindowsPath
+# objects whose .exists()/.parent/.mkdir cannot run on a POSIX host).
+_NATIVE_PATH = type(Path("."))
+
 # Curated hamlib rig models offered in the UI (rigctl -l, verified 2026-08-10).
 CURATED_RIG_MODELS: list[tuple[int, str]] = [
     (1020, "Yaesu FT-817"),
@@ -324,8 +331,14 @@ class DeviceConfigStore:
     def __init__(
         self, path: str | Path = DEFAULT_CONFIG_PATH, *, script: str | Path | None = None
     ) -> None:
-        self.path = Path(path)
-        self.script = Path(script) if script else Path(__file__).resolve().parents[2] / "restart.sh"
+        self.path = _NATIVE_PATH(path)
+        if script is not None:
+            self.script = _NATIVE_PATH(script)
+        elif os.name == "nt":
+            from server.core.paths import app_root
+            self.script = app_root() / "restart.ps1"
+        else:
+            self.script = _NATIVE_PATH(__file__).resolve().parents[2] / "restart.sh"
 
     def load(self) -> dict[str, Any] | None:
         return load_device_config(self.path)
@@ -334,11 +347,29 @@ class DeviceConfigStore:
         save_device_config(cfg, self.path)
 
     def spawn_restart(self) -> None:
-        """Detached restart.sh run; survives this process being killed."""
+        """Detached restart run; survives this process being killed."""
 
         if not self.script.exists():
             log.error("restart script missing: %s", self.script)
             raise FileNotFoundError(f"restart script missing: {self.script}")
+        if os.name == "nt":
+            data_dir = _NATIVE_PATH(os.environ.get("LOCALAPPDATA", ".")) / "MRRC-FT8"
+            data_dir.mkdir(parents=True, exist_ok=True)
+            log_path = data_dir / "restart.log"
+            flags = 0
+            for name in ("DETACHED_PROCESS", "CREATE_NEW_PROCESS_GROUP"):
+                flags |= getattr(subprocess, name, 0)
+            with log_path.open("ab") as fh:
+                subprocess.Popen(
+                    ["powershell", "-NoProfile", "-ExecutionPolicy", "Bypass",
+                     "-File", str(self.script)],
+                    cwd=str(self.script.parent),
+                    stdout=fh,
+                    stderr=fh,
+                    creationflags=flags,
+                    close_fds=True,
+                )
+            return
         log_path = Path("/tmp/mrrc-ft8-restart.log")
         with log_path.open("ab") as fh:
             subprocess.Popen(
