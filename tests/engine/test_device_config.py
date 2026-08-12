@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 import sys
 from types import SimpleNamespace
 
@@ -45,7 +46,7 @@ def test_load_corrupt_json_returns_none(tmp_path) -> None:
 def test_save_is_atomic_and_creates_parent(tmp_path) -> None:
     path = tmp_path / "nested" / "device-config.json"
     save_device_config({"rig_model": 1049, "rigctld_port": 4532, "audio_device": None}, path)
-    assert json.loads(path.read_text()) == {"rig_model": 1049, "rigctld_port": 4532}
+    assert json.loads(path.read_text(encoding="utf-8")) == {"rig_model": 1049, "rigctld_port": 4532}
     leftovers = list(tmp_path.glob("nested/device-config-*.tmp"))
     assert leftovers == []
 
@@ -91,6 +92,7 @@ def test_enumerate_audio_devices_tolerates_missing_sounddevice(monkeypatch) -> N
 
 
 def test_enumerate_serial_devices(monkeypatch) -> None:
+    monkeypatch.setattr("server.engine.device_config.os.name", "posix")
     monkeypatch.setattr(
         "server.engine.device_config.glob.glob",
         lambda pat: [f"/dev/cu.usbserial-0121DB3A0"] if "cu." in pat else [],
@@ -136,7 +138,8 @@ def test_validate_rejects_non_string_device_on_windows(monkeypatch) -> None:
 
 
 def test_validate_accepts_good_config() -> None:
-    cfg = {"rig_model": 1049, "rig_device": "/dev/cu.x", "rig_baud": 38400,
+    device = "COM3" if os.name == "nt" else "/dev/cu.x"
+    cfg = {"rig_model": 1049, "rig_device": device, "rig_baud": 38400,
            "rigctld_port": 4532, "audio_device": "USB"}
     assert validate(cfg, [{"index": 0, "name": "USB"}]) is None
 
@@ -176,7 +179,7 @@ def test_validate_accepts_stop_bits_1_and_2() -> None:
 def test_save_skips_empty_rig_device(tmp_path) -> None:
     path = tmp_path / "device-config.json"
     save_device_config({"rig_device": "", "audio_device": "FT8"}, path)
-    assert json.loads(path.read_text()) == {"audio_device": "FT8"}
+    assert json.loads(path.read_text(encoding="utf-8")) == {"audio_device": "FT8"}
 
 
 def test_validate_allows_unchanged_audio_even_when_absent() -> None:

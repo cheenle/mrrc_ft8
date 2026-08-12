@@ -42,12 +42,17 @@ def default_library_path() -> Path:
 
 
 def _expected_shm_size(logical_nbytes: int) -> int:
-    """Return the observable segment size for an exact logical allocation."""
+    """Return the observable segment size for an exact logical allocation.
 
-    if sys.platform != "darwin":
-        return logical_nbytes
-    page_size = mmap.PAGESIZE
-    return ((logical_nbytes + page_size - 1) // page_size) * page_size
+    Darwin ``mmap`` and Windows ``CreateFileMapping`` both round the allocation
+    up to the system page size, and ``SharedMemory.size`` reports that rounded
+    size; other platforms report the exact logical size.
+    """
+
+    if sys.platform in ("darwin", "win32"):
+        page_size = mmap.PAGESIZE
+        return ((logical_nbytes + page_size - 1) // page_size) * page_size
+    return logical_nbytes
 
 
 def worker_main(

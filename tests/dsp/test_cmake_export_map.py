@@ -14,7 +14,7 @@ PRODUCTION_EXPORTS = {
 
 
 def _global_exports(export_map: Path) -> set[str]:
-    text = export_map.read_text()
+    text = export_map.read_text(encoding="utf-8")
     assert "${" not in text
     global_block = text.split("global:", 1)[1].split("local:", 1)[0]
     return {

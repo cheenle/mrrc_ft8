@@ -8,6 +8,14 @@ from pathlib import Path
 import pytest
 
 
+# Export-map inspection (nm/dyld_info) and the version-script/unexports
+# machinery are Unix-only; the Windows DLL ABI is exercised by the packaging
+# smoke test instead (launcher loads wsjt_core.dll via the bundled server).
+pytestmark = pytest.mark.skipif(
+    os.name == "nt", reason="native ABI export-map tests require Unix toolchain"
+)
+
+
 ROOT = Path(__file__).parents[2]
 BUILD = ROOT / "dsp" / "build"
 EXPECTED_CAPABILITIES = (

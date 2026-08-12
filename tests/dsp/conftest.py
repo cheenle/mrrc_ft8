@@ -3,6 +3,7 @@ from __future__ import annotations
 import ctypes as c
 import os
 import subprocess
+import sys
 from pathlib import Path
 
 os.environ.setdefault("OMP_STACKSIZE", "10M")
@@ -13,7 +14,25 @@ from scipy.signal import resample_poly
 
 
 ROOT = Path(__file__).parents[2]
-SUFFIX = ".dylib" if os.uname().sysname == "Darwin" else ".so"
+SUFFIX = ".dll" if os.name == "nt" else (".dylib" if sys.platform == "darwin" else ".so")
+FORTRAN_COMPILER = "gfortran-mp-13" if sys.platform == "darwin" else "gfortran"
+@pytest.fixture(autouse=True)
+def _windows_dsp_dll_search_path() -> None:
+    """On Windows, let ctypes find the MinGW runtime DLLs next to gfortran.
+
+    Python 3.8+ secure DLL loading ignores PATH, so fresh test builds of
+    libwsjt_core.dll cannot resolve libgfortran-5/libfftw3f_threads/etc.
+    without an explicit add_dll_directory.
+    """
+    if os.name == "nt":
+        import shutil
+
+        compiler = shutil.which("gfortran")
+        if compiler:
+            os.add_dll_directory(str(Path(compiler).resolve().parent))
+    yield
+
+
 ENCODE_ARGTYPES = [
     c.c_char_p,
     c.c_float,
@@ -27,7 +46,16 @@ ENCODE_ARGTYPES = [
 
 @pytest.fixture(scope="session")
 def raw_library_path(tmp_path_factory: pytest.TempPathFactory) -> Path:
-    """Configure and build a fresh native library for DSP tests."""
+    """Configure and build a fresh native library for DSP tests.
+
+    Skipped on Windows: the Fortran decode allocates hundreds of KB of
+    automatic arrays on the caller stack, which overflows the 1 MB Windows
+    main-thread default (macOS/Linux give 8 MB+).  The packaged server runs
+    decode on a large-stack thread (server/core/binding.py ``_call_native``);
+    that path is validated by the binding E2E and by the macOS suite.
+    """
+    if os.name == "nt":
+        pytest.skip("native raw-ctypes decode requires >1 MB stack on Windows")
     build = tmp_path_factory.mktemp("ft8-dsp-build")
     build_type = os.environ.get("MRRC_FT8_DSP_BUILD_TYPE", "Release")
     assert build_type in {"Debug", "Release"}
@@ -38,7 +66,7 @@ def raw_library_path(tmp_path_factory: pytest.TempPathFactory) -> Path:
             str(ROOT / "dsp"),
             "-B",
             str(build),
-            "-DCMAKE_Fortran_COMPILER=gfortran-mp-13",
+            f"-DCMAKE_Fortran_COMPILER={FORTRAN_COMPILER}",
             f"-DCMAKE_BUILD_TYPE={build_type}",
         ],
         cwd=ROOT,

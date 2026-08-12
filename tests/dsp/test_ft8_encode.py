@@ -3,6 +3,7 @@ from __future__ import annotations
 import ctypes as c
 import os
 import subprocess
+import sys
 from pathlib import Path
 
 import numpy as np
@@ -10,6 +11,8 @@ import pytest
 
 
 ROOT = Path(__file__).parents[2]
+SUFFIX = ".dll" if os.name == "nt" else (".dylib" if sys.platform == "darwin" else ".so")
+FORTRAN_COMPILER = "gfortran-mp-13" if sys.platform == "darwin" else "gfortran"
 ENCODE_ARGTYPES = [
     c.c_char_p,
     c.c_float,
@@ -31,7 +34,7 @@ def encode_library(tmp_path_factory: pytest.TempPathFactory) -> c.CDLL:
             str(ROOT / "dsp"),
             "-B",
             str(build),
-            "-DCMAKE_Fortran_COMPILER=gfortran-mp-13",
+            f"-DCMAKE_Fortran_COMPILER={FORTRAN_COMPILER}",
             "-DCMAKE_BUILD_TYPE=Release",
         ],
         cwd=ROOT,
@@ -43,8 +46,7 @@ def encode_library(tmp_path_factory: pytest.TempPathFactory) -> c.CDLL:
         check=True,
     )
 
-    suffix = ".dylib" if os.uname().sysname == "Darwin" else ".so"
-    library = build / f"libwsjt_core{suffix}"
+    library = build / f"libwsjt_core{SUFFIX}"
     assert library.is_file(), f"fresh build did not create {library}"
     loaded = c.CDLL(str(library))
     loaded.wsjt_ft8_encode.argtypes = ENCODE_ARGTYPES

@@ -7,15 +7,35 @@ skip the round), 2 = bad config, 3 = another instance holds the lock.
 from __future__ import annotations
 
 import argparse
-import fcntl
 import logging
 import sys
 from pathlib import Path
+
+try:
+    import fcntl
+except ImportError:  # Windows has no fcntl; use msvcrt byte-range locking.
+    fcntl = None
+    import msvcrt
 
 from .config import RumlogConfig, load_config
 from .sync import run_sync_once
 
 log = logging.getLogger("rumlog_sync")
+
+
+def _lock_exclusive(stream: object) -> None:
+    """Advisory exclusive non-blocking lock (flock on Unix, msvcrt on Windows).
+
+    Raises OSError when another process already holds the lock.
+    """
+    if fcntl is not None:
+        fcntl.flock(stream, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        return
+    stream.seek(0)
+    stream.write("\0")  # msvcrt locks existing bytes only
+    stream.flush()
+    stream.seek(0)
+    msvcrt.locking(stream.fileno(), msvcrt.LK_NBLCK, 1)
 
 
 def _parse_args(argv: list[str]) -> argparse.Namespace:
@@ -50,7 +70,7 @@ def run_cli(argv: list[str], *, cwd: str | None = None) -> int:
     lock_path.parent.mkdir(parents=True, exist_ok=True)
     with lock_path.open("w") as lock_stream:
         try:
-            fcntl.flock(lock_stream, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            _lock_exclusive(lock_stream)
         except OSError:
             log.warning("another sync instance holds %s; skipping round", lock_path)
             return 3

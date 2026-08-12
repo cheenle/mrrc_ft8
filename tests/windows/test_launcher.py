@@ -99,14 +99,14 @@ def test_server_command_includes_ssl_pair() -> None:
     mod = _load()
     cmd = mod.server_command(Path("C:/app/App"), (Path("C:/c.pem"), Path("C:/k.pem")))
     assert cmd[0].endswith("ft8-server.exe")
-    assert "--ssl-cert" in cmd and "C:/c.pem" in cmd
-    assert "--ssl-key" in cmd and "C:/k.pem" in cmd
+    assert "--ssl-cert" in cmd and str(Path("C:/c.pem")) in cmd
+    assert "--ssl-key" in cmd and str(Path("C:/k.pem")) in cmd
 
 
 def test_server_command_without_ssl_pair() -> None:
     mod = _load()
     cmd = mod.server_command(Path("C:/app/App"), None)
-    assert cmd == ["C:/app/App/ft8-server.exe"]
+    assert cmd == [str(Path("C:/app/App") / "ft8-server.exe")]
     assert "--ssl-cert" not in cmd
     assert "--ssl-key" not in cmd
     assert "--no-ssl" not in cmd

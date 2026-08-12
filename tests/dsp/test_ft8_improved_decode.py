@@ -16,7 +16,7 @@ ROOT = Path(__file__).parents[2]
 
 def _request_state_assignments() -> dict[str, str]:
     """Return normalized assignments from the native request initializer."""
-    source = (ROOT / "dsp" / "wsjt_improved.f90").read_text()
+    source = (ROOT / "dsp" / "wsjt_improved.f90").read_text(encoding="utf-8")
     match = re.search(
         r"(?ims)^\s*subroutine\s+initialize_request_state\b"
         r"(.*?)^\s*end\s+subroutine\s+initialize_request_state\s*$",
@@ -204,7 +204,7 @@ def test_improved_same_process_cq_empty_cq_has_no_request_history_leak(
 
 
 def test_openmp_stack_contract_is_set_before_runtime_load_and_documented() -> None:
-    fixture = (ROOT / "tests" / "dsp" / "conftest.py").read_text()
+    fixture = (ROOT / "tests" / "dsp" / "conftest.py").read_text(encoding="utf-8")
     setting = 'os.environ.setdefault("OMP_STACKSIZE", "10M")'
     assert fixture.index(setting) < fixture.index("import numpy")
     assert fixture.index(setting) < fixture.index("from scipy")
@@ -215,7 +215,7 @@ def test_openmp_stack_contract_is_set_before_runtime_load_and_documented() -> No
         ROOT / "docs" / "superpowers" / "plans" / "2026-08-01-ft8-dsp-worker.md",
     ]
     for record in required_records:
-        text = record.read_text()
+        text = record.read_text(encoding="utf-8")
         assert "OMP_STACKSIZE" in text, f"missing OpenMP stack contract in {record}"
         assert "10M" in text, f"missing vendor stack size in {record}"
 

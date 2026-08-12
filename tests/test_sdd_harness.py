@@ -27,16 +27,16 @@ def test_trace_recognizes_multi_digit_sdd_identifiers() -> None:
 
 def test_task5_quality_fix_records_are_synchronized() -> None:
     root = Path(__file__).parents[1]
-    architecture = (root / "SDD/09-architecture-overview.md").read_text()
-    components = (root / "SDD/11-component-model.md").read_text()
-    feasibility = (root / "SDD/13-feasibility-assessment.md").read_text()
-    history = (root / "SDD/14-version-history.md").read_text()
-    agents = (root / "AGENTS.md").read_text()
-    inventory = (root / "tests/README.md").read_text()
+    architecture = (root / "SDD/09-architecture-overview.md").read_text(encoding="utf-8")
+    components = (root / "SDD/11-component-model.md").read_text(encoding="utf-8")
+    feasibility = (root / "SDD/13-feasibility-assessment.md").read_text(encoding="utf-8")
+    history = (root / "SDD/14-version-history.md").read_text(encoding="utf-8")
+    agents = (root / "AGENTS.md").read_text(encoding="utf-8")
+    inventory = (root / "tests/README.md").read_text(encoding="utf-8")
     plan = (
         root
         / "docs/superpowers/plans/2026-08-01-ft8-dsp-worker.md"
-    ).read_text()
+    ).read_text(encoding="utf-8")
     patched_copies = (
         "encode174_91var.f90",
         "osd174_91var.f90",
@@ -61,4 +61,4 @@ def test_task5_quality_fix_records_are_synchronized() -> None:
     assert "weak direct-A8 fixture" in feasibility
     assert "weak direct-A8 fixture" in inventory
     assert "## Unreleased" in history
-    assert "| SDD version | V1.8 |" in (root / "SDD/README.md").read_text()
+    assert "| SDD version | V1.8 |" in (root / "SDD/README.md").read_text(encoding="utf-8")

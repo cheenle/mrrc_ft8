@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import os
 import sys
 from types import SimpleNamespace
 
@@ -56,6 +57,7 @@ def test_devices_view_reports_config_source_and_enums(client, monkeypatch) -> No
         {"name": "USB Audio", "max_input_channels": 2, "max_output_channels": 2},
     ])
     monkeypatch.setitem(sys.modules, "sounddevice", fake_sd)
+    monkeypatch.setattr("server.engine.device_config.os.name", "posix")
     monkeypatch.setattr(
         "server.engine.device_config.glob.glob",
         lambda pat: ["/dev/cu.usbserial-0121DB3A0"] if "cu." in pat else [],
@@ -78,9 +80,10 @@ def test_devices_put_saves_file(client, tmp_path, monkeypatch) -> None:
     monkeypatch.setitem(sys.modules, "sounddevice", SimpleNamespace(query_devices=lambda: [
         {"name": "USB Audio", "max_input_channels": 2, "max_output_channels": 2},
     ]))
+    device = "COM3" if os.name == "nt" else "/dev/cu.x"
     res = client.put(
         "/api/v1/devices",
-        json={"rig_model": 1049, "rig_device": "/dev/cu.x", "rig_baud": 38400,
+        json={"rig_model": 1049, "rig_device": device, "rig_baud": 38400,
               "rigctld_port": 4532, "audio_device": "USB Audio"},
         headers=auth_headers(session_id),
     )
@@ -103,7 +106,7 @@ def test_devices_put_allows_empty_rig_device_as_unset(client, tmp_path, monkeypa
         headers=auth_headers(session_id),
     )
     assert res.status_code == 200, res.text
-    saved = json.loads((tmp_path / "device-config.json").read_text())
+    saved = json.loads((tmp_path / "device-config.json").read_text(encoding="utf-8"))
     assert "rig_device" not in saved
     assert saved["audio_device"] == "USB Audio"
 

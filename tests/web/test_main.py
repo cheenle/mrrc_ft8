@@ -184,6 +184,10 @@ def test_interrupted_qso_becomes_aborted_restart(tmp_path: Path) -> None:
         check.close()
 
 
+@pytest.mark.skipif(
+    os.name == "nt",
+    reason="Windows cannot atomically replace an open SQLite file (os.replace on an open file raises WinError 5)",
+)
 def test_reply_survives_external_db_replace(tmp_path: Path) -> None:
     """Regression: replacing the db file under a live server must not turn
     reply into a 500 (production incident, ``mrrc-ft8.db`` swapped mid-run
@@ -583,6 +587,10 @@ def test_auto_call_reply_defaults_frequency_without_decode_freq() -> None:
     assert captured["tx_frequency"] == 1500.0
 
 
+@pytest.mark.skipif(
+    not (Path(__file__).parents[2] / "desktop" / "ft8web" / "dist" / "index.html").exists(),
+    reason="desktop client dist not built; run `npm run build` in desktop/ft8web first",
+)
 def test_desktop_mount_serves_client() -> None:
     app = create_server(make_config(), start_dsp=False, start_audio=False)
     with TestClient(app, base_url="https://testserver") as client:

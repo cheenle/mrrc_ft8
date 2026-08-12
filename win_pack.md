@@ -111,17 +111,18 @@ venv/bin/python -m pytest tests/ -q        # 必须全绿（2026-08-12 为 908 p
 mkdir -p dist && rm -f dist/mrrc_ft8_src.zip
 zip -qr dist/mrrc_ft8_src.zip . \
   -x "./.git/*" "./venv/*" "./.venv/*" "./dist/*" "./build/*" \
-     "./wsjtx-3.0.2/*" "./mrrc-ft8.db" "./data/*" "./__pycache__/*" \
+     "./mrrc-ft8.db" "./data/*" "./__pycache__/*" \
      "./windows/__pycache__/*" "./tests/__pycache__/*" "./.pytest_cache/*" \
      "./.claude/*" "./.superpowers/*" "./*.pyc" "./.DS_Store" \
-     "./desktop/ft8web/node_modules/*" "./desktop/ft8web/dist/*"
+     "./desktop/ft8web/node_modules/*" "./desktop/ft8web/dist/*" "./dsp/build/*" \
+     "./FT8web/*"
 ```
 
 **关键**：
 - `./.agents/*` **不能排除**——`tests/test_sdd_harness.py` 依赖其中的 harness 文件（同 mrrc_ft710 的教训，缺了 VM 上测试会失败）。
-- `./data/*` 必须排除（含本机运行时 `device-config.json`、`mrrc-ft8.db`、日志）。
-- `wsjtx-3.0.2/`（98M 只读 vendor）和 `mrrc-ft8.db`（12M）必须排除。
-- `vendor/` **保留在包内**（内含装配好的 `wsjt_core.dll` + 运行时 DLL + rigctld），这样 VM 上解压即用、且经得起 §3 Step 3 的整体删除。
+- **`wsjtx-3.0.2/` 必须包含在包里**：`tests/dsp/test_vendor_policy.py::test_vendor_tree_matches_approved_digest` 会对整棵树做哈希比对（`dsp/vendor.sha256`），DSP 编译（`dsp/CMakeLists.txt` 引用 `wsjtx-3.0.2/lib`）也依赖它。98M 源码压缩后约 32M，zip 总共约 35M。
+- `./data/*`、`mrrc-ft8.db`（12M）、`FT8web/`（旧副本，含独立 `.git`）必须排除。
+- `vendor/`（`wsjt_core.dll` + 运行时 DLL + rigctld）：**首次构建时在 VM 上装配**（见 §2.3/§2.4 的 `vm_03_vendor.ps1` 流程），之后可取回本机放进 `vendor/`，随包走，经得起 §3 Step 3 的整体删除。
 
 ### Step 2 — 上传到 VM（经 ham 跳板）
 

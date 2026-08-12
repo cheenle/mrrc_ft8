@@ -74,7 +74,7 @@ def test_exhausted_attempts_spill_to_journal(tmp_path) -> None:
         run(qlog.drain_once())
     assert qlog.pending == 0
     assert tmp_path.joinpath("pending.jsonl").exists()
-    assert "K1ABC" in tmp_path.joinpath("pending.jsonl").read_text()
+    assert "K1ABC" in tmp_path.joinpath("pending.jsonl").read_text(encoding="utf-8")
 
 
 def test_recover_reads_journal_into_queue(tmp_path) -> None:
@@ -92,7 +92,7 @@ def test_recover_reads_journal_into_queue(tmp_path) -> None:
     assert fresh.pending == 0
     assert fresh.repository.list_qsos()[0].dx_call == "K1ABC"
     # Journal cleared so a second restart cannot duplicate.
-    assert tmp_path.joinpath("pending.jsonl").read_text() == ""
+    assert tmp_path.joinpath("pending.jsonl").read_text(encoding="utf-8") == ""
 
 
 def test_flush_persists_remaining_queue(tmp_path) -> None:

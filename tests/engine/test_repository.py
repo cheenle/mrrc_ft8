@@ -265,6 +265,10 @@ def test_worked_calls_groups_base_and_excludes_void(tmp_path: Path) -> None:
     repo.close()
 
 
+@pytest.mark.skipif(
+    os.name == "nt",
+    reason="Windows cannot atomically replace an open SQLite file (os.replace on an open file raises WinError 5)",
+)
 def test_external_db_replace_does_not_wedge_writes(tmp_path: Path) -> None:
     """AD-014: an external process replacing the db file mid-run must not
     permanently wedge the repository.

@@ -1,11 +1,11 @@
 $ErrorActionPreference = "Stop"
 
-# $ErrorActionPreference does NOT apply to native commands — check
+# $ErrorActionPreference does NOT apply to native commands - check
 # $LASTEXITCODE explicitly so a failing test or build aborts packaging.
 function Invoke-Checked {
     param(
         [Parameter(Mandatory = $true, Position = 0)][string]$Command,
-        [ValueFromRemainingArguments = $true]$Remaining
+        [Parameter(ValueFromRemainingArguments = $true)]$Remaining
     )
     $flat = @()
     foreach ($a in $Remaining) { $flat += $a }

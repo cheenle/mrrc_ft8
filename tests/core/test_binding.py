@@ -563,7 +563,7 @@ def test_explicit_library_path_sets_all_four_signatures_and_selects_path(
     wave = output()
     encoded = binding.encode("CQ K1ABC FN42", 1500.0, FT8_TX_RATE, wave)
 
-    assert loaded_paths == ["/tmp/libwsjt_core.so"]
+    assert loaded_paths == [str(Path("/tmp/libwsjt_core.so"))]
     functions = [
         library.wsjt_get_abi_info,
         library.wsjt_ft8_encode,

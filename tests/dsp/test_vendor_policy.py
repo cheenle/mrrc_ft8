@@ -315,7 +315,7 @@ def test_vendor_digest_rejects_non_regular_entries(tmp_path: Path) -> None:
 
 def test_vendor_tree_matches_approved_digest() -> None:
     """Every vendored file must match the approved stable tree digest."""
-    expected = VENDOR_DIGEST.read_text().strip()
+    expected = VENDOR_DIGEST.read_text(encoding="utf-8").strip()
     actual = tree_digest(VENDOR_ROOT)
 
     assert actual == expected, (
@@ -328,8 +328,8 @@ def test_vendor_tree_matches_approved_digest() -> None:
 
 def test_headless_stdcall_is_exact_vendor_extraction() -> None:
     """The isolated helper must remain byte-for-byte vendor equivalent."""
-    expected = extract_stdcall(VENDOR_STDCALL.read_text())
-    actual = HEADLESS_STDCALL.read_text()
+    expected = extract_stdcall(VENDOR_STDCALL.read_text(encoding="utf-8"))
+    actual = HEADLESS_STDCALL.read_text(encoding="utf-8")
 
     assert actual == expected
 

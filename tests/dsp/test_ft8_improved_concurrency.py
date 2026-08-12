@@ -15,11 +15,14 @@ from test_ft8_standard_decode import Result, config
 
 
 ROOT = Path(__file__).parents[2]
-SUFFIX = ".dylib" if os.uname().sysname == "Darwin" else ".so"
+SUFFIX = ".dll" if os.name == "nt" else (".dylib" if sys.platform == "darwin" else ".so")
+FORTRAN_COMPILER = "gfortran-mp-13" if sys.platform == "darwin" else "gfortran"
 
 
 @pytest.fixture
 def a8_hook_library(tmp_path_factory: pytest.TempPathFactory) -> c.CDLL:
+    if os.name == "nt":
+        pytest.skip("native raw-ctypes decode requires >1 MB stack on Windows")
     build = tmp_path_factory.mktemp("ft8-a8-hook-build")
     subprocess.run(
         [
@@ -28,7 +31,7 @@ def a8_hook_library(tmp_path_factory: pytest.TempPathFactory) -> c.CDLL:
             str(ROOT / "dsp"),
             "-B",
             str(build),
-            "-DCMAKE_Fortran_COMPILER=gfortran-mp-13",
+            f"-DCMAKE_Fortran_COMPILER={FORTRAN_COMPILER}",
             "-DCMAKE_BUILD_TYPE=Release",
             "-DMRRC_FT8_TEST_HOOKS=ON",
         ],
@@ -157,10 +160,10 @@ def test_improved_fails_closed_when_runtime_cannot_form_requested_team(
 
 
 def test_partition_helper_covers_every_legal_band_exactly_once(tmp_path: Path) -> None:
-    executable = tmp_path / "partition-probe"
+    executable = tmp_path / ("partition-probe.exe" if os.name == "nt" else "partition-probe")
     subprocess.run(
         [
-            "gfortran-mp-13",
+            FORTRAN_COMPILER,
             str(ROOT / "dsp" / "wsjt_partition.f90"),
             str(ROOT / "tests" / "dsp" / "partition_probe.f90"),
             "-o",
@@ -173,10 +176,10 @@ def test_partition_helper_covers_every_legal_band_exactly_once(tmp_path: Path) -
 
 
 def test_a8_gate_uses_strict_three_hz_threshold_and_atomic_clear(tmp_path: Path) -> None:
-    executable = tmp_path / "a8-gate-probe"
+    executable = tmp_path / ("a8-gate-probe.exe" if os.name == "nt" else "a8-gate-probe")
     subprocess.run(
         [
-            "gfortran-mp-13",
+            FORTRAN_COMPILER,
             "-fopenmp",
             str(ROOT / "dsp" / "wsjt_a8_gate.f90"),
             str(ROOT / "tests" / "dsp" / "a8_gate_probe.f90"),

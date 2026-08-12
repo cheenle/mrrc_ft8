@@ -119,16 +119,36 @@ def worker_library_path(tmp_path_factory: pytest.TempPathFactory) -> Path:
             str(ROOT / "dsp"),
             "-B",
             str(build),
-            "-DCMAKE_Fortran_COMPILER=gfortran-mp-13",
+            f"-DCMAKE_Fortran_COMPILER={'gfortran-mp-13' if sys.platform == 'darwin' else 'gfortran'}",
             "-DCMAKE_BUILD_TYPE=Release",
         ],
         cwd=ROOT,
         check=True,
     )
     subprocess.run(["cmake", "--build", str(build), "-j"], cwd=ROOT, check=True)
-    suffix = ".dylib" if sys.platform == "darwin" else ".so"
+    suffix = ".dll" if os.name == "nt" else (".dylib" if sys.platform == "darwin" else ".so")
     path = build / f"libwsjt_core{suffix}"
     assert path.is_file()
+    if os.name == "nt":
+        # The spawned worker resolves deps via CoreBinding's add_dll_directory
+        # (its DLL dir); copy the MinGW runtime DLLs next to the fresh build so
+        # the child can load libwsjt_core.dll without them on the search path.
+        import shutil
+
+        compiler = shutil.which("gfortran")
+        assert compiler, "gfortran must be on PATH to copy runtime DLLs"
+        bin_dir = Path(compiler).resolve().parent
+        for dll in (
+            "libgfortran-5.dll",
+            "libgomp-1.dll",
+            "libquadmath-0.dll",
+            "libwinpthread-1.dll",
+            "libgcc_s_seh-1.dll",
+            "libstdc++-6.dll",
+            "libfftw3f-3.dll",
+            "libfftw3f_threads-3.dll",
+        ):
+            shutil.copy(bin_dir / dll, build)
     return path
 
 
@@ -167,8 +187,14 @@ def test_worker_module_defers_numpy_and_binding_until_after_stack_default() -> N
 
 
 def test_default_library_path_is_project_build_for_platform() -> None:
-    suffix = ".dylib" if sys.platform == "darwin" else ".so"
-    assert default_library_path() == ROOT / "dsp" / "build" / f"libwsjt_core{suffix}"
+    expected = ROOT / "dsp" / "build"
+    if sys.platform == "darwin":
+        expected = expected / "libwsjt_core.dylib"
+    elif os.name == "nt":
+        expected = expected / "wsjt_core.dll"  # MinGW builds prefix-free for packaging
+    else:
+        expected = expected / "libwsjt_core.so"
+    assert default_library_path() == expected
 
 
 def test_default_library_path_win32_source(monkeypatch) -> None:
@@ -183,7 +209,7 @@ def test_default_library_path_frozen_uses_app_root(monkeypatch) -> None:
     import server.core.paths as paths
     monkeypatch.setattr(paths.sys, "_MEIPASS", "/virtual/_internal", raising=False)
     from server.core.worker import default_library_path
-    assert str(default_library_path()) == "/virtual/_internal/wsjt_core.dll"
+    assert str(default_library_path()) == str(Path("/virtual/_internal") / "wsjt_core.dll")
 
 
 def test_spawned_worker_sends_no_ready_and_matches_ping_and_shutdown(

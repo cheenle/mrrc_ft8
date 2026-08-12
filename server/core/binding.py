@@ -106,6 +106,28 @@ class _DecodeResult(ctypes.Structure):
     ]
 
 
+def _call_native(fn: object) -> object:
+    """Run a native library call on a large-stack thread on Windows.
+
+    The Fortran decode allocates multi-hundred-KB automatic arrays on the
+    caller stack; the Windows main-thread default is 1 MB (macOS/Linux give
+    8 MB+), which overflows.  ``threading.stack_size`` only affects threads
+    created afterwards, so each heavy native call runs on a dedicated thread.
+    """
+    if os.name != "nt":
+        return fn()  # type: ignore[operator]
+    threading.stack_size(16 * 1024 * 1024)
+    holder: dict[str, object] = {}
+
+    def target() -> None:
+        holder["value"] = fn()  # type: ignore[operator]
+
+    thread = threading.Thread(target=target)
+    thread.start()
+    thread.join()
+    return holder["value"]
+
+
 _DECODE_ARGTYPES = [
     ctypes.POINTER(ctypes.c_int16),
     ctypes.POINTER(_DecodeConfig),
@@ -161,7 +183,13 @@ class _CtypesAdapter:
     __slots__ = ("_library",)
 
     def __init__(self, library_path: str | os.PathLike[str]) -> None:
-        library = ctypes.CDLL(str(Path(library_path)))
+        path = Path(library_path)
+        if os.name == "nt" and path.parent.is_dir():
+            # Python 3.8+ uses secure DLL loading on Windows and ignores PATH;
+            # the MinGW runtime DLLs (libgfortran-5.dll, libfftw3f_threads-3.dll,
+            # libstdc++-6.dll, ...) sit next to wsjt_core.dll, so add that dir.
+            os.add_dll_directory(str(path.parent))
+        library = ctypes.CDLL(str(path))
         library.wsjt_get_abi_info.argtypes = [ctypes.POINTER(_AbiInfo)]
         library.wsjt_get_abi_info.restype = ctypes.c_int32
         library.wsjt_ft8_encode.argtypes = [
@@ -350,8 +378,8 @@ class CoreBinding:
         _require_integer("slot_id", slot_id, -(2**63), 2**63 - 1)
         started = time.monotonic()
         with DSP_LOCK:
-            status, native_results, overflow = self._adapter.decode(
-                samples, native_config, config.path, slot_id
+            status, native_results, overflow = _call_native(  # type: ignore[assignment]
+                lambda: self._adapter.decode(samples, native_config, config.path, slot_id)
             )
             if status != 0:
                 raise DspStatusError("decode", status)
@@ -387,8 +415,10 @@ class CoreBinding:
             raise ValueError("frequency must be finite and between 100 and 4910 Hz")
         _validate_output(output)
         with DSP_LOCK:
-            status, sent, written = self._adapter.encode(
-                message_bytes, frequency_value, sample_rate, output
+            status, sent, written = _call_native(  # type: ignore[assignment]
+                lambda: self._adapter.encode(
+                    message_bytes, frequency_value, sample_rate, output
+                )
             )
             if status != 0:
                 raise DspStatusError("encode", status)

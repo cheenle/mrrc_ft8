@@ -5,7 +5,7 @@
 from pathlib import Path
 import sys
 
-ROOT = Path(SPECPATH).parents[2]
+ROOT = Path(SPECPATH).parents[1]
 DIST_ROOT = ROOT / "dist" / "windows" / "_pyinstaller"
 
 _extra_data = []
@@ -17,7 +17,7 @@ if _hamlib_root.exists():
     _extra_data.append((str(_hamlib_root), "hamlib"))  # rigctld.exe + libhamlib
 
 a = Analysis(
-    [str(ROOT / "server" / "main.py")],
+    [str(ROOT / "packaging" / "windows" / "server_entry.py")],
     pathex=[str(ROOT)],
     binaries=[],
     datas=[
