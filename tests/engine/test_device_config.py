@@ -129,6 +129,12 @@ def test_validate_rejects_non_com_on_windows(monkeypatch) -> None:
     assert validate({"rig_device": "/dev/cu.usbserial-1"}, []) is not None
 
 
+def test_validate_rejects_non_string_device_on_windows(monkeypatch) -> None:
+    monkeypatch.setattr("server.engine.device_config.os.name", "nt")
+    from server.engine.device_config import validate
+    assert validate({"rig_device": 5}, []) is not None
+
+
 def test_validate_accepts_good_config() -> None:
     cfg = {"rig_model": 1049, "rig_device": "/dev/cu.x", "rig_baud": 38400,
            "rigctld_port": 4532, "audio_device": "USB"}
