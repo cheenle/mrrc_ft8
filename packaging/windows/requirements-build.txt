@@ -1,0 +1,5 @@
+# Build-only dependencies for the Windows installer. PyInstaller 6 changed the
+# onedir layout ("_internal/") — do not float this version.
+pyinstaller==6.21.0
+cryptography>=42.0
+pyserial>=3.5

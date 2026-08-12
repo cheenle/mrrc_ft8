@@ -41,3 +41,7 @@ artifacts/dsp-benchmark.json
 # Desktop client build artifacts
 desktop/ft8web/node_modules/
 desktop/ft8web/dist/
+
+# Windows installer prebuilt binaries (assembled on the build VM)
+vendor/wsjtx-runtime/
+vendor/hamlib/
