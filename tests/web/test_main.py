@@ -604,3 +604,42 @@ def test_server_config_merges_device_file(tmp_path) -> None:
     config = merge_into(base, load_device_config(path))
     assert config.audio_device == "USB Audio"
     assert config.rigctld_port == 4533
+
+
+def test_from_env_reads_web_host_port(monkeypatch) -> None:
+    monkeypatch.setenv("MRRC_FT8_PASSWORD_HASH", "x")
+    monkeypatch.setenv("MRRC_FT8_MY_CALL", "N0CALL")
+    monkeypatch.setenv("MRRC_FT8_MY_GRID", "AA00AA")
+    monkeypatch.setenv("MRRC_FT8_WEB_HOST", "0.0.0.0")
+    monkeypatch.setenv("MRRC_FT8_WEB_PORT", "8443")
+    from server.main import ServerConfig
+    cfg = ServerConfig.from_env()
+    assert cfg.web_host == "0.0.0.0"
+    assert cfg.web_port == 8443
+
+
+def test_from_env_defaults_web_host_port(monkeypatch) -> None:
+    monkeypatch.delenv("MRRC_FT8_WEB_HOST", raising=False)
+    monkeypatch.delenv("MRRC_FT8_WEB_PORT", raising=False)
+    monkeypatch.setenv("MRRC_FT8_PASSWORD_HASH", "x")
+    monkeypatch.setenv("MRRC_FT8_MY_CALL", "N0CALL")
+    monkeypatch.setenv("MRRC_FT8_MY_GRID", "AA00AA")
+    from server.main import ServerConfig
+    cfg = ServerConfig.from_env()
+    assert cfg.web_host == "127.0.0.1"
+    assert cfg.web_port == 8000
+
+
+def test_uvicorn_kwargs_applies_ssl() -> None:
+    from server.main import ServerConfig, uvicorn_kwargs
+    cfg = ServerConfig("h", "c", "g", frozenset({"localhost"}))
+    kw = uvicorn_kwargs(cfg, ssl_cert="c.pem", ssl_key="k.pem")
+    assert kw["host"] == "127.0.0.1" and kw["port"] == 8000
+    assert kw["ssl_certfile"] == "c.pem" and kw["ssl_keyfile"] == "k.pem"
+
+
+def test_uvicorn_kwargs_omits_ssl_when_absent() -> None:
+    from server.main import ServerConfig, uvicorn_kwargs
+    cfg = ServerConfig("h", "c", "g", frozenset({"localhost"}))
+    kw = uvicorn_kwargs(cfg)
+    assert "ssl_certfile" not in kw and "ssl_keyfile" not in kw

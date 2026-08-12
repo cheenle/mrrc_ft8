@@ -101,6 +101,8 @@ class ServerConfig:
     band_hunt_window_min: int = 30
     band_hunt_interval_s: float = 60.0
     band_hunt_cooldown_s: float = 1_200.0
+    web_host: str = "127.0.0.1"
+    web_port: int = 8000
 
     @classmethod
     def from_env(cls) -> ServerConfig:
@@ -173,6 +175,11 @@ class ServerConfig:
             return value if lo <= value <= hi else default
 
         band_hunt_url = os.environ.get("MRRC_FT8_BAND_HUNT_URL", "").strip() or None
+        web_host = os.environ.get("MRRC_FT8_WEB_HOST", "127.0.0.1").strip() or "127.0.0.1"
+        try:
+            web_port = int(os.environ.get("MRRC_FT8_WEB_PORT", "8000"))
+        except ValueError:
+            raise ValueError("MRRC_FT8_WEB_PORT must be an integer")
         return cls(
             password_hash=password_hash,
             my_call=my_call,
@@ -197,6 +204,8 @@ class ServerConfig:
             band_hunt_window_min=band_int("MRRC_FT8_BAND_HUNT_WINDOW_MIN", 30, 5, 1440),
             band_hunt_interval_s=band_int("MRRC_FT8_BAND_HUNT_INTERVAL", 60, 15, 3600),
             band_hunt_cooldown_s=band_int("MRRC_FT8_BAND_HUNT_COOLDOWN", 1200, 60, 36000),
+            web_host=web_host,
+            web_port=web_port,
         )
 
 
@@ -303,6 +312,20 @@ async def _auto_call(
         log.info("auto_call: %s snr=%s slot=%d", call, view.get("snr"), slot_id)
     except Exception:
         log.exception("auto_call failed for %s", call)
+
+
+def uvicorn_kwargs(
+    config: ServerConfig,
+    *,
+    ssl_cert: str | None = None,
+    ssl_key: str | None = None,
+) -> dict[str, object]:
+    """Uvicorn run kwargs from config + optional TLS pair."""
+    kw: dict[str, object] = {"host": config.web_host, "port": config.web_port}
+    if ssl_cert and ssl_key:
+        kw["ssl_certfile"] = ssl_cert
+        kw["ssl_keyfile"] = ssl_key
+    return kw
 
 
 def create_server(
@@ -1106,6 +1129,10 @@ def main() -> None:
         help="print an Argon2id hash for MRRC_FT8_PASSWORD_HASH and exit; "
         "prompts interactively when no value is given",
     )
+    parser.add_argument("--ssl-cert", default=None, metavar="PEM",
+                        help="TLS certificate file (enables HTTPS)")
+    parser.add_argument("--ssl-key", default=None, metavar="PEM",
+                        help="TLS private key file (enables HTTPS)")
     args = parser.parse_args()
     if args.hash_password is not None:
         from getpass import getpass
@@ -1122,7 +1149,7 @@ def main() -> None:
         config = merge_into(config, device_file)
         log.info("device config file overrides: %s", sorted(device_file))
     app = create_server(config)
-    uvicorn.run(app, host="127.0.0.1", port=8000)
+    uvicorn.run(app, **uvicorn_kwargs(config, ssl_cert=args.ssl_cert, ssl_key=args.ssl_key))
 
 
 if __name__ == "__main__":
