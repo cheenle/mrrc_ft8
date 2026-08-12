@@ -98,6 +98,37 @@ def test_enumerate_serial_devices(monkeypatch) -> None:
     assert enumerate_serial_devices() == ["/dev/cu.usbserial-0121DB3A0"]
 
 
+def test_enumerate_serial_devices_windows_com_ports(monkeypatch) -> None:
+    # Import pyserial while os.name is still "posix" so its module gets cached
+    # in sys.modules; faking os.name="nt" first would force the Windows-only
+    # serial.win32 (ctypes.WinDLL) to load, which fails on non-Windows hosts.
+    import serial.tools.list_ports as lp
+    monkeypatch.setattr(
+        lp,
+        "comports",
+        lambda: [
+            type("P", (), {"device": "COM3"})(),
+            type("P", (), {"device": "COM5"})(),
+        ],
+    )
+    monkeypatch.setattr("server.engine.device_config.os.name", "nt")
+    from server.engine.device_config import enumerate_serial_devices
+    assert enumerate_serial_devices() == ["COM3", "COM5"]
+
+
+def test_validate_accepts_windows_com_port(monkeypatch) -> None:
+    monkeypatch.setattr("server.engine.device_config.os.name", "nt")
+    from server.engine.device_config import validate
+    assert validate({"rig_device": "COM3"}, []) is None
+    assert validate({"rig_device": "com7"}, []) is None
+
+
+def test_validate_rejects_non_com_on_windows(monkeypatch) -> None:
+    monkeypatch.setattr("server.engine.device_config.os.name", "nt")
+    from server.engine.device_config import validate
+    assert validate({"rig_device": "/dev/cu.usbserial-1"}, []) is not None
+
+
 def test_validate_accepts_good_config() -> None:
     cfg = {"rig_model": 1049, "rig_device": "/dev/cu.x", "rig_baud": 38400,
            "rigctld_port": 4532, "audio_device": "USB"}

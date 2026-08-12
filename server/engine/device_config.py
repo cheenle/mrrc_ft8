@@ -15,6 +15,7 @@ import glob
 import json
 import logging
 import os
+import re
 import subprocess
 import tempfile
 from pathlib import Path
@@ -229,8 +230,14 @@ def enumerate_audio_devices(timeout: float = 3.0) -> list[dict[str, Any]]:
 
 
 def enumerate_serial_devices() -> list[str]:
-    """Candidate CAT serial devices (macOS cu.* plus common Linux names)."""
+    """Candidate CAT serial devices (macOS/Linux /dev names, Windows COM)."""
 
+    if os.name == "nt":
+        try:
+            from serial.tools import list_ports
+            return sorted(p.device for p in list_ports.comports())
+        except Exception:
+            return sorted(glob.glob("COM[0-9]*"))
     return sorted(
         set(glob.glob("/dev/cu.*")) | set(glob.glob("/dev/ttyUSB*")) | set(glob.glob("/dev/ttyACM*"))
     )
@@ -255,7 +262,10 @@ def validate(
         if isinstance(device, str):
             device = device.strip()
         if device:
-            if not isinstance(device, str) or not device.startswith("/dev/"):
+            if os.name == "nt":
+                if not isinstance(device, str) or not re.fullmatch(r"COM\d{1,3}", device.upper()):
+                    return "rig_device must be a COM port (e.g. COM3)"
+            elif not isinstance(device, str) or not device.startswith("/dev/"):
                 return "rig_device must be an absolute /dev/... path"
     if "rig_baud" in cfg:
         if cfg["rig_baud"] not in BAUD_RATES:
