@@ -12,7 +12,12 @@
 
 - **Task 1–10：已完成并提交**（`feat/windows-installer`，提交见 git log：f13d465 … bca9b7e）。
 - **Task 11（文档）：已完成并提交** `8ba8e2e`（`win_pack.md` + `docs/WINDOWS_INSTALLER_GUIDE.md`）。
-- **Task 12（VM 构建 + 冒烟）：未执行** —— 手工步骤，需在 Win11 KVM VM（ham.vlsc.net → 192.168.122.133）上照 `win_pack.md` §2/§3 操作。
+- **Windows 跨平台修复：已提交** `1b54b50`（build.ps1 语法、PyInstaller spec parents 索引、`server_entry.py` freeze_support 包装器、binding 大栈线程 + DLL 搜索路径、win32 shm 页对齐、测试平台化/GBK/skipif）。
+- **Task 12（VM 构建 + 冒烟）：已完成**。在 Win11 KVM VM 上：
+  - pytest **832 passed, 78 skipped**（skips 是文档化的 Windows 不适用项：raw-ctypes 解码栈、导出 map、打开文件 os.replace、同进程锁竞争、desktop dist 未建）。
+  - `dist\windows\MRRC_FT8-Setup.exe` 构建成功（60 MB，SHA-256 `ee866947731ac2318f4c1c7dc14511ba8a67b67ffbb68a2f32c8d9a3f68318b2`）。
+  - 冻结版 `ft8-server.exe` 冒烟通过：启动、绑定 8000、`/api/v1/health` 401、DSP/capture 子进程正常 spawn（freeze_support）。
+  - 剩余手工项：VM 桌面安装 Setup.exe 后完整 UI 冒烟（登录、LAN 访问、Devices Apply）——照 `win_pack.md` §3 Step 7。
 - Mac 侧测试全绿：`venv/bin/python -m pytest tests/ -q` → 908 passed。
 
 ## Global Constraints

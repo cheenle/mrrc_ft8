@@ -172,6 +172,8 @@ scp ham.vlsc.net:/tmp/MRRC_FT8-Setup.exe dist/windows/
 shasum -a 256 dist/windows/MRRC_FT8-Setup.exe
 ```
 
+首次成功构建（2026-08-12）：`dist/windows/MRRC_FT8-Setup.exe` **60 MB**，SHA-256 `ee866947731ac2318f4c1c7dc14511ba8a67b67ffbb68a2f32c8d9a3f68318b2`。
+
 ### Step 7 — 安装 + 冒烟（在 VM 桌面，手动）
 
 装 Setup.exe → 启动 `MRRC_FT8.exe`（launcher，控制台窗口），确认：
