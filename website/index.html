@@ -44,6 +44,7 @@
           <span>MRRC-FT<span style="color: var(--accent)">8</span></span>
         </a>
         <ul class="nav-links">
+          <li><a href="#download">Download</a></li>
           <li><a href="#features">Features</a></li>
           <li><a href="#live">Live Station</a></li>
           <li><a href="#start">Quick Start</a></li>
@@ -105,6 +106,70 @@
           >
             <i class="fab fa-github"></i> GitHub
           </a>
+        </div>
+      </div>
+    </section>
+
+    <!-- Download -->
+    <section
+      class="section"
+      id="download"
+      style="background: var(--bg-primary)"
+    >
+      <div class="container">
+        <div class="section-header">
+          <span class="section-label">Download</span>
+          <h2 class="section-title">Windows Desktop Installer</h2>
+          <p class="section-subtitle">
+            Windows 11/10 x64 — embedded Python runtime + WSJT-X DSP decoder +
+            Hamlib rigctld, no manual Python or Node.js install. First run
+            generates a self-signed HTTPS certificate; default password
+            abcd1234; LAN/remote access over HTTPS.
+          </p>
+        </div>
+
+        <div
+          style="
+            background: var(--bg-secondary);
+            border: 1px solid var(--accent);
+            border-radius: 14px;
+            padding: 1.75rem 2rem;
+            max-width: 720px;
+            margin: 0 auto;
+          "
+        >
+          <p style="margin: 0 0 0.25rem; font-size: 1.15rem">
+            <i class="fab fa-windows" style="color: var(--accent)"></i>
+            <strong> MRRC_FT8-Setup.exe — v1.1.0 Stable</strong>
+          </p>
+          <p style="color: var(--text-muted); margin: 0 0 1rem">
+            60 MB · Windows 11/10 x64<br />
+            <code style="font-size: 0.76rem"
+              >SHA-256: ee866947731ac2318f4c1c7dc14511ba8a67b67ffbb68a2f32c8d9a3f68318b2</code
+            >
+          </p>
+          <p style="color: var(--text-muted); margin: 0 0 1.25rem">
+            Full MRRC-FT8 station: FastAPI server + FT8 DSP (decode/encode) +
+            rigctld + web/desktop client. Windows build: 832 tests passed;
+            installer boot and serve verified. Radio/audio RF acceptance remains
+            an operator-side check on a physical station.
+          </p>
+          <div
+            style="display: flex; gap: 1rem; flex-wrap: wrap; justify-content: center"
+          >
+            <a
+              href="downloads/MRRC_FT8-Setup.exe"
+              class="btn btn-primary btn-large"
+            >
+              <i class="fab fa-windows"></i> Download for Windows
+            </a>
+            <a
+              href="downloads/MRRC_FT8-v1.1.0-Windows-x64-Setup.exe"
+              class="btn btn-secondary btn-large"
+            >
+              <i class="fas fa-fingerprint"></i> Versioned v1.1.0
+            </a>
+          </div>
         </div>
       </div>
     </section>
@@ -1093,6 +1158,7 @@
             <h4>Links</h4>
             <ul>
               <li><a href="#">Home</a></li>
+              <li><a href="#download">Download</a></li>
               <li><a href="#features">Features</a></li>
               <li><a href="#live">Live Station</a></li>
               <li><a href="#architecture">Architecture</a></li>

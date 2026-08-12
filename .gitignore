@@ -46,3 +46,4 @@ desktop/ft8web/dist/
 # Windows installer prebuilt binaries (assembled on the build VM)
 vendor/wsjtx-runtime/
 vendor/hamlib/
+website/downloads/

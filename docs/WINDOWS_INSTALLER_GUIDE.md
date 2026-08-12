@@ -7,6 +7,22 @@
 
 > 打包方（构建/发布）操作手册见仓库根目录 [`win_pack.md`](../win_pack.md)。
 
+## Download (v1.1.0 Stable)
+
+| File | Size | SHA-256 |
+|------|------|---------|
+| `MRRC_FT8-Setup.exe` | 60 MB | `ee866947731ac2318f4c1c7dc14511ba8a67b67ffbb68a2f32c8d9a3f68318b2` |
+
+- Fast mirror (recommended in CN): <https://www.vlsc.net/mrrc_ft8/downloads/MRRC_FT8-Setup.exe>
+- Versioned mirror: <https://www.vlsc.net/mrrc_ft8/downloads/MRRC_FT8-v1.1.0-Windows-x64-Setup.exe>
+- GitHub repository: <https://github.com/cheenle/mrrc_ft8>
+
+The v1.1.0 package was built on Windows 11 with Python 3.12.4, PyInstaller
+6.21.0, and Inno Setup 6. All 832 Windows tests passed; the frozen server
+boot, HTTPS serving, and DSP/capture child spawns were smoke-verified on the
+build VM. Radio/audio RF acceptance is an operator-side check on a physical
+station.
+
 ## 系统要求
 
 - Windows 11 或 Windows 10（64 位）
