@@ -8,6 +8,13 @@
 
 **Tech Stack:** Python 3.11+ / FastAPI / uvicorn, PyInstaller 6.21, Inno Setup 6, MinGW-w64 gfortran (one-time DSP build), Node.js (desktop client build), Hamlib rigctld, msys2.
 
+## 执行状态（2026-08-12）
+
+- **Task 1–10：已完成并提交**（`feat/windows-installer`，提交见 git log：f13d465 … bca9b7e）。
+- **Task 11（文档）：已完成并提交** `8ba8e2e`（`win_pack.md` + `docs/WINDOWS_INSTALLER_GUIDE.md`）。
+- **Task 12（VM 构建 + 冒烟）：未执行** —— 手工步骤，需在 Win11 KVM VM（ham.vlsc.net → 192.168.122.133）上照 `win_pack.md` §2/§3 操作。
+- Mac 侧测试全绿：`venv/bin/python -m pytest tests/ -q` → 908 passed。
+
 ## Global Constraints
 
 - Server audio is always 12 kHz int16 mono into the decoder; TX is 48 kHz. Do not touch.
@@ -1444,7 +1451,7 @@ git commit -m "build(windows): MRRC_FT8 packaging orchestration (tests -> npm ->
 - Create: `win_pack.md`
 - Create: `docs/WINDOWS_INSTALLER_GUIDE.md`
 
-- [ ] **Step 1: Write `win_pack.md`** — mirror the structure of `mrrc_ft710/win_pack.md`:
+- [x] **Step 1: Write `win_pack.md`** — mirror the structure of `mrrc_ft710/win_pack.md`:
 
 - §1 Environment topology (Mac → ham.vlsc.net → Win11 VM `192.168.122.133`; VM: Python 3.12, Inno Setup, msys2/MinGW, Node.js).
 - §2 One-time VM setup: SSH key into VM (`C:\ProgramData\ssh\administrators_authorized_keys` + icacls); msys2 install + `pacman -S mingw-w64-x86_64-gcc-fortran mingw-w64-x86_64-cmake mingw-w64-x86_64-fftw`; Node.js; `venv` + `pip install -r requirements.txt -r packaging/windows/requirements-build.txt`; official WSJT-X 3.0.2 Windows install → copy `C:\Program Files\WSJT\bin\{libgfortran-5,libgomp-1,libfftw3f-3,libquadmath-0,libwinpthread-1}.dll` to `vendor/wsjtx-runtime/windows/x64/`; Hamlib Windows build → `vendor/hamlib/windows/x64/`; **DSP build once**: in an msys2 mingw64 shell `cmake -S dsp -B dsp/build -G "MinGW Makefiles" && cmake --build dsp/build -j` then copy `dsp/build/wsjt_core.dll` to `vendor/wsjtx-runtime/windows/x64/`.
@@ -1452,7 +1459,7 @@ git commit -m "build(windows): MRRC_FT8 packaging orchestration (tests -> npm ->
 - §4 Troubleshooting table (mirror mrrc_ft710's: SSH admin key ACL, PowerShell `;` vs `&&`, GBK encoding, PyInstaller `_internal` path gotchas, `OMP_STACKSIZE`, mp spawn + `freeze_support`, firewall rule, self-signed cert warning).
 - §5 VM command cheat-sheet.
 
-- [ ] **Step 2: Write `docs/WINDOWS_INSTALLER_GUIDE.md`** — user-facing:
+- [x] **Step 2: Write `docs/WINDOWS_INSTALLER_GUIDE.md`** — user-facing:
 
 - Install `MRRC_FT8-Setup.exe` (Windows 11/10 x64); admin for the firewall rule.
 - First run: launcher copies config to `%LOCALAPPDATA%\MRRC-FT8\ft8.env`, generates a self-signed cert, starts rigctld + server, opens `https://localhost:8000/desktop/` — accept the browser's one-time certificate warning.
@@ -1461,7 +1468,7 @@ git commit -m "build(windows): MRRC_FT8 packaging orchestration (tests -> npm ->
 - LAN/remote: connect from another device to `https://<pc-hostname-or-ip>:8000/desktop/`; the cert is self-signed, so accept the warning once. Ensure the firewall rule for TCP 8000 exists.
 - Known limits: KVM-virtualised audio out is not reliable for TX verification — use a physical Windows machine for TX audio checks.
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add win_pack.md docs/WINDOWS_INSTALLER_GUIDE.md
