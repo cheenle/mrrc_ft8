@@ -234,7 +234,7 @@ def get_cty_database() -> CtyDatabase:
 
     global _cty_db
     if _cty_db is None:
-        from pathlib import Path
+        from server.core.paths import app_root
 
-        _cty_db = load_cty(str(Path(__file__).resolve().parents[2] / "cty.dat"))
+        _cty_db = load_cty(str(app_root() / "cty.dat"))
     return _cty_db

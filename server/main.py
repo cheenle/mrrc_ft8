@@ -1078,15 +1078,15 @@ def create_server(
 
 
 def _static_dir() -> str:
-    from pathlib import Path
+    from server.core.paths import app_root
 
-    return str(Path(__file__).resolve().parent / "web" / "static")
+    return str(app_root() / "server" / "web" / "static")
 
 
 def _desktop_dist_dir() -> str:
-    from pathlib import Path
+    from server.core.paths import app_root
 
-    return str(Path(__file__).resolve().parent.parent / "desktop" / "ft8web" / "dist")
+    return str(app_root() / "desktop" / "ft8web" / "dist")
 
 
 def _record_last_tx(state: AppState, slot_id: int, message: str, freq_hz: float) -> None:
