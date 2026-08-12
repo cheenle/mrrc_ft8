@@ -27,6 +27,23 @@ def test_load_env_parses_key_value(tmp_path) -> None:
     assert "comment" not in env
 
 
+def test_load_env_allowed_hosts_default_contains_localhost(tmp_path) -> None:
+    mod = _load()
+    f = tmp_path / "ft8.env"
+    f.write_text("MRRC_FT8_MY_CALL=N0CALL\n")
+    env = mod.load_env(f)
+    assert "MRRC_FT8_ALLOWED_HOSTS" in env
+    assert "localhost" in env["MRRC_FT8_ALLOWED_HOSTS"]
+
+
+def test_load_env_allowed_hosts_explicit_wins(tmp_path) -> None:
+    mod = _load()
+    f = tmp_path / "ft8.env"
+    f.write_text("MRRC_FT8_ALLOWED_HOSTS=192.168.1.50\n")
+    env = mod.load_env(f)
+    assert env["MRRC_FT8_ALLOWED_HOSTS"] == "192.168.1.50"
+
+
 def test_local_url_https_localhost() -> None:
     mod = _load()
     env = {"MRRC_FT8_WEB_HOST": "0.0.0.0", "MRRC_FT8_WEB_PORT": "8000"}
@@ -50,12 +67,49 @@ def test_rigctld_command_adds_stop_bits_when_not_one() -> None:
     assert "-C" in cmd and "stop_bits=2" in cmd
 
 
+def test_rigctld_command_baked_defaults() -> None:
+    mod = _load()
+    cmd = mod.rigctld_command({}, None, app=Path("C:/app/App"))
+    assert cmd[cmd.index("-m") + 1] == "1049"
+    assert cmd[cmd.index("-r") + 1] == "COM3"
+    assert cmd[cmd.index("-s") + 1] == "38400"
+    assert cmd[cmd.index("-t") + 1] == "4532"
+    assert "-vvv" in cmd
+
+
+def test_rigctld_command_no_stop_bits_flag_when_default() -> None:
+    mod = _load()
+    cmd = mod.rigctld_command({}, None, app=Path("C:/app/App"))
+    assert "-C" not in cmd
+    cmd = mod.rigctld_command({"MRRC_FT8_RIG_STOP_BITS": "1"}, None, app=Path("C:/app/App"))
+    assert "-C" not in cmd
+
+
+def test_rigctld_command_device_cfg_overrides_env() -> None:
+    mod = _load()
+    cmd = mod.rigctld_command(
+        {"MRRC_FT8_RIG_MODEL": "1049"},
+        {"rig_model": 3073},
+        app=Path("C:/app/App"),
+    )
+    assert cmd[cmd.index("-m") + 1] == "3073"
+
+
 def test_server_command_includes_ssl_pair() -> None:
     mod = _load()
     cmd = mod.server_command(Path("C:/app/App"), (Path("C:/c.pem"), Path("C:/k.pem")))
     assert cmd[0].endswith("ft8-server.exe")
     assert "--ssl-cert" in cmd and "C:/c.pem" in cmd
     assert "--ssl-key" in cmd and "C:/k.pem" in cmd
+
+
+def test_server_command_without_ssl_pair() -> None:
+    mod = _load()
+    cmd = mod.server_command(Path("C:/app/App"), None)
+    assert cmd == ["C:/app/App/ft8-server.exe"]
+    assert "--ssl-cert" not in cmd
+    assert "--ssl-key" not in cmd
+    assert "--no-ssl" not in cmd
 
 
 def test_wait_for_server_timeout(monkeypatch) -> None:
