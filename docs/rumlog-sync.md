@@ -2,16 +2,18 @@
 
 ## 安装 crontab
 
-`crontab -e` 添加（每 5 分钟一轮；`flock` 防重入）：
+`crontab -e` 添加（每 5 分钟一轮；程序内部已用 `fcntl.flock` 防重入，无需外部 `flock`——macOS 默认没有 `flock` 命令）：
 
 ```bash
-*/5 * * * * cd /Users/cheenle/HAM/ft8 && flock -n data/rumlog-sync.lock venv/bin/python -m rumlog_sync >> data/rumlog-sync.log 2>&1
+*/5 * * * * cd /Users/cheenle/HAM/ft8 && venv/bin/python -m rumlog_sync >> data/rumlog-sync.log 2>&1
 ```
 
 ## 配置
 
 `data/rumlog-sync.json`（缺失时用默认值；模板见 `rumlog_sync/config.example.json`）。
-关键项：`rumlog_db`（RUMLogNG Core Data 路径）、`my_call`/`my_grid`、`confirm_retries`。
+关键项：
+- `ft8_db`：默认 `mrrc-ft8.db`（即 live FT8 server 在用的库）。2026-08-12 前曾误指 `data/mrrc-ft8.db`，导致 live QSO 从不推送、拉取也只进镜像库；已改为与 server 同库并跑通一轮全量对账。旧 `data/mrrc-ft8.db` 是孤本镜像，已不再使用。
+- `rumlog_db`（RUMLogNG Core Data 路径）、`my_call`/`my_grid`、`confirm_retries`。
 `udp_*` 字段保留为备用（WSJT-X UDP 2237 模块，实测 RUMLogNG 6.5 未激活 UDP 解析，推送走 AppleScript）。
 
 ## 首次运行

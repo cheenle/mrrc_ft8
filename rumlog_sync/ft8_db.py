@@ -88,13 +88,20 @@ class Ft8Db:
     # ---- lookups --------------------------------------------------------
 
     def find_existing(self, dx_call: str, band: str, epoch: float) -> int | None:
-        """qso id matching dx_call+band within the 120 s window, or None."""
+        """qso id matching dx_call+band within the 120 s window, or None.
+
+        A stored row with an empty band matches any incoming band, and an
+        empty incoming band matches any stored band (early rows were logged
+        without a band; RUMLogNG fills one in).  Same call within the window
+        is the same QSO either way.
+        """
 
         row = self._con.execute(
-            "SELECT id FROM qso WHERE dx_call = ? AND band = ?"
+            "SELECT id FROM qso WHERE dx_call = ?"
             " AND status = 'completed' AND abs(completed_epoch - ?) <= 120"
+            " AND (band = ? OR band = '' OR ? = '')"
             " ORDER BY abs(completed_epoch - ?) LIMIT 1",
-            (dx_call, band, epoch, epoch),
+            (dx_call, epoch, band, band, epoch),
         ).fetchone()
         return row["id"] if row else None
 
@@ -106,10 +113,11 @@ class Ft8Db:
         """
 
         rows = self._con.execute(
-            "SELECT id FROM qso WHERE dx_call = ? AND band = ?"
+            "SELECT id FROM qso WHERE dx_call = ?"
             " AND status = 'completed' AND abs(completed_epoch - ?) <= 120"
+            " AND (band = ? OR band = '' OR ? = '')"
             " ORDER BY id",
-            (dx_call, band, epoch),
+            (dx_call, epoch, band, band),
         ).fetchall()
         return [r["id"] for r in rows]
 

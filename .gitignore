@@ -16,6 +16,7 @@ wsjtx-3.0.2/
 
 # Runtime data
 mrrc-ft8.db
+mrrc-ft8.db.*.bak
 *.adi
 *.wav
 *.log

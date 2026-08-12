@@ -51,6 +51,17 @@ def test_insert_and_find_by_window(ft8_db_path) -> None:
     assert db.find_existing("TL8GD", "40m", 1_795_384_100.0) is None  # band
 
 
+def test_find_existing_tolerates_empty_band(ft8_db_path) -> None:
+    db = Ft8Db(ft8_db_path)
+    db.ensure_schema()
+    # Early live rows were logged without a band; RUMLogNG fills one in.
+    qso_id = db.insert_record(_record(band=""))
+    assert db.find_existing("TL8GD", "40m", 1_795_384_100.0) == qso_id
+    assert db.find_existing("TL8GD", "", 1_795_384_100.0) == qso_id
+    assert db.find_existing("TL8GD", "15m", 1_795_384_300.0) is None  # outside window
+    assert db.find_all_existing("TL8GD", "40m", 1_795_384_100.0) == [qso_id]
+
+
 def test_find_by_uuid_precise(ft8_db_path) -> None:
     db = Ft8Db(ft8_db_path)
     db.ensure_schema()

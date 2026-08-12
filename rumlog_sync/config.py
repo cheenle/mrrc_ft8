@@ -28,7 +28,7 @@ class RumlogConfig(TypedDict):
 
 
 DEFAULT_CONFIG: RumlogConfig = {
-    "ft8_db": "data/mrrc-ft8.db",
+    "ft8_db": "mrrc-ft8.db",
     "rumlog_db": (
         "/Users/cheenle/Library/Containers/de.dl2rum.RUMlogNG/Data/Library/"
         "Application Support/RUMLogNG/CoreQsoModel_1.sqlite"
