@@ -7,21 +7,23 @@
 
 > 打包方（构建/发布）操作手册见仓库根目录 [`win_pack.md`](../win_pack.md)。
 
-## Download (v1.1.0 Stable)
+## Download (v1.2.0 Stable)
 
 | File | Size | SHA-256 |
 |------|------|---------|
-| `MRRC_FT8-Setup.exe` | 60 MB | `ee866947731ac2318f4c1c7dc14511ba8a67b67ffbb68a2f32c8d9a3f68318b2` |
+| `MRRC_FT8-Setup.exe` | 61 MB | `6a5e2f220e802704222cbada06b90e57efb10688e7dd9d0e652f368fdc0b1ff4` |
 
 - Fast mirror (recommended in CN): <https://www.vlsc.net/mrrc_ft8/downloads/MRRC_FT8-Setup.exe>
-- Versioned mirror: <https://www.vlsc.net/mrrc_ft8/downloads/MRRC_FT8-v1.1.0-Windows-x64-Setup.exe>
+- Versioned mirror: <https://www.vlsc.net/mrrc_ft8/downloads/MRRC_FT8-v1.2.0-Windows-x64-Setup.exe>
 - GitHub repository: <https://github.com/cheenle/mrrc_ft8>
 
-The v1.1.0 package was built on Windows 11 with Python 3.12.4, PyInstaller
-6.21.0, and Inno Setup 6. All 832 Windows tests passed; the frozen server
-boot, HTTPS serving, and DSP/capture child spawns were smoke-verified on the
+The v1.2.0 package was built on Windows 11 with Python 3.12.4, PyInstaller
+6.21.0, and Inno Setup 6. All 909 tests passed; the frozen server boot,
+HTTPS serving, and DSP/capture child spawns were smoke-verified on the
 build VM. Radio/audio RF acceptance is an operator-side check on a physical
-station.
+station. v1.2.0 adds rigctld lifecycle management to the launcher
+restart, band-hunt/auto-call worked-set freshness and selected-state fixes,
+and AUDIO false-positive re-verify.
 
 ## 系统要求
 
@@ -68,7 +70,7 @@ DXCC 等。界面既可用于本机，也可从局域网/远程的设备（手�
 在界面的 **Settings → Devices** 里配置：
 
 | 字段 | 说明 |
-|------|------|
+| ------ | ------ |
 | Rig Model | 电台型号（下拉选择，含自定义型号） |
 | CAT Serial Device | 串口号，下拉会列出本机所有 COM 口（`COM3` 等） |
 | Baud Rate | 波特率（默认 38400） |
@@ -123,9 +125,11 @@ MRRC_FT8_PASSWORD_HASH=$argon2id$v=19$m=65536,t=3,p=4$...   # 登录密码哈希
 默认密码 `abcd1234` 对应的 Argon2id 哈希已写入 `ft8.env`。要改密码：
 
 1. 在一台装有 Python 的机器上（或本仓库的 venv 里）执行：
+
    ```bash
    python -m server.main --hash-password <新密码>
    ```
+
    输出一串 `$argon2id$...` 哈希。
 2. 把 `ft8.env` 里的 `MRRC_FT8_PASSWORD_HASH` 替换为新哈希，重启应用。
 
@@ -138,7 +142,7 @@ MRRC_FT8_PASSWORD_HASH=$argon2id$v=19$m=65536,t=3,p=4$...   # 登录密码哈希
 ## 故障排查
 
 | 现象 | 原因 | 处理 |
-|------|------|------|
+| ------ | ------ | ------ |
 | 浏览器打不开 `https://localhost:8000` | 服务器没起来，或端口被占 | 看 launcher 窗口输出；`MRRC_FT8_WEB_PORT` 换个端口 |
 | 登录失败 | 密码错 / 改过 hash 没重启 | 用 `abcd1234`，或核对 `ft8.env` 的 `MRRC_FT8_PASSWORD_HASH` |
 | 显示"连接不是私密连接" | 自签证书（正常） | 点"继续前往"接受一次 |
@@ -162,7 +166,7 @@ dist\windows\MRRC_FT8-Setup.exe  安装包
 ```
 
 | 组件文件 | 用途 |
-|----------|------|
+| ---------- | ------ |
 | `MRRC_FT8.exe` | launcher：生成配置/证书，拉起 rigctld + 服务器，打开浏览器 |
 | `ft8-server.exe` | FastAPI 服务器（含 DSP、web/desktop UI 资源） |
 | `hamlib\rigctld.exe` | Hamlib 串口控制（唯一串口 owner） |

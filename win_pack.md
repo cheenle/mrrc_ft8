@@ -50,7 +50,7 @@ icacls C:\ProgramData\ssh\administrators_authorized_keys /inheritance:r /grant "
 cd C:\mrrc_ft8
 python -m venv venv
 .\venv\Scripts\python.exe -m pip install --upgrade pip
-.\venv\Scripts\python.exe -m pip install -r requirements.txt
+.\venv\Scripts\python.exe -m pip install -e ".[dev]"   # 项目依赖 + pytest（仓库无 requirements.txt，依赖在 pyproject）
 .\venv\Scripts\python.exe -m pip install -r packaging\windows\requirements-build.txt   # pyinstaller==6.21.0 锁版 + cryptography + pyserial
 ```
 
@@ -119,6 +119,7 @@ zip -qr dist/mrrc_ft8_src.zip . \
 ```
 
 **关键**：
+
 - `./.agents/*` **不能排除**——`tests/test_sdd_harness.py` 依赖其中的 harness 文件（同 mrrc_ft710 的教训，缺了 VM 上测试会失败）。
 - **`wsjtx-3.0.2/` 必须包含在包里**：`tests/dsp/test_vendor_policy.py::test_vendor_tree_matches_approved_digest` 会对整棵树做哈希比对（`dsp/vendor.sha256`），DSP 编译（`dsp/CMakeLists.txt` 引用 `wsjtx-3.0.2/lib`）也依赖它。98M 源码压缩后约 32M，zip 总共约 35M。
 - `./data/*`、`mrrc-ft8.db`（12M）、`FT8web/`（旧副本，含独立 `.git`）必须排除。
@@ -174,6 +175,12 @@ shasum -a 256 dist/windows/MRRC_FT8-Setup.exe
 
 首次成功构建（2026-08-12）：`dist/windows/MRRC_FT8-Setup.exe` **60 MB**，SHA-256 `ee866947731ac2318f4c1c7dc14511ba8a67b67ffbb68a2f32c8d9a3f68318b2`。
 
+v1.2.0（2026-08-15）：909 tests 全绿后构建，**61 MB**，SHA-256 `6a5e2f220e802704222cbada06b90e57efb10688e7dd9d0e652f368fdc0b1ff4`。
+本次经验：Step 1 的 zip 排除列表需加 `./website/downloads/*`（旧安装包 63MB 会混入源码包）；
+删除 `C:\mrrc_ft8` 后必须重跑 §2.2 的 venv + pyproject 依赖安装（仓库无 requirements.txt，用 `pip install -e ".[dev]"`）；
+VM 上装配 vendor 时若 msys2 缺 hamlib 包，rigctld.exe 会缺失（`vm_03_vendor.ps1` 只拷到 DLL）——
+用 `vm_04_hamlib.ps1` 从 GitHub 下载（VM 网络受限时改在本机下载后 scp 上去手动解压拷贝）。
+
 ### Step 7 — 安装 + 冒烟（在 VM 桌面，手动）
 
 装 Setup.exe → 启动 `MRRC_FT8.exe`（launcher，控制台窗口），确认：
@@ -189,14 +196,14 @@ shasum -a 256 dist/windows/MRRC_FT8-Setup.exe
 
 ## 4. 发布到网站（可选，等镜像站点就绪）
 
-参照 mrrc_ft710：下载镜像在 **www.vlsc.net**，webroot `/var/www/vlsc.net/mrrc_ft8/`。发布时把
+参照 mrrc_ft710：下载镜像在 **<www.vlsc.net**，webroot> `/var/www/vlsc.net/mrrc_ft8/`。发布时把
 `MRRC_FT8-Setup.exe` 拷到 `website/downloads/`，跑 `./deploy.sh`（备份 + 上传 + `nginx -t`），
 并同步更新版本号/大小/SHA-256 的地方：`website/index.html`、`website/zh/index.html`、`docs/WINDOWS_INSTALLER_GUIDE.md`、`README.md`、`CHANGELOG.md`。
 
 ## 5. 故障排查（mrrc_ft710 踩过 + 本包特有）
 
 | 现象 | 原因 | 处理 |
-|------|------|------|
+| ------ | ------ | ------ |
 | `virsh list` 看不到 win11 | 默认连 qemu:///session | `sudo virsh -c qemu:///system list --all` |
 | 公钥加了仍 Permission denied | 管理员用户只认 `C:\ProgramData\ssh\administrators_authorized_keys` | 见 §2.1，注意 icacls 权限 |
 | SSH 里 `&&` 报错 | VM 默认 shell 是 PowerShell 5.1 | 用 `;` 或把命令写成 .ps1 scp 上去执行 |
