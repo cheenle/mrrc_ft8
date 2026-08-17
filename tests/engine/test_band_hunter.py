@@ -7,6 +7,7 @@ import httpx
 from server.engine.band_hunter import (
     decide_switch,
     fetch_opportunities,
+    filter_exhausted,
     rank_bands,
 )
 
@@ -256,3 +257,67 @@ def test_rank_bands_keeps_unknown_names_unchanged() -> None:
     payload = {"ok": True, "bands": [_band("20m", 14_074_000, entities=("Some New Entity",))]}
     ranked = rank_bands(payload, {"Japan"})
     assert ranked[0]["new_entities"] == ["Some New Entity"]
+
+
+# --- 手动切换尊重 + 追猎降级（2026-08-17 现场：band_hunt 反复拉回 30m 与手动操作拉锯）---
+
+
+def test_decide_switch_respects_recent_manual_tune() -> None:
+    """用户手动切波段后 1 小时内，band_hunt 不拉回（不覆盖手动意图）。"""
+
+    ranked = rank_bands({"bands": [_band("30m", 10_136_000, entities=("Congo (Rep.)",))]}, set())
+    assert (
+        decide_switch(
+            ranked, idle=True, current_freq_hz=21_074_000,
+            seconds_since_last_switch=9999, cooldown_s=1200,
+            seconds_since_manual_tune=60, manual_respect_s=3600,
+        )
+        is None
+    )
+
+
+def test_decide_switch_allows_after_manual_respect_window() -> None:
+    """手动切换超过尊重窗口后恢复追猎。"""
+
+    ranked = rank_bands({"bands": [_band("30m", 10_136_000, entities=("Congo (Rep.)",))]}, set())
+    assert (
+        decide_switch(
+            ranked, idle=True, current_freq_hz=21_074_000,
+            seconds_since_last_switch=9999, cooldown_s=1200,
+            seconds_since_manual_tune=7200, manual_respect_s=3600,
+        )
+        == 10_136_000
+    )
+
+
+def test_decide_switch_ignores_manual_when_never_manual() -> None:
+    """从未手动切过（None）→ 手动守卫不生效。"""
+
+    ranked = rank_bands({"bands": [_band("30m", 10_136_000, entities=("Congo (Rep.)",))]}, set())
+    assert (
+        decide_switch(
+            ranked, idle=True, current_freq_hz=21_074_000,
+            seconds_since_last_switch=9999, cooldown_s=1200,
+            seconds_since_manual_tune=None, manual_respect_s=3600,
+        )
+        == 10_136_000
+    )
+
+
+def test_filter_exhausted_drops_bands_over_strike_limit() -> None:
+    """追猎 3 次未通联的 band 从候选剔除（不再拉回），其余保留。"""
+
+    ranked = [
+        _band("30m", 10_136_000, entities=("Congo (Rep.)",)),
+        _band("20m", 14_074_000, entities=("Japan",)),
+    ]
+    kept = filter_exhausted(ranked, {"30m": 3}, max_strikes=3)
+    assert [b["band"] for b in kept] == ["20m"]
+
+
+def test_filter_exhausted_keeps_bands_within_budget() -> None:
+    """strikes 未达上限或未记录 → 保留。"""
+
+    ranked = [_band("30m", 10_136_000, entities=("Congo (Rep.)",))]
+    assert [b["band"] for b in filter_exhausted(ranked, {"30m": 2}, max_strikes=3)] == ["30m"]
+    assert [b["band"] for b in filter_exhausted(ranked, {}, max_strikes=3)] == ["30m"]

@@ -66,12 +66,23 @@ _LEVEL_NAME_RE = re.compile(r"^[A-Z][A-Z0-9_]{0,15}$")
 _MODE_NAME_RE = re.compile(r"^[A-Z0-9]{1,16}$")
 
 # §10.5 schema-validated settings; safety-impacting ones are TX-locked.
+
+
+def _valid_lines_rate(value: object) -> bool:
+    """waterfall_lines_per_second: number within [1, 10], not a bool."""
+
+    if not isinstance(value, (int, float)) or isinstance(value, bool):
+        return False
+    try:
+        return 1.0 <= float(value) <= 10.0
+    except (TypeError, ValueError):
+        return False
+
+
 SETTING_SCHEMA: dict[str, Callable[[Any], bool]] = {
     "decoder_profile": lambda v: isinstance(v, int) and not isinstance(v, bool) and 0 <= v <= 4,
     "decoder_threads": lambda v: isinstance(v, int) and not isinstance(v, bool) and 1 <= v <= 12,
-    "waterfall_lines_per_second": lambda v: isinstance(v, (int, float))
-    and not isinstance(v, bool)
-    and 1.0 <= float(v) <= 10.0,
+    "waterfall_lines_per_second": lambda v: _valid_lines_rate(v),
     "cq_loop_idle_timeout_s": lambda v: isinstance(v, int) and not isinstance(v, bool) and 60 <= v <= 3600,
     "auto_call_new_dxcc": lambda v: isinstance(v, bool),
     "auto_band_hunt": lambda v: isinstance(v, bool),
@@ -168,6 +179,8 @@ class AppState:
     selected_freq: float | None = None  # audio offset the selected message was heard at
     occupancy: FrequencyOccupancy = field(default_factory=FrequencyOccupancy)
     radio_freq_hz: int | None = None  # last polled dial frequency, if rig is up
+    last_manual_tune_mono: float | None = None  # manual band change (monotonic)
+    _rig_level_cache: dict[str, Any] | None = None  # transient rig level probe cache
     last_tx: dict[str, Any] | None = None  # last transmitted message (desktop client)
     dxcc_cache: Any = None  # cached DxccSummary; rebuilt when repository.dxcc_dirty
     band_hunt_url: str | None = None  # pskreporter /api/band_hunt (NFR-088); None = off
@@ -196,7 +209,10 @@ def _parse_freq(value: object) -> float | None:
 
     if isinstance(value, bool) or not isinstance(value, (int, float)):
         return None
-    freq = float(value)
+    try:
+        freq = float(value)
+    except (TypeError, ValueError):  # pragma: no cover - guarded by isinstance
+        return None
     return freq if freq > 0 else None
 
 
@@ -605,6 +621,8 @@ def create_router(state: AppState) -> APIRouter:
             await state.rig.set_frequency(freq)
         except Exception as exc:
             return _reject(502, "rig_error", detail=str(exc))
+        # 手动切波段：band_hunt 尊重窗口内不拉回（NFR-088, 2026-08-17）。
+        state.last_manual_tune_mono = time.monotonic()
         return await mutate(request, request.headers.get("idempotency-key"), 200, {"freq_hz": freq})
 
     # rigctld level access (ATT / AGC / PREAMP / RF gain …).  Levels are
@@ -853,7 +871,7 @@ def create_router(state: AppState) -> APIRouter:
                     body = resp.json()
             except Exception as exc:
                 return _reject(502, "band_hunt_unreachable", detail=str(exc))
-            if not isinstance(body, dict) or body.get("ok") is not True:
+            if not isinstance(body, dict) or body.get("ok") is not True:  # pi-lens-ignore: no-identity-operator-on-literals
                 return JSONResponse(body if isinstance(body, dict) else {"ok": False, "reason": "bad_upstream"})
             try:
                 ttl_s = max(5, min(int(params["window_min"]), 3600))
@@ -1094,7 +1112,7 @@ def _scheduled_tx(tx_phase: int) -> dict[str, Any]:
 
     now = time.time()
     period = FT8_PERIOD_SECONDS
-    cur = int(now // period)
+    cur = int(now // period)  # pi-lens-ignore: unchecked-throwing-call-python
     cur_start = cur * period
     # The encode round-trip is reserved: the driver encodes at arm time and
     # only transmits if the waveform fits AFTER the encode (honest fit).

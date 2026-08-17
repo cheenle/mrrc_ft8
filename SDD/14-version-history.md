@@ -1,5 +1,21 @@
 # 14. Version History
 
+## Unreleased — 2026-08-16 — RUMLogNG duplicate cleanup tool (AD-016 guarded exception)
+
+新增独立 `rumlog_dedup/`：只读扫描 RUMLogNG Core Data 找重复 QSO（与同步同一谓词：同呼号 + band 相等或空通配 + ≤120 s；另加簇时间跨度≤窗口，防链式跨 QSO 误并）。默认 `--dry-run` 只打印计划与 SQL，不落库；`--apply --yes --backup DIR` 才写——先经 SQLite online-backup API 生成并校验快照（行数一致才继续），RUMLogNG 运行中拒绝写入除非 `--force`。保留「最早时刻」行（QSO 起始时刻，符合日志惯例），merge-then-delete 先把重复行互补字段（6 位 grid / RST / freq）回填到保留行再删；纯逻辑 `core.py` 可单测。实测 RUMLogNG 15595 行含 3338 重复簇 / 约 3980 冗余行（约 26%）。这是 AD-016「禁写 RUMLogNG」的受控一次性例外，同步程序仍保持只读。Regressions: `tests/rumlog_dedup/` 10 passed；端到端冒烟（临时库 6→3 行，merge 正确）。
+
+## Unreleased — 2026-08-16 — RUMLogNG sync push dedupe: sliding window + band wildcard (AD-016)
+
+`rumlog_sync.sync._dedupe_pending` 原用固定 120 s 桶（`epoch // 120`）并按字面 band 分组去重，与拉取确认侧 `find_existing`/`find_all_existing` 的 ±120 s 滑窗 + 空 band 通配语义不一致：两条同一 QSO 的副本若跨越桶边界（如 119 s vs 121 s）、或一条 band 为空一条有值，会两条都推入 RUMLogNG 造成重复。改为与确认侧同一谓词（同 dx_call + band 相等或任一侧为空 + |Δepoch| ≤ 120 s）的成对滑窗去重；顺带修正 sync.py 模块 docstring（推送实为 AppleScript，非 UDP）并删除未用导入 `build_push_adif_fields`。AGENTS.md 模块表与 sdd-guardian `rumlog-readonly` 约束消息同步改为 AppleScript 推送（UDP 2237 保留为备用）。Regressions: 新增 `test_dedupe_pending_collapses_duplicate_rows` / `test_dedupe_pending_keeps_distinct_qsos`；`tests/rumlog_sync/` 46 passed。
+
+## Unreleased — 2026-08-17 — band_hunt respects manual tuning + hunt-budget exhaustion (NFR-088)
+
+现场：30m（10.136 MHz）被 band_hunt 反复拉回 7 次（05:05–08:30），与手动切波段拉锯；pskreporter 报 30m 有 Congo 新实体，但 30m 实际听不到 Congo（当天解码全亚洲台），追猎无效且不放弃。
+
+- **手动切换尊重**：`decide_switch` 新增 `seconds_since_manual_tune`/`manual_respect_s` 守卫——`/api/v1/radio/band` 手动切频记录 `AppState.last_manual_tune_mono`，窗口（默认 3600 s，`MRRC_FT8_BAND_HUNT_MANUAL_RESPECT_S`）内 band_hunt 不拉回。
+- **追猎预算降级**：`band_hunt_loop` 维护 `band_strikes`（band → 被拉回次数），纯函数 `filter_exhausted` 剔除预算耗尽的 band（默认 3 次，`MRRC_FT8_BAND_HUNT_MAX_STRIKES`）；band 不再被 pskreporter 报告或实体已通联时自动重置预算。
+- 顺带修复预存健壮性：`rank_bands` 签名改 `Optional`（本就处理 None）；`_spot_count` 安全 int；`_valid_lines_rate` 校验 helper；`_parse_freq` float 保护；`uvicorn_kwargs` 返回 `dict[str, Any]`；AppState 声明 `_rig_level_cache` 字段；`is not True`/`is True` 语义保留并加 pi-lens-ignore。
+- Regressions: `tests/engine/test_band_hunter.py` 新增 5 用例（手动守卫/超时/无手动 + filter_exhausted 剔除/保留）；全量 926 passed。
 ## Unreleased — 2026-08-11 — Decode rows show DXCC entity (country) + wider Band Activity
 
 - **服务器**：`decode_message_view` 新增 `entity` 字段（英文 DXCC 实体名，来自仓库 cty.dat）；`on_decode` 对每个非 mine 且含呼号的解码行做 lookup（独立于 DXCC cache 就绪状态），unknown/own-echo 为空字符串。`is_new_dxcc` 判定不变。

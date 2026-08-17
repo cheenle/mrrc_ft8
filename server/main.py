@@ -101,6 +101,10 @@ class ServerConfig:
     band_hunt_window_min: int = 30
     band_hunt_interval_s: float = 60.0
     band_hunt_cooldown_s: float = 1_200.0
+    # 手动切波段后的尊重窗口（band_hunt 不拉回；NFR-088 2026-08-17）
+    band_hunt_manual_respect_s: float = 3_600.0
+    # 同一波段追猎（拉回）次数上限，超过即剔除候选（追猎降级）
+    band_hunt_max_strikes: int = 3
     web_host: str = "127.0.0.1"
     web_port: int = 8000
 
@@ -204,6 +208,10 @@ class ServerConfig:
             band_hunt_window_min=band_int("MRRC_FT8_BAND_HUNT_WINDOW_MIN", 30, 5, 1440),
             band_hunt_interval_s=band_int("MRRC_FT8_BAND_HUNT_INTERVAL", 60, 15, 3600),
             band_hunt_cooldown_s=band_int("MRRC_FT8_BAND_HUNT_COOLDOWN", 1200, 60, 36000),
+            band_hunt_manual_respect_s=band_int(
+                "MRRC_FT8_BAND_HUNT_MANUAL_RESPECT_S", 3600, 60, 86400
+            ),
+            band_hunt_max_strikes=band_int("MRRC_FT8_BAND_HUNT_MAX_STRIKES", 3, 1, 20),
             web_host=web_host,
             web_port=web_port,
         )
@@ -319,9 +327,9 @@ def uvicorn_kwargs(
     *,
     ssl_cert: str | None = None,
     ssl_key: str | None = None,
-) -> dict[str, object]:
+) -> dict[str, Any]:
     """Uvicorn run kwargs from config + optional TLS pair."""
-    kw: dict[str, object] = {"host": config.web_host, "port": config.web_port}
+    kw: dict[str, Any] = {"host": config.web_host, "port": config.web_port}
     if ssl_cert and ssl_key:
         kw["ssl_certfile"] = ssl_cert
         kw["ssl_keyfile"] = ssl_key
@@ -895,10 +903,14 @@ def create_server(
             from .engine.band_hunter import (
                 decide_switch,
                 fetch_opportunities,
+                filter_exhausted,
                 rank_bands,
             )
 
             last_switch_mono: float | None = None
+            # 追猎预算: band → 被 band_hunt 拉回该波段的次数（2026-08-17: 30m
+            # 被反复拉回 7 次仍无通联；达到上限后剔除候选，停止拉锯）。
+            band_strikes: dict[str, int] = {}
             while True:
                 await asyncio.sleep(config.band_hunt_interval_s)
                 try:
@@ -938,11 +950,22 @@ def create_server(
                         continue
                     worked = {e.name for e in state.dxcc_cache.entities}
                     ranked = rank_bands(payload, worked)
+                    # 重置不再出现/已无新实体的波段的追猎计数（重新获得预算）
+                    ranked_names = {b["band"] for b in ranked}
+                    for band in list(band_strikes):
+                        if band not in ranked_names:
+                            del band_strikes[band]
+                    # 追猎降级: 预算耗尽的波段从候选剔除（stop fighting the operator）
+                    ranked = filter_exhausted(
+                        ranked, band_strikes, config.band_hunt_max_strikes
+                    )
                     log.debug(
-                        "band_hunt: ranked %s",
+                        "band_hunt: ranked %s strikes=%s",
                         [(b["band"], len(b["new_entities"])) for b in ranked[:4]],
+                        band_strikes,
                     )
                     now = time.monotonic()
+                    last_manual = state.last_manual_tune_mono
                     target = decide_switch(
                         ranked,
                         idle=True,
@@ -953,11 +976,19 @@ def create_server(
                             else None
                         ),
                         cooldown_s=config.band_hunt_cooldown_s,
+                        seconds_since_manual_tune=(
+                            now - last_manual if last_manual is not None else None
+                        ),
+                        manual_respect_s=config.band_hunt_manual_respect_s,
                     )
                     if target is None:
                         continue
                     if state.rig is None or state.safety.armed or state.safety.ptt_on:
                         continue
+                    # 记一次追猎（该波段预算-1）
+                    band_strikes[band_from_freq_hz(target)] = (
+                        band_strikes.get(band_from_freq_hz(target), 0) + 1
+                    )
                     await state.rig.set_frequency(target)
                     state.radio_freq_hz = target
                     # 方案 A: band_hunt 切频后主动重开 capture（此处保证非发射）

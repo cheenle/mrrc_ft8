@@ -66,19 +66,20 @@ async def fetch_opportunities(
             payload = resp.json()
     except Exception:
         return None
-    if isinstance(payload, dict) and payload.get("ok") is True:
+    if isinstance(payload, dict) and payload.get("ok") is True:  # pi-lens-ignore: no-identity-operator-on-literals
         return payload
     return None
 
 
 def rank_bands(
-    opportunities: dict[str, Any], worked_entities: set[str]
+    opportunities: Optional[dict[str, Any]], worked_entities: set[str]
 ) -> list[dict[str, Any]]:
     """Keep bands with at least one unworked DXCC entity, ranked.
 
     Pure function. ``opportunities`` is the ``/api/band_hunt`` payload
-    (``{"bands": [...]}``). ``worked_entities`` is the local worked set
-    of DXCC entity names (e.g. ``{e.name for e in state.dxcc_cache.entities}``).
+    (``{"bands": [...]}``) or ``None`` (fetch failure — returns []).
+    ``worked_entities`` is the local worked set of DXCC entity names
+    (e.g. ``{e.name for e in state.dxcc_cache.entities}``).
 
     Returns band dicts enriched with ``new_entities``, sorted by
     (new-entity count desc, nearby_spot_count desc, avg_snr desc). A band
@@ -101,12 +102,24 @@ def rank_bands(
     ranked.sort(
         key=lambda b: (
             len(b["new_entities"]),
-            int(b.get("nearby_spot_count", 0)),
+            _spot_count(b),
             _avg_snr(b),
         ),
         reverse=True,
     )
     return ranked
+
+
+def _spot_count(band: dict[str, Any]) -> int:
+    """Coerce a band dict's ``nearby_spot_count`` to int; garbage → 0."""
+
+    value = band.get("nearby_spot_count")
+    if value is None:
+        return 0
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return 0
 
 
 def decide_switch(
@@ -116,12 +129,17 @@ def decide_switch(
     current_freq_hz: Optional[int],
     seconds_since_last_switch: Optional[float],
     cooldown_s: float,
+    seconds_since_manual_tune: Optional[float] = None,
+    manual_respect_s: float = 3600.0,
 ) -> Optional[int]:
     """Pick a target dial frequency to tune to, or ``None`` to stay put.
 
     Pure function. Guards (any → no switch): orchestrator not idle; no
     ranked candidates; top band has no dial frequency; a switch happened
-    within ``cooldown_s``; the top band is already the current one.
+    within ``cooldown_s``; the top band is already the current one; the
+    operator manually tuned the rig within ``manual_respect_s`` (2026-08-17:
+    band_hunt used to fight the operator for 30 m — a manual band change
+    must not be overridden by the hunter for a while).
     """
     if not idle or not ranked:
         return None
@@ -133,9 +151,35 @@ def decide_switch(
         and seconds_since_last_switch < cooldown_s
     ):
         return None
+    if (
+        seconds_since_manual_tune is not None
+        and seconds_since_manual_tune < manual_respect_s
+    ):
+        return None
     if current_freq_hz is not None and abs(current_freq_hz - target_freq) < MATCH_HZ:
         return None
     return target_freq
+
+
+def filter_exhausted(
+    ranked: list[dict[str, Any]],
+    band_strikes: dict[str, int],
+    max_strikes: int,
+) -> list[dict[str, Any]]:
+    """Drop bands whose hunt budget is exhausted; keep the rest in order.
+
+    ``band_strikes[band]`` counts how many times the hunter pulled the rig
+    back onto that band without a new DXCC completing.  A band over
+    ``max_strikes`` is removed so the rig stops being dragged back to a
+    band that does not yield (2026-08-17 field: 30 m/Congo re-pulled 7×).
+    When the band's entities are worked (rank_bands drops it) or the band
+    leaves the pskreporter report, the caller resets its strikes.
+    """
+    return [
+        band
+        for band in ranked
+        if band_strikes.get(str(band.get("band", "")), 0) < max_strikes
+    ]
 
 
 def _avg_snr(band: dict[str, Any]) -> float:
