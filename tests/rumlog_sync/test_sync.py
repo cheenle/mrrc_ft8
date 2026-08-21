@@ -8,7 +8,7 @@ from pathlib import Path
 
 from rumlog_sync.config import RumlogConfig
 from rumlog_sync.ft8_db import Ft8Db
-from rumlog_sync.sync import run_sync_once
+from rumlog_sync.sync import _dedupe_pending, run_sync_once
 
 
 @dataclass
@@ -251,3 +251,42 @@ def test_soft_error_when_rumlog_db_missing(ft8_db_path, tmp_path: Path) -> None:
     )
     assert report.pulled == 0
     assert report.errors  # recorded, not raised
+
+
+def _pending_rec(call: str, band: str, epoch: float, id_: int) -> dict[str, object]:
+    """Minimal pending-push record; only the dedupe-key fields matter."""
+
+    return {"id": id_, "dx_call": call, "band": band, "completed_epoch": epoch}
+
+
+def test_dedupe_pending_collapses_duplicate_rows() -> None:
+    # Identical historical duplicates (JTDX re-import) collapse to one.
+    dupes = [_pending_rec("TL8GD", "20m", 1_795_384_049.0, i) for i in range(5)]
+    assert [r["id"] for r in _dedupe_pending(dupes)] == [0]
+
+    # An empty band is a wildcard: an empty-band copy and a filled-band copy
+    # of the same QSO must collapse (mirrors find_all_existing), or both get
+    # pushed and RUMLogNG receives a duplicate.
+    mixed_band = [
+        _pending_rec("TL8GD", "", 1_795_384_049.0, 0),
+        _pending_rec("TL8GD", "20m", 1_795_384_049.0, 1),
+    ]
+    assert [r["id"] for r in _dedupe_pending(mixed_band)] == [0]
+
+    # Within the 120 s window but straddling a fixed 120 s bucket boundary →
+    # still one QSO (sliding window, not epoch // 120 buckets).
+    boundary = [
+        _pending_rec("TL8GD", "20m", 119.0, 0),
+        _pending_rec("TL8GD", "20m", 121.0, 1),
+    ]
+    assert [r["id"] for r in _dedupe_pending(boundary)] == [0]
+
+
+def test_dedupe_pending_keeps_distinct_qsos() -> None:
+    distinct = [
+        _pending_rec("TL8GD", "20m", 100.0, 0),
+        _pending_rec("TL8GD", "20m", 300.0, 1),  # > 120 s apart
+        _pending_rec("V85T", "20m", 100.0, 2),  # different call
+        _pending_rec("TL8GD", "40m", 100.0, 3),  # different band
+    ]
+    assert [r["id"] for r in _dedupe_pending(distinct)] == [0, 1, 2, 3]

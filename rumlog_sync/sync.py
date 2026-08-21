@@ -3,9 +3,9 @@
 Spec §3.2.  Pull: read-only cursor past ``last_seen_pk``, map each row,
 dedupe against the FT8 db (UUID first, then dx_call+band with a 120 s
 window), insert new or update existing with RUMLogNG winning.  Push:
-records with ``pushed_to_rumlog=0`` go out as WSJT-X UDP HEARTBEAT +
-QSO_LOGGED; unconfirmed pushes are requeued after ``confirm_retries``
-rounds.  Every step is transactional per record; failures are logged and
+records with ``pushed_to_rumlog=0`` go out via the RUMLogNG AppleScript
+API (``apple_push``); unconfirmed pushes are requeued after
+``confirm_retries`` rounds.  Every step is transactional per record; failures are logged and
 skip that record, never aborting the round mid-way.
 """
 
@@ -18,7 +18,7 @@ from typing import Any, Callable
 from .apple_push import push_via_applescript
 from .config import RumlogConfig
 from .ft8_db import Ft8Db
-from .mapper import build_push_adif_fields, map_rumlog_row
+from .mapper import map_rumlog_row
 from .rumlog_reader import RUMlogReader
 
 log = logging.getLogger(__name__)
@@ -38,29 +38,53 @@ def _qso_id(rec: dict[str, object]) -> int:
         raise ValueError(f"record id is not an int: {value!r}") from None
 
 
-def _dedupe_pending(records: list[dict[str, object]]) -> list[dict[str, object]]:
-    """Keep one record per QSO (dx_call+band, 120 s window) before pushing.
+def _rec_epoch(rec: dict[str, object]) -> float:
+    """Coerce ``completed_epoch`` to float; None/garbage → 0.0."""
 
-    The canonical db can hold duplicate historical rows (JTDX re-imports);
-    pushing every duplicate would duplicate QSOs in RUMLogNG (AD-016).
+    try:
+        return float(rec.get("completed_epoch") or 0)
+    except (TypeError, ValueError):
+        return 0.0
+
+
+def _same_push_qso(a: dict[str, object], b: dict[str, object]) -> bool:
+    """True when two pending records describe the same QSO (AD-016 §5).
+
+    Mirrors ``Ft8Db.find_all_existing``: same ``dx_call``, an equal-or-empty
+    ``band`` (empty is a wildcard on either side), and completion times within
+    the 120 s window.
     """
 
-    seen: set[tuple[str, str, int]] = set()
-    unique: list[dict[str, object]] = []
+    if str(a.get("dx_call") or "") != str(b.get("dx_call") or ""):
+        return False
+    band_a = str(a.get("band") or "")
+    band_b = str(b.get("band") or "")
+    if band_a and band_b and band_a != band_b:
+        return False
+    return abs(_rec_epoch(a) - _rec_epoch(b)) <= 120.0
+
+
+def _dedupe_pending(records: list[dict[str, object]]) -> list[dict[str, object]]:
+    """Keep one record per QSO before pushing (AD-016 §5).
+
+    The canonical db can hold duplicate historical rows (JTDX re-imports);
+    pushing every duplicate would duplicate QSOs in RUMLogNG.  The window is
+    a sliding ±120 s around each candidate — the same predicate the pull step
+    uses for confirmation — not fixed 120 s buckets, which would leak a
+    duplicate when two copies straddle a bucket boundary (e.g. 119 s vs
+    121 s) and would treat an empty band as distinct from a filled one.
+    Pending batches are small (a handful per round), so the pairwise scan is
+    fine; the one-time large first-run merge has already completed.
+    """
+
+    kept: list[dict[str, object]] = []
     for rec in records:
-        epoch: Any = rec.get("completed_epoch")
-        try:
-            window = int(float(epoch or 0) // 120)
-        except (TypeError, ValueError):
-            window = 0
-        key = (str(rec.get("dx_call") or ""), str(rec.get("band") or ""), window)
-        if key in seen:
+        if any(_same_push_qso(rec, k) for k in kept):
             continue
-        seen.add(key)
-        unique.append(rec)
-    if len(unique) < len(records):
-        log.info("deduped push queue: %d → %d", len(records), len(unique))
-    return unique
+        kept.append(rec)
+    if len(kept) < len(records):
+        log.info("deduped push queue: %d → %d", len(records), len(kept))
+    return kept
 
 
 @dataclass

@@ -49,7 +49,8 @@ venv/bin/python -m pytest tests/
 | `desktop/ft8web/` | 桌面客户端（ft8web 壳 + 服务器大脑，GPL v3 派生）：React 19 + Vite + Tailwind；**浏览器零 DSP/音频/PTT** — 解码/waterfall/收发/日志全部走服务器 REST + 三路 WS（`/api/v1`、`/ws/v1/{state,decodes,waterfall}`）；适配层 `mrrcClient.ts`/`mrrcStreams.ts`/`useServerFT8.ts`（隐式控制租约 + 5 s 心跳对齐 §15.4）；登录门 + `last_tx` 快照显示发出的消息。`dist/` 与 `node_modules/` gitignore — **电台部署须本地 `npm run build`**（见其 README）。单击解码行=select（永不发射）、双击=回复（移动 PWA 惯例） |
 | `deploy/` | Caddyfile（模板+live 实例）、Caddy root LaunchDaemon、systemd unit、macOS LaunchAgent（密码哈希经 `python -m server.main --hash-password` bootstrap）；`restart.sh` 串口占用守卫（AD-008：rigctld 启动前检测非 rigctld 持有者，冲突 fail-fast，`MRRC_FT8_SKIP_SERIAL_GUARD=1` 应急跳过）；注意 `restart.sh` 会杀掉本站 `rigctld`（`pgrep -x rigctld`）但会**自动保活其他电台的共享 daemon**（按 `-t $RIGCTLD_PORT` 区分：非本站 rigctld 快照命令、本站 rigctld 就绪后原样恢复，如旧 MRRC 项目共用的 IC-M710@4531）；启动前读 `data/device-config.json`（存在时覆盖 RIG_* 参数） |
 | `acceptance/` | 硬件验收脚本（FT-710 real-radio：preflight/monitor/`--tx`，不进 pytest） |
-| `rumlog_sync/` | 独立 QSO 双向同步（AD-016）：FT8 db ↔ RUMLogNG；WSJT-X UDP 2237 推送 + 只读 Core Data 轮询；Z_PK 游标、rumlog_uuid 幂等、120 s 去重窗口、RUMLogNG 为准、推送闭环重推；`python -m rumlog_sync` + crontab `*/5` + flock |
+| `rumlog_sync/` | 独立 QSO 双向同步（AD-016）：FT8 db ↔ RUMLogNG；AppleScript 推送（WSJT-X UDP 2237 保留为备用）+ 只读 Core Data 轮询；Z_PK 游标、rumlog_uuid 幂等、±120 s 去重窗口（滑窗 + 空 band 通配，与拉取确认同谓词）、RUMLogNG 为准、推送闭环重推；`python -m rumlog_sync` + crontab `*/5` + flock |
+| `rumlog_dedup/` | RUMLogNG 重复清理工具（AD-016 受控一次性例外）：只读扫描重复（同同步谓词 + 簇时间跨度≤窗口防链式误并）；默认 `--dry-run`，`--apply --yes --backup DIR` 才写（SQLite online-backup 快照校验 + 拒绝 RUMLogNG 运行中写入）；保留最早时刻行 + merge-then-delete；`python -m rumlog_dedup` |
 | `wsjtx-3.0.2/` | vendor 参考源码（只读，禁止修改；gitignore，仅本地构建/校验用，不入库） |
 | `tests/` | pytest；ft8sim/ft4sim 合成信号回归 |
 

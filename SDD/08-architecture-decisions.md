@@ -89,6 +89,6 @@ base advance (2026-08-03 field bug "D").
 - FT8 db → RUMLogNG：RUMLogNG 官方 **AppleScript API**（application 属性 callsign/mode/frequency/rst*/locator/logDateTime + `logQSO`，frequency 单位 kHz、logDateTime 为 UTC），每轮分批（15 条/次 osascript）推送；推送状态与 RUMLogNG 侧 UUID 记录在 qso 表新增列（rumlog_uuid / pushed_to_rumlog），闭环确认 + 超轮重推。WSJT-X UDP 2237（HEARTBEAT + QSO_LOGGED）实现保留为备用模块，实测 RUMLogNG 6.5 未激活该 UDP 解析（socket 收包不处理）。
 - RUMLogNG → FT8 db：只读（uri mode=ro）轮询 CoreQsoModel_1.sqlite，Z_PK 游标增量；列存在性探测防御 RUMLogNG schema 升级；字段冲突以 RUMLogNG 为准，completed_epoch/started_utc 保留 FT8 侧精确值。
 - 跨库去重：rumlog_uuid 精确匹配优先；否则 dx_call+band 相同且完成时刻差 ≤120 s；推送前按同一窗口去重（历史重复行只推一条），拉取确认时确认窗口内**全部**重复行（否则重复历史无限 requeue）。
-- **禁止写 RUMLogNG 数据库**（Core Data 内部状态表外部写入会损坏日志）。
+- **禁止写 RUMLogNG 数据库**（Core Data 内部状态表外部写入会损坏日志）。唯一例外：独立 `rumlog_dedup/` 一次性去重工具（默认 `--dry-run`，`--apply` 须经 SQLite online-backup 快照校验 + 显式确认 + 拒绝 RUMLogNG 运行中写入），同步程序本身仍保持只读。
 
 **Consequences:** 两边日志记录集合最终一致；RUMLogNG 侧删记录不回删 FT8 db（单向追加语义）；同步程序独立于 server 运行（crontab 驱动，flock 防重入）；AppleScript 每条 QSO 耗时秒级，大历史首轮推送分批进行。

@@ -252,7 +252,12 @@ Core Data → FT8 mapping (timestamp offset, RST parsing, UUID hex), the
 AppleScript push generation (kHz frequency, UTC logDateTime, batching,
 escaping) with a mock osascript runner, the idempotent qso-column
 migration, push state machine (mark/confirm/requeue), duplicate-row
-confirmation via find_all_existing, and a full one-round integration
-(pull → merge → push → confirm). The WSJT-X UDP 2237 builders remain as a
+confirmation via find_all_existing, the pre-push dedupe (sliding ±120 s
+window + empty-band wildcard, matching the confirmation predicate), and
+a full one-round integration (pull → merge → push → confirm). The WSJT-X UDP 2237 builders remain as a
 backup module (RUMLogNG 6.5 does not activate that parser). The
-real-RUMLogNG smoke path is opt-in (`--smoke`, manual QSO + delete).
+real-RUMLogNG smoke path is opt-in (`--smoke`, manual QSO + delete). A
+separate `rumlog_dedup` suite (`tests/rumlog_dedup/`) covers the
+duplicate-clustering / keep / merge / summarize / SQL pure logic of the
+RUMLogNG cleanup tool (default `--dry-run`; `--apply` requires a verified
+backup).

@@ -247,7 +247,7 @@
     "(UPDATE|INSERT|DELETE)\\s+ZCORE_QSO",
     "DELETE\\s+FROM\\s+ZCORE"
    ],
-   "message": "RUMLogNG Core Data 数据库只读访问（AD-016）；禁止直接写 Core Data。只读轮询用 uri mode=ro；写入一律经 WSJT-X UDP 2237。"
+   "message": "RUMLogNG Core Data 数据库只读访问（AD-016）；禁止直接写 Core Data。只读轮询用 uri mode=ro；写入一律经 RUMLogNG AppleScript API（WSJT-X UDP 2237 保留为备用，不直接写 Core Data）。"
   }
  ],
  "context_map": []
