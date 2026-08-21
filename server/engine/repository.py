@@ -21,7 +21,7 @@ import threading
 import time
 from collections.abc import Callable
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from enum import StrEnum
 
 from .sequencer import QSORecord
@@ -306,9 +306,10 @@ class Repository:
         """``(dx_call, utc_date YYYYMMDD, started_utc, band)`` of stored QSOs.
 
         Cross-source by default so a JTDX re-sync never duplicates a live
-        QSO; pass ``source="jtdx"`` to restrict.  UTC date derives from
-        ``completed_epoch`` (the ADIF side uses ``qso_date``; midnight
-        crossers are the only divergence, tolerated).
+        QSO; pass ``source="jtdx"`` to restrict.  The date must be the QSO
+        **start** date to match the ADIF side (``qso_date``), so midnight
+        crossers (``started_utc`` later in the day than the completion
+        time) derive from ``completed_epoch`` minus one day.
         """
 
         where, params = "", []
@@ -321,10 +322,17 @@ class Repository:
             ).fetchall()
         keys: set[tuple[str, str, str, str]] = set()
         for row in rows:
-            date = datetime.fromtimestamp(
+            completed = datetime.fromtimestamp(
                 row["completed_epoch"], tz=timezone.utc
-            ).strftime("%Y%m%d")
-            keys.add((row["dx_call"], date, row["started_utc"], row["band"]))
+            )
+            started = row["started_utc"]
+            if (
+                len(started) == 6
+                and started.isdigit()
+                and started > completed.strftime("%H%M%S")
+            ):
+                completed -= timedelta(days=1)
+            keys.add((row["dx_call"], completed.strftime("%Y%m%d"), started, row["band"]))
         return keys
 
     def list_qsos(

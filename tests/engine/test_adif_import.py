@@ -199,3 +199,31 @@ def test_sync_never_reimports_live_qso(
     report = sync_jtdx_log(repository_fake, path, my_call="BG1SB", my_grid="ON80DA")
     assert report.inserted == 0
     assert repository_fake.count_rows("qso") == 1
+
+
+def test_sync_midnight_crosser_is_idempotent(
+    tmp_path: Path, repository_fake: Repository
+) -> None:
+    """A QSO starting 23:59:45 and ending 00:00:59 next day must dedupe.
+
+    Regression: ``dedupe_keys`` used to derive the UTC date from
+    ``completed_epoch`` while the ADIF side keys on ``qso_date`` (start
+    date), so every midnight crosser was re-imported on every sync and
+    then re-pushed to RUMLogNG.
+    """
+
+    record = (
+        "<call:5>CX1FK <gridsquare:0> <mode:3>FT8 "
+        "<qso_date:8>20230305 <time_on:6>235945 "
+        "<qso_date_off:8>20230306 <time_off:6>000059 "
+        "<band:3>20m <freq:9>14.075500 "
+        "<station_callsign:5>BG1SB <my_gridsquare:5>ON80DA <eor>"
+    )
+    path = tmp_path / "wsjtx_log.adi"
+    path.write_text(record)
+    first = sync_jtdx_log(repository_fake, path, my_call="BG1SB", my_grid="ON80DA")
+    assert first.inserted == 1
+    second = sync_jtdx_log(repository_fake, path, my_call="BG1SB", my_grid="ON80DA")
+    assert second.inserted == 0
+    assert second.skipped == 1
+    assert repository_fake.count_rows("qso") == 1

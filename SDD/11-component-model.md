@@ -137,7 +137,7 @@ signal and is never part of the production surface.
 | `msgparse.py` | Supported standard-message parsing and validation |
 | `repository.py` | SQLite transactions, retention and schema migrations |
 | `adif.py` | ADIF generation/export from canonical QSO data |
-| `adif_import.py` | JTDX ADIF export parser + idempotent incremental import (`sync_jtdx_log`); dedupe key `(dx_call, utc date, started_utc, band)`; `source='jtdx'` rows |
+| `adif_import.py` | JTDX ADIF export parser + idempotent incremental import (`sync_jtdx_log`); dedupe key `(dx_call, utc start date, started_utc, band)` — midnight crossers key on the start date (ADIF `qso_date`), not the completion date; `source='jtdx'` rows |
 | `dxcc.py` | cty.dat parser + callsign→DXCC lookup + full-scan summary (total / entities / by_band) |
 | `main.py` auto-call | `is_new_dxcc` decode marking + `auto_call_candidate` decision + `_auto_call` (safety-armed sequencer reply, audit) |
 

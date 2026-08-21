@@ -40,7 +40,7 @@ venv/bin/python -m pytest tests/
 | `dsp/wsjt_improved.f90` | Improved profiles 0–4、确定性 A8 owner、严格 OpenMP team 校验和纯 Fortran batch 调度 |
 | `dsp/wsjt_test_hooks.f90` | 仅 `MRRC_FT8_TEST_HOOKS=ON` 时编译的非生产 direct-A8 测试入口 |
 | `server/core/` | DSP Worker/supervisor；ctypes 绑定 wsjt_core；全局 DSP lock |
-| `server/engine/adif_import.py` | JTDX `wsjtx_log.adi` 容错解析（容忍半行写入）+ 去重键 `(dx_call, utc日期, started_utc, band)` + `sync_jtdx_log` 幂等增量导入；启动 + 每小时由 main.py 调度 |
+| `server/engine/adif_import.py` | JTDX `wsjtx_log.adi` 容错解析（容忍半行写入）+ 去重键 `(dx_call, utc开始日期, started_utc, band)`（跨午夜 QSO 以开始日为准）+ `sync_jtdx_log` 幂等增量导入；启动 + 每小时由 main.py 调度 |
 | `server/engine/dxcc.py` | 仓库内 `cty.dat`（country-files ADIF 格式）解析 + 呼号→DXCC 实体 lookup（`=`精确 / `(23)`数字替换 / 最长前缀）+ `dxcc_summary` 全量统计（总数/实体列表/波段矩阵） |
 | `server/main.py` 自动呼叫 | decode 消息带 `is_new_dxcc`（实体已通联判定）；开关 `auto_call_new_dxcc` 开启后服务端对第一个新 DXCC CQ 自动通联（`auto_call_candidate` 纯函数 + `safety.arm` + `sequencer.reply_to`，不打断当前 QSO） |
 | `server/engine/band_hunter.py` | NFR-088 波段猎人：轮询外部 `/api/band_hunt`（HTTP 唯一跨库边界，pskreporter 侧），`rank_bands`/`decide_switch` 纯函数过滤已通联实体并排序（pskreporter 实体名→cty 规范名归一化：Germany/Malaysia/Turkey 别名）；`MRRC_FT8_BAND_HUNT_URL`（默认空=关闭）+ 设置 `auto_band_hunt` 双闸门；空闲时经现有 rig 调谐路径切频，再由自动呼叫闭环 |
