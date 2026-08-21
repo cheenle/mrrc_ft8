@@ -37,7 +37,8 @@
     mrrc_ft710: '/mrrc_ft710/',
     mrrc_ft8: '/mrrc_ft8/',
     sunmrrc: '/sunmrrc/',
-    sunsdrmobile: '/sunsdrmobile/'
+    sunsdrmobile: '/sunsdrmobile/',
+    blog: '/blog/'
   };
 
   var L = isCN ? {
@@ -111,6 +112,7 @@
         siteLink('mrrc_ft8', 'FT-8') +
         siteLink('sunmrrc', 'SunMRRC') +
         siteLink('sunsdrmobile', 'SunsdrMobile') +
+        siteLink('blog', 'Blog') +
       '</nav>' +
       '<a class="vlsc-gn-gh" href="https://github.com/cheenle" target="_blank" rel="noopener" title="GitHub">' +
         '<i class="fab fa-github"></i>' +
@@ -229,6 +231,18 @@
     adsenseScript.src = 'https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-7442510147240155';
     adsenseScript.crossOrigin = 'anonymous';
     document.head.appendChild(adsenseScript);
+  }
+
+  // ── 9. 反馈系统 bootstrap（全站自动注入；admin/api 页面除外）──
+  if (location.hostname === 'www.vlsc.net'
+      && !/\/feedback\/(admin|api)/.test(location.pathname)) {
+    var fbCss = document.createElement('link');
+    fbCss.rel = 'stylesheet';
+    fbCss.href = '/feedback/static/feedback.css?v=1';
+    (document.head || document.documentElement).appendChild(fbCss);
+    var fbJs = document.createElement('script');
+    fbJs.src = '/feedback/static/feedback.js?v=1';
+    document.body.appendChild(fbJs);
   }
 
 })();
