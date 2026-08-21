@@ -46,7 +46,7 @@ export function formFromConfig(
 		audio_in_device: audioVal(cfg?.audio_in_device ?? cfg?.audio_device),
 		audio_out_device: audioVal(cfg?.audio_out_device ?? cfg?.audio_device),
 		audio_in_channel:
-		typeof cfg?.audio_in_channel === "number" ? cfg.audio_in_channel : 0,
+			typeof cfg?.audio_in_channel === "number" ? cfg.audio_in_channel : 0,
 	};
 }
 
