@@ -145,7 +145,8 @@ mid-session drops and `RPRT -n` errors. It covers frequency/mode/PTT
 round-trips, error-code propagation, input validation before any I/O,
 command serialization through the lock, transparent reconnect after a broken
 session, fail-closed behavior when rigctld is unreachable and idempotent
-close. The TX playback suite proves block-exact writes through a fake output
+close, plus `tune_with_mode` (frequency→mode→filter order, empty-mode skip,
+swallowed mode/width failures, propagating frequency failure). The TX playback suite proves block-exact writes through a fake output
 stream, the 48 kHz/mono/float32 stream contract, cancellation of a blocked
 write, device-loss mapping, concurrent-play rejection and invalid-buffer
 rejection before any stream opens. The safety suite drives the central PTT

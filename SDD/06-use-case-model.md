@@ -20,7 +20,7 @@ The operator taps a candidate to inspect it, then separately taps Reply. The ser
 
 ### UC-011 Select FT8 Band
 
-The lease holder picks a band (7/14/21/28 MHz) from the top-bar selector. The server tunes the rig dial to the band's FT8 frequency (7.074/14.074/21.074/28.074 MHz) through the lease-gated `/radio/band` mutation. A free lease is acquired implicitly (UC-002); the change is rejected while TX is armed, and failures are surfaced rather than silent. The selector reflects the rig's polled dial frequency when it lands on a known band.
+The lease holder picks a band (7/14/21/28 MHz) from the top-bar selector. The server tunes the rig dial to the band's FT8 frequency (7.074/14.074/21.074/28.074 MHz) through the lease-gated `/radio/band` mutation and re-asserts the configured operating mode (default USB, 2400 Hz passband) after every tune — band changes on many rigs restore the band-stacked mode. A free lease is acquired implicitly (UC-002); the change is rejected while TX is armed, and failures are surfaced rather than silent. The selector reflects the rig's polled dial frequency when it lands on a known band.
 
 ### UC-004 Call CQ
 

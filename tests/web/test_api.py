@@ -410,6 +410,9 @@ def test_radio_band_rules(client: TestClient, state: AppState, rig: ApiRig) -> N
     )
     assert ok.status_code == 200
     assert rig.frequencies == [14_074_000]
+    # Every tune re-asserts the operating mode (band-stacked mode reset).
+    assert rig.mode == ("USB", 2400)
+    assert rig.filter_hz == 2400
 
     client.post("/api/v1/operation/cq", headers=auth_headers(session_id))
     during_tx = client.post(

@@ -36,7 +36,7 @@ from .engine.dsp_decode import SupervisorDecoder
 from .engine.latency import LatencyHistogram
 from .engine.orchestrator import Orchestrator
 from .engine.repository import Repository
-from .engine.rig import RigClient
+from .engine.rig import RigClient, tune_with_mode
 from .engine.safety import Interlock, SafetyController
 from .engine.sequencer import (
     DEFAULT_TX_AUDIO_FREQUENCY,
@@ -369,6 +369,7 @@ def create_server(
         my_call=config.my_call,
         my_grid=config.my_grid,
         rig=rig_client,
+        rig_mode=config.rig_mode,
         allowed_hosts=config.allowed_hosts,
         band_hunt_url=config.band_hunt_url,
         device_config=DeviceConfigStore(),
@@ -989,7 +990,7 @@ def create_server(
                     band_strikes[band_from_freq_hz(target)] = (
                         band_strikes.get(band_from_freq_hz(target), 0) + 1
                     )
-                    await state.rig.set_frequency(target)
+                    await tune_with_mode(state.rig, target, config.rig_mode)
                     state.radio_freq_hz = target
                     # 方案 A: band_hunt 切频后主动重开 capture（此处保证非发射）
                     await _proactive_capture_restart(

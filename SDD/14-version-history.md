@@ -1,5 +1,9 @@
 # 14. Version History
 
+## Unreleased — 2026-08-22 — 切频时重设操作模式（tune_with_mode）
+
+用户现场要求：无论手动（`/radio/band` 顶栏波段选择）还是自动（band_hunt 切频），切频后都要把电台模式重设为配置模式（`rig_mode`，默认 USB，2400 Hz）。电台换波段常恢复 band-stacked 模式（如切到 40m 回到 LSB），FT8 需要 USB。新增 `server/engine/rig.py::tune_with_mode`：先 `set_frequency`（失败照常抛 502/中断 band_hunt 该轮），成功后 best-effort `set_mode` + FT-710 原始路径 `set_filter_width`（hamlib 4.6.2 M 命令不落宽度的既有 workaround），模式/宽度失败仅记日志不掩盖已完成的切频；`AppState.rig_mode` 由 `create_server` 从 `ServerConfig.rig_mode` 注入。UC-006 波段选择流程同步注明。Regressions: `tests/engine/test_rig.py` 新增 5 用例（顺序/空模式跳过/模式失败不掩盖/非 FT-710 宽度 best-effort/频率失败传播）；`tests/web/test_api.py::test_radio_band_rules` 断言切频后 mode=(USB,2400)。
+
 ## Unreleased — 2026-08-22 — JTDX import dedupe: midnight crossers no longer re-imported
 
 现场：rumlog_sync 每小时向 RUMLogNG 重复推送同 9 条 QSO（CX1FK/BG2KUD/VK2FAB/BA6KC/AA5AT/K1BZ/JA2JVG/9M25MJ/V85T），本地 qso 表这 9 个呼号各累积 ~445 份重复（共 4000+ 行）。根因：`Repository.dedupe_keys` 从 `completed_epoch` 推导 UTC 日期，而 ADIF 侧 `dedupe_key` 用 `qso_date`（QSO **开始**日期）；跨午夜 QSO（time_on 23:59:45 / time_off 次日 00:00:59）两侧键永远不匹配，每小时增量导入都重新插入（新行 `pushed_to_rumlog=0`），sync 再推入 RUMLogNG，pull 又确认全部本地副本——自我维持的复制循环。修复：`dedupe_keys` 推导**开始**日期——`started_utc` 晚于完成时刻的当日时间时，`completed_epoch` 减一天（符合 ADIF 规范 QSO_DATE=开始日期）。Regressions: `tests/engine/test_adif_import.py::test_sync_midnight_crosser_is_idempotent`；全量 927 passed。存量清理（用户批准，均已备份 /tmp/mrrc-dedup-backup-20260822/）：本地 qso 表删 4363 重复行（120 组，保留每键最小 id 并合并 rumlog_uuid/pushed 状态，15855→11546 行，清理后重复键 0）；RUMLogNG 侧 `rumlog_dedup --apply`（先 AppleScript 优雅退出 app，快照校验通过）删 1251 行，剩余重复簇 0，事后重启 RUMLogNG。server 经 restart.sh 重启加载修复；手动 sync 一轮 pulled=0 inserted=0 updated=0 pushed=0 requeued=0。

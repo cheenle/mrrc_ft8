@@ -667,3 +667,70 @@ def test_rig_client_exposes_host_and_port() -> None:
     rig = RigClient(host="127.0.0.2", port=4533)
     assert rig.host == "127.0.0.2"
     assert rig.port == 4533
+
+
+class _RecordingRig:
+    """Rig surface for tune_with_mode: records calls, can fail mode."""
+
+    def __init__(self, *, fail_mode: bool = False, bad_width: bool = False) -> None:
+        self.calls: list[tuple] = []
+        self.fail_mode = fail_mode
+        self.bad_width = bad_width
+
+    async def set_frequency(self, frequency_hz: int) -> None:
+        self.calls.append(("freq", frequency_hz))
+
+    async def set_mode(self, mode: str, passband_hz: int) -> None:
+        self.calls.append(("mode", mode, passband_hz))
+        if self.fail_mode:
+            raise RigError("rig_rprt", "mode rejected", rprt=1)
+
+    async def set_filter_width(self, hz: int) -> None:
+        self.calls.append(("width", hz))
+        if self.bad_width:
+            raise ValueError(f"unsupported filter width: {hz} Hz")
+
+
+def test_tune_with_mode_sets_frequency_then_mode_and_width() -> None:
+    from server.engine.rig import tune_with_mode
+
+    rig = _RecordingRig()
+    run(tune_with_mode(rig, 7_074_000, "USB"))
+    assert rig.calls == [("freq", 7_074_000), ("mode", "USB", 2400), ("width", 2400)]
+
+
+def test_tune_with_mode_empty_mode_tunes_frequency_only() -> None:
+    from server.engine.rig import tune_with_mode
+
+    rig = _RecordingRig()
+    run(tune_with_mode(rig, 7_074_000, ""))
+    assert rig.calls == [("freq", 7_074_000)]
+
+
+def test_tune_with_mode_mode_failure_does_not_mask_tune() -> None:
+    """Frequency already moved; a mode hiccup is logged, not raised."""
+
+    from server.engine.rig import tune_with_mode
+
+    rig = _RecordingRig(fail_mode=True)
+    run(tune_with_mode(rig, 7_074_000, "USB"))  # must not raise
+    assert rig.calls == [("freq", 7_074_000), ("mode", "USB", 2400)]
+
+
+def test_tune_with_mode_non_ft710_width_is_best_effort() -> None:
+    from server.engine.rig import tune_with_mode
+
+    rig = _RecordingRig(bad_width=True)
+    run(tune_with_mode(rig, 7_074_000, "USB"))  # ValueError width → swallowed
+    assert rig.calls == [("freq", 7_074_000), ("mode", "USB", 2400), ("width", 2400)]
+
+
+def test_tune_with_mode_frequency_failure_propagates() -> None:
+    from server.engine.rig import tune_with_mode
+
+    class _DeadRig(_RecordingRig):
+        async def set_frequency(self, frequency_hz: int) -> None:
+            raise RigError("timeout", "rig unreachable")
+
+    with pytest.raises(RigError):
+        run(tune_with_mode(_DeadRig(), 7_074_000, "USB"))

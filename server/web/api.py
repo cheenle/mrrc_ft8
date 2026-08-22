@@ -33,6 +33,7 @@ from ..engine.repository import Repository, VoidWindowExpired
 from ..engine.safety import Interlock, SafetyController, TxRefused
 from ..engine.tx_driver import TX_ENCODE_SECONDS, TX_FIT_MARGIN_SECONDS, TX_WAVEFORM_SECONDS
 from ..engine.tx_frequency import FrequencyOccupancy
+from ..engine.rig import tune_with_mode
 from ..engine.sequencer import DEFAULT_TX_AUDIO_FREQUENCY, DisarmReason, Sequencer
 from ..engine.device_config import (
     BAUD_RATES,
@@ -179,6 +180,7 @@ class AppState:
     selected_freq: float | None = None  # audio offset the selected message was heard at
     occupancy: FrequencyOccupancy = field(default_factory=FrequencyOccupancy)
     radio_freq_hz: int | None = None  # last polled dial frequency, if rig is up
+    rig_mode: str = "USB"  # operating mode re-asserted on every band tune
     last_manual_tune_mono: float | None = None  # manual band change (monotonic)
     _rig_level_cache: dict[str, Any] | None = None  # transient rig level probe cache
     last_tx: dict[str, Any] | None = None  # last transmitted message (desktop client)
@@ -618,7 +620,7 @@ def create_router(state: AppState) -> APIRouter:
         if state.rig is None:
             return _reject(503, "rig_unavailable")
         try:
-            await state.rig.set_frequency(freq)
+            await tune_with_mode(state.rig, freq, state.rig_mode)
         except Exception as exc:
             return _reject(502, "rig_error", detail=str(exc))
         # 手动切波段：band_hunt 尊重窗口内不拉回（NFR-088, 2026-08-17）。

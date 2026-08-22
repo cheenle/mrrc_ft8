@@ -684,3 +684,39 @@ class RigClient:
             raise RigError(
                 "protocol", f"rig returned an invalid {what}: {text!r}"
             ) from None
+
+
+TUNE_PASSBAND_HZ = 2400  # FT8/FT4 operating passband re-asserted on every tune
+
+
+async def tune_with_mode(
+    rig: RigClient,
+    frequency_hz: int,
+    mode: str,
+    passband_hz: int = TUNE_PASSBAND_HZ,
+) -> None:
+    """Set the dial frequency, then re-assert the operating mode.
+
+    Many rigs restore the band-stacked mode on a band change, so every
+    tune (manual ``/radio/band`` or automatic band-hunt) re-applies the
+    configured mode (default USB).  A mode/filter failure is logged and
+    swallowed: the frequency already moved, and a mode hiccup must not
+    mask that from the caller (monitor-only posture).
+    """
+
+    await rig.set_frequency(frequency_hz)
+    if not mode:
+        return
+    try:
+        await rig.set_mode(mode, passband_hz)
+    except Exception as exc:
+        log.warning("tune: frequency set but mode %s apply failed: %s", mode, exc)
+        return
+    # hamlib never applies the width on the FT-710 (mis-framed SH, see
+    # RigClient.set_filter_width) — apply it via the raw path too.
+    try:
+        await rig.set_filter_width(passband_hz)
+    except ValueError:
+        pass  # not one of the FT-710 raw-table widths
+    except Exception as exc:
+        log.debug("tune: filter width apply failed: %s", exc)
