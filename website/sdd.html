@@ -4,36 +4,72 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta name="description" content="MRRC-FT8 Software Design Description (SDD) overview: architecture decisions, service model, component model and version history.">
-    <meta name="theme-color" content="#0a0a0a">
+    <meta name="theme-color" content="#050a08">
     <title>MRRC-FT8 SDD</title>
 
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
 
-    <link rel="stylesheet" href="css/octen.css?v=4">
-    <link rel="stylesheet" href="css/sunsdrmobile.css?v=1">
-    <link rel="stylesheet" href="css/ft8.css">
+    <link rel="stylesheet" href="css/scope.css?v=1">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+        <style>
+        .scope-site-brand { display:inline-flex;align-items:center;gap:0.4rem;font-family:var(--scope-font-mono);font-size:1.25rem;font-weight:700;color:var(--scope-text);white-space:nowrap; }
+        .scope-site-brand i { color:var(--scope-primary); }
+        .hero { position:relative; padding:calc(var(--scope-gn-h) + 6rem) 0 5rem; background:radial-gradient(circle at 70% 30%, rgba(0,255,65,0.08), transparent 40%), var(--scope-bg); overflow:hidden; text-align:center; }
+        .hero-badge { display:inline-flex;align-items:center;gap:0.5rem;font-family:var(--scope-font-mono);font-size:0.8rem;color:var(--scope-primary);border:1px solid var(--scope-border);border-radius:999px;padding:0.35rem 0.8rem;margin-bottom:1.25rem;background:rgba(0,255,65,0.05); }
+        .hero-title { font-family:var(--scope-font-mono);font-size:clamp(2.2rem,6vw,4rem);font-weight:700;margin:0 0 1rem;line-height:1.1;color:var(--scope-text); }
+        .hero-title .gradient { color:var(--scope-primary); }
+        .hero-subtitle { color:var(--scope-text-2);font-size:1.15rem;max-width:640px;margin:0 auto 2rem; }
+        .hero-actions { display:flex;flex-wrap:wrap;gap:1rem;justify-content:center; }
+        .btn { display:inline-flex;align-items:center;gap:0.5rem;padding:0.7rem 1.4rem;font-family:var(--scope-font-mono);font-weight:600;font-size:0.875rem;border-radius:var(--scope-radius);border:1px solid var(--scope-primary);background:transparent;color:var(--scope-primary);cursor:pointer;transition:all 0.2s ease;text-decoration:none; }
+        .btn:hover { background:rgba(0,255,65,0.1);box-shadow:0 0 16px var(--scope-primary-glow);text-decoration:none; }
+        .btn-primary { background:var(--scope-primary);color:var(--scope-bg); }
+        .btn-primary:hover { background:#33ff66; }
+        .btn-large { padding:0.85rem 1.6rem; }
+        .section { padding:5rem 0; }
+        .section-header { margin-bottom:2.5rem; }
+        .section-label { display:inline-block;font-family:var(--scope-font-mono);font-size:0.75rem;font-weight:700;letter-spacing:0.12em;text-transform:uppercase;color:var(--scope-primary);margin-bottom:0.75rem; }
+        .section-title { font-family:var(--scope-font-mono);font-size:2rem;font-weight:700;margin:0 0 0.75rem;color:var(--scope-text); }
+        .section-subtitle { color:var(--scope-text-2);max-width:640px;margin:0; }
+        .features-grid { display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:1.25rem; }
+        .feature-card { background:var(--scope-surface);border:1px solid var(--scope-border);border-radius:var(--scope-radius);padding:1.5rem; }
+        .feature-card .icon { width:40px;height:40px;border-radius:var(--scope-radius);background:rgba(0,255,65,0.08);border:1px solid var(--scope-border);display:flex;align-items:center;justify-content:center;color:var(--scope-primary);font-size:1.1rem;margin-bottom:0.75rem; }
+        .feature-card h3 { margin:0 0 0.5rem;font-family:var(--scope-font-mono);font-size:1.05rem;color:var(--scope-text); }
+        .feature-card p { color:var(--scope-text-2);font-size:0.92rem;margin:0 0 0.75rem;line-height:1.6; }
+        .feature-card code { font-family:var(--scope-font-mono);font-size:0.85em;background:var(--scope-bg);padding:0.15rem 0.4rem;border-radius:var(--scope-radius);color:var(--scope-primary); }
+        .steps { display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:1rem; }
+        .step { background:var(--scope-surface);border:1px solid var(--scope-border);border-radius:var(--scope-radius);padding:1.25rem; }
+        .step h4 { margin:0 0 0.5rem;font-family:var(--scope-font-mono);font-size:0.95rem;color:var(--scope-text); }
+        .step a { color:var(--scope-primary);text-decoration:none; }
+        .step a:hover { text-decoration:underline; }
+        .tech-stack { display:flex;flex-wrap:wrap;gap:0.6rem; }
+        .tech-tag { display:inline-flex;align-items:center;gap:0.35rem;font-family:var(--scope-font-mono);font-size:0.78rem;color:var(--scope-text-2);border:1px solid var(--scope-border);border-radius:999px;padding:0.35rem 0.75rem;background:rgba(0,255,65,0.04); }
+        table.scope-table { width:100%;border-collapse:collapse;font-size:0.9rem;margin:1.25rem 0; }
+        table.scope-table th, table.scope-table td { padding:0.85rem 1rem;text-align:left;border-bottom:1px solid var(--scope-border); }
+        table.scope-table th { font-family:var(--scope-font-mono);font-weight:600;color:var(--scope-primary);background:var(--scope-surface); }
+        table.scope-table tr:nth-child(even) { background:rgba(0,255,65,0.03); }
+        code { font-family:var(--scope-font-mono);font-size:0.85em;background:var(--scope-surface);padding:0.15rem 0.4rem;border-radius:var(--scope-radius);color:var(--scope-primary); }
+        @media (max-width: 768px) { .section { padding:3.5rem 0; } .section-title { font-size:1.6rem; } }
+    </style>
 </head>
-<body data-site="mrrc_ft8">
+<body data-site="mrrc_ft8" class="fx-grid">
 
-<nav class="navbar">
-    <div class="container navbar-content">
-        <a href="index.html" class="logo">
-            <span class="logo-icon"><i class="fas fa-file-lines"></i></span>
-            <span>FT-8 <span style="color: var(--accent);">SDD</span></span>
+<nav class="scope-site-nav">
+    <div class="container scope-site-nav-inner">
+        <a href="index.html" class="scope-site-brand fx-glow">
+            <i class="fas fa-satellite-dish"></i>
+            <span>MRRC-FT<span style="color:var(--scope-primary)">8</span></span>
         </a>
-        <ul class="nav-links">
-            <li><a href="#overview">Overview</a></li>
-            <li><a href="#updates">Latest</a></li>
-            <li><a href="#chapters">Chapters</a></li>
-            <li><a href="#decisions">AD Index</a></li>
-            <li><a href="https://github.com/cheenle/mrrc_ft8/tree/main/SDD" target="_blank" rel="noopener">GitHub</a></li>
+        <ul class="scope-site-nav-links">
+            <li><a href="index.html#features">Features</a></li>
+            <li><a href="index.html#architecture">Architecture</a></li>
+            <li><a href="sdd.html">SDD</a></li>
+            <li><a href="https://github.com/cheenle/mrrc_ft8" target="_blank" rel="noopener"><i class="fab fa-github"></i> GitHub</a></li>
         </ul>
-        <div class="nav-actions">
-            <a href="zh/sdd.html" class="lang-btn">中文</a>
-            <button class="mobile-menu-toggle" onclick="toggleMobileMenu()"><i class="fas fa-bars"></i></button>
+        <div style="display:flex;align-items:center;gap:0.75rem;">
+            <a href="zh/sdd.html" class="scope-btn" style="padding:0.4rem 0.8rem;font-size:0.75rem;">中文</a>
+            <button class="scope-site-nav-toggle" aria-label="Toggle menu"><i class="fas fa-bars"></i></button>
         </div>
     </div>
 </nav>
@@ -60,14 +96,14 @@
     </div>
 </section>
 
-<section class="section" id="overview" style="background: var(--bg-secondary);">
+<section class="section" id="overview" style="background: var(--scope-surface);">
     <div class="container">
         <div class="section-header">
             <span class="section-label">Overview</span>
             <h2 class="section-title">SDD Scope</h2>
             <p class="section-subtitle">IBM TeamSD aligned, 15 chapters, implementation-grounded content.</p>
         </div>
-        <table>
+        <table class="scope-table">
             <thead>
             <tr><th>Attribute</th><th>Value</th></tr>
             </thead>
@@ -84,7 +120,7 @@
     </div>
 </section>
 
-<section class="section" id="updates-v12" style="background: var(--bg-primary);">
+<section class="section" id="updates-v12" style="background: var(--scope-bg);">
     <div class="container">
         <div class="section-header">
             <span class="section-label">Latest Update</span>
@@ -94,26 +130,26 @@
             <div class="feature-card">
                 <div class="icon"><i class="fas fa-sliders-h"></i></div>
                 <h3>FT-710 Rig Levels via Raw CAT</h3>
-                <p>ATT / PREAMP / AGC / RF gain now switch through raw <code>\send_raw</code> CAT frames instead of hamlib's <code>L</code>/<code>l</code> level path, which the FT-710 never answers (verified live 2026-08-04 against the station rigctld). Codes: <code>RA01;</code>=6 dB, <code>PA01;</code>=10 dB, <code>GT06;</code>=AUTO — hamlib 4.7.2 sends the wrong <code>GT04;</code> — and <code>RG0&lt;NNN&gt;;</code>=0..1. The drawer reads the rig's real state and drops the stale snapshot after every write.</p>
+                <p>ATT / PREAMP / AGC / RF gain now switch through raw <code class="scope-code">\send_raw</code> CAT frames instead of hamlib's <code class="scope-code">L</code>/<code class="scope-code">l</code> level path, which the FT-710 never answers (verified live 2026-08-04 against the station rigctld). Codes: <code class="scope-code">RA01;</code>=6 dB, <code class="scope-code">PA01;</code>=10 dB, <code class="scope-code">GT06;</code>=AUTO — hamlib 4.7.2 sends the wrong <code class="scope-code">GT04;</code> — and <code class="scope-code">RG0&lt;NNN&gt;;</code>=0..1. The drawer reads the rig's real state and drops the stale snapshot after every write.</p>
             </div>
             <div class="feature-card">
                 <div class="icon"><i class="fas fa-filter"></i></div>
                 <h3>FT-710 Filter Width Raw-SH</h3>
-                <p>Hamlib 4.6.2 mis-framed the width command (<code>SH0NN;</code> instead of <code>SH00NN;</code>) so <code>M &lt;mode&gt; &lt;width&gt;</code> never changed the rig. The width now goes through raw <code>\send_raw</code> with the true SH-register readback (1.8 / 2.4 / 3.0 kHz), compatible with the hamlib 4.7.2 upgrade. TX power (<code>PC0…;</code>) is rejected by the FT-710 and is deliberately not exposed.</p>
+                <p>Hamlib 4.6.2 mis-framed the width command (<code class="scope-code">SH0NN;</code> instead of <code class="scope-code">SH00NN;</code>) so <code class="scope-code">M &lt;mode&gt; &lt;width&gt;</code> never changed the rig. The width now goes through raw <code class="scope-code">\send_raw</code> with the true SH-register readback (1.8 / 2.4 / 3.0 kHz), compatible with the hamlib 4.7.2 upgrade. TX power (<code class="scope-code">PC0…;</code>) is rejected by the FT-710 and is deliberately not exposed.</p>
             </div>
         </div>
         <img
           src="images/cockpit-ft8.jpg"
           alt="MRRC-FT8 web cockpit — live FT8 band activity and decodes on 14.074 MHz (20 m)"
-          style="width: 100%; max-width: 880px; border-radius: 0.75rem; border: 1px solid var(--border); box-shadow: 0 10px 35px rgba(0,0,0,0.4); margin: 1.5rem auto 0; display: block;"
+          style="width: 100%; max-width: 880px; border-radius: 0.75rem; border: 1px solid var(--scope-border); box-shadow: 0 10px 35px rgba(0,0,0,0.4); margin: 1.5rem auto 0; display: block;"
         />
-        <p style="color: var(--text-muted); font-size: 0.85rem; text-align: center; margin-top: 0.6rem">
+        <p style="color: var(--scope-text-muted); font-size: 0.85rem; text-align: center; margin-top: 0.6rem">
           The live cockpit: 20 m FT8 band activity and decodes on 14.074 MHz.
         </p>
     </div>
 </section>
 
-<section class="section" id="updates" style="background: var(--bg-secondary);">
+<section class="section" id="updates" style="background: var(--scope-surface);">
     <div class="container">
         <div class="section-header">
             <span class="section-label">V1.1 Baseline</span>
@@ -144,7 +180,7 @@
     </div>
 </section>
 
-<section class="section" id="chapters" style="background: var(--bg-secondary);">
+<section class="section" id="chapters" style="background: var(--scope-surface);">
     <div class="container">
         <div class="section-header">
             <span class="section-label">Chapter Index</span>
@@ -170,7 +206,7 @@
     </div>
 </section>
 
-<section class="section" id="decisions" style="background: var(--bg-primary);">
+<section class="section" id="decisions" style="background: var(--scope-bg);">
     <div class="container">
         <div class="section-header">
             <span class="section-label">Architecture Decisions</span>
@@ -196,40 +232,28 @@
     </div>
 </section>
 
-<footer class="footer">
+<footer class="scope-footer">
     <div class="container">
-        <div class="footer-grid">
+        <div class="footer-grid" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:2rem;margin-bottom:2rem;">
             <div class="footer-section">
-                <h4>MRRC-FT8 SDD</h4>
-                <p>Design documentation aligned with implementation state.</p>
+                <h4 style="margin:0 0 0.75rem;font-family:var(--scope-font-mono);font-size:0.95rem;color:var(--scope-text);">MRRC-FT8 SDD</h4>
+                <p style="color:var(--scope-text-2);font-size:0.88rem;margin:0;">Design documentation aligned with implementation state.</p>
             </div>
             <div class="footer-section">
-                <h4>Links</h4>
-                <ul>
-                    <li><a href="index.html">FT-8 Website</a></li>
-                    <li><a href="https://github.com/cheenle/mrrc_ft8/tree/main/SDD" target="_blank" rel="noopener">SDD Folder</a></li>
-                    <li><a href="https://github.com/cheenle/mrrc_ft8/blob/main/SDD/README.md" target="_blank" rel="noopener">SDD README</a></li>
+                <h4 style="margin:0 0 0.75rem;font-family:var(--scope-font-mono);font-size:0.95rem;color:var(--scope-text);">Links</h4>
+                <ul style="list-style:none;margin:0;padding:0;">
+                    <li style="margin-bottom:0.35rem;"><a href="index.html" style="color:var(--scope-text-2);font-size:0.88rem;">FT-8 Website</a></li>
+                    <li style="margin-bottom:0.35rem;"><a href="https://github.com/cheenle/mrrc_ft8/tree/main/SDD" target="_blank" rel="noopener" style="color:var(--scope-text-2);font-size:0.88rem;">SDD Folder</a></li>
+                    <li style="margin-bottom:0.35rem;"><a href="https://github.com/cheenle/mrrc_ft8/blob/main/SDD/README.md" target="_blank" rel="noopener" style="color:var(--scope-text-2);font-size:0.88rem;">SDD README</a></li>
                 </ul>
             </div>
         </div>
-        <div class="footer-bottom">
-            <p>&copy; 2026 MRRC-FT8 Project. Open Source under GPLv3 License.</p>
+        <div class="footer-bottom" style="border-top:1px solid var(--scope-border);padding-top:1.25rem;text-align:center;color:var(--scope-text-muted);font-size:0.8rem;">
+            <p style="margin:0;">&copy; 2026 MRRC-FT8 Project. Open Source under GPLv3 License.</p>
         </div>
     </div>
 </footer>
 
-<script>
-function toggleMobileMenu() {
-    document.querySelector('.nav-links').classList.toggle('active');
-}
-document.querySelectorAll('a[href^="#"]').forEach((a) => {
-    a.addEventListener('click', function (e) {
-        e.preventDefault();
-        const t = document.querySelector(this.getAttribute('href'));
-        if (t) t.scrollIntoView({ behavior: 'smooth', block: 'start' });
-    });
-});
-</script>
-<script src="js/global-nav.js?v=5" defer data-gn="1"></script>
+<script src="js/scope.js?v=1" defer></script>
 </body>
 </html>

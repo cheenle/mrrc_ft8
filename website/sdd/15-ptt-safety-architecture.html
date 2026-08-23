@@ -7,95 +7,87 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="../css/octen.css?v=4">
-    <link rel="stylesheet" href="../css/sunsdrmobile.css?v=1">
-    <link rel="stylesheet" href="../css/ft8.css">
+    <link rel="stylesheet" href="../css/scope.css?v=1">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-7442510147240155" crossorigin="anonymous"></script>
     <style>
-        .sdd-layout { display: flex; max-width: 1400px; margin: 0 auto; padding: 0 2rem; gap: 2rem; }
+        .sdd-layout { display: flex; max-width: 1400px; margin: 0 auto; padding: calc(var(--scope-gn-h) + 2rem) 2rem 2rem; gap: 2rem; }
         .sdd-sidebar {
-            width: 260px; flex-shrink: 0; position: sticky; top: 80px;
-            max-height: calc(100vh - 100px); overflow-y: auto;
-            background: var(--bg-card); border: 1px solid var(--border);
-            border-radius: 0.75rem; padding: 1.25rem 0;
+            width: 260px; flex-shrink: 0; position: sticky; top: calc(var(--scope-gn-h) + 2rem);
+            max-height: calc(100vh - var(--scope-gn-h) - 4rem); overflow-y: auto;
+            background: var(--scope-surface); border: 1px solid var(--scope-border);
+            border-radius: var(--scope-radius); padding: 1.25rem 0;
         }
         .sdd-sidebar h4 {
-            font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.08em;
-            color: var(--accent); padding: 0 1.25rem; margin-bottom: 0.75rem;
+            font-family: var(--scope-font-mono); font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.08em;
+            color: var(--scope-primary); padding: 0 1.25rem; margin-bottom: 0.75rem;
         }
-        .sdd-sidebar ul { list-style: none; }
+        .sdd-sidebar ul { list-style: none; margin: 0; padding: 0; }
         .sdd-sidebar a {
             display: block; padding: 0.375rem 1.25rem; font-size: 0.8125rem;
-            color: var(--text-secondary); transition: all 0.15s;
+            color: var(--scope-text-2); transition: all 0.15s;
             border-left: 2px solid transparent;
         }
-        .sdd-sidebar a:hover { color: var(--text-primary); border-left-color: var(--border-hover); }
+        .sdd-sidebar a:hover { color: var(--scope-text); border-left-color: var(--scope-border-strong); text-decoration: none; }
         .sdd-sidebar a.active {
-            color: var(--accent); background: var(--accent-glow);
-            border-left-color: var(--accent); font-weight: 500;
+            color: var(--scope-primary); background: rgba(0, 255, 65, 0.08);
+            border-left-color: var(--scope-primary); font-weight: 500;
         }
         .sdd-content { flex: 1; min-width: 0; padding-bottom: 4rem; }
-        .sdd-content h1 { font-size: 2rem; font-weight: 700; margin: 2rem 0 0.5rem; letter-spacing: -0.02em; }
-        .sdd-content h2 { font-size: 1.375rem; font-weight: 600; margin: 2rem 0 0.75rem; color: var(--accent); }
-        .sdd-content h3 { font-size: 1.125rem; font-weight: 600; margin: 1.5rem 0 0.5rem; }
-        .sdd-content h4 { font-size: 1rem; font-weight: 600; margin: 1.25rem 0 0.5rem; }
-        .sdd-content p, .sdd-content li { color: var(--text-secondary); line-height: 1.7; margin-bottom: 0.75rem; }
-        .sdd-content table {
-            width: 100%; border-collapse: collapse; margin: 1.25rem 0;
-            font-size: 0.875rem;
-        }
-        .sdd-content th, .sdd-content td {
-            padding: 0.625rem 0.875rem; text-align: left;
-            border: 1px solid var(--border);
-        }
-        .sdd-content th { background: var(--bg-tertiary); color: var(--text-primary); font-weight: 600; }
-        .sdd-content td { color: var(--text-secondary); }
+        .sdd-content h1 { font-family: var(--scope-font-mono); font-size: 2rem; font-weight: 700; margin: 2rem 0 0.5rem; letter-spacing: -0.02em; color: var(--scope-text); }
+        .sdd-content h2 { font-family: var(--scope-font-mono); font-size: 1.375rem; font-weight: 600; margin: 2rem 0 0.75rem; color: var(--scope-primary); }
+        .sdd-content h3 { font-size: 1.125rem; font-weight: 600; margin: 1.5rem 0 0.5rem; color: var(--scope-text); }
+        .sdd-content h4 { font-size: 1rem; font-weight: 600; margin: 1.25rem 0 0.5rem; color: var(--scope-text); }
+        .sdd-content p, .sdd-content li { color: var(--scope-text-2); line-height: 1.7; margin-bottom: 0.75rem; }
+        .sdd-content table { width: 100%; border-collapse: collapse; margin: 1.25rem 0; font-size: 0.875rem; }
+        .sdd-content th, .sdd-content td { padding: 0.625rem 0.875rem; text-align: left; border: 1px solid var(--scope-border); }
+        .sdd-content th { background: var(--scope-surface-2); color: var(--scope-text); font-weight: 600; }
+        .sdd-content td { color: var(--scope-text-2); }
         .sdd-content code {
-            font-family: var(--font-mono); font-size: 0.85em;
-            background: var(--bg-tertiary); padding: 1px 6px; border-radius: 3px;
-            color: var(--accent);
+            font-family: var(--scope-font-mono); font-size: 0.85em;
+            background: var(--scope-surface); padding: 0.15rem 0.4rem; border-radius: var(--scope-radius);
+            color: var(--scope-primary);
         }
         .sdd-content pre {
-            background: var(--bg-tertiary); border: 1px solid var(--border);
-            border-radius: 0.5rem; padding: 1rem; overflow-x: auto;
+            background: var(--scope-surface); border: 1px solid var(--scope-border);
+            border-radius: var(--scope-radius); padding: 1rem; overflow-x: auto;
             margin: 1rem 0; font-size: 0.8125rem; line-height: 1.6;
         }
         .sdd-content pre code {
-            background: none; padding: 0; color: var(--text-secondary);
+            background: none; padding: 0; color: var(--scope-text-2);
         }
         .sdd-content blockquote {
-            border-left: 3px solid var(--accent); padding: 0.5rem 1rem;
-            margin: 1rem 0; color: var(--text-muted); font-size: 0.9375rem;
-            background: var(--bg-tertiary); border-radius: 0 0.375rem 0.375rem 0;
+            border-left: 3px solid var(--scope-primary); padding: 0.5rem 1rem;
+            margin: 1rem 0; color: var(--scope-text-muted); font-size: 0.9375rem;
+            background: var(--scope-surface); border-radius: 0 var(--scope-radius) var(--scope-radius) 0;
         }
         .sdd-content ul, .sdd-content ol { margin-left: 1.5rem; margin-bottom: 1rem; }
-        .sdd-content hr { border: none; border-top: 1px solid var(--border); margin: 2rem 0; }
-        .sdd-content a { color: var(--accent); }
-        .sdd-content img { max-width: 100%; border-radius: 0.5rem; margin: 1rem 0; }
+        .sdd-content hr { border: none; border-top: 1px solid var(--scope-border); margin: 2rem 0; }
+        .sdd-content a { color: var(--scope-primary); }
+        .sdd-content img { max-width: 100%; border-radius: var(--scope-radius); margin: 1rem 0; }
         @media (max-width: 900px) {
-            .sdd-layout { flex-direction: column; padding: 0 1rem; }
+            .sdd-layout { flex-direction: column; padding: calc(var(--scope-gn-h) + 1rem) 1rem 1rem; }
             .sdd-sidebar { width: 100%; position: static; max-height: none; }
         }
     </style>
 </head>
-<body data-site="mrrc_ft8">
+<body data-site="mrrc_ft8" class="fx-grid">
 
-<nav class="navbar">
-    <div class="container navbar-content">
-        <a href="../index.html" class="logo">
-            <span class="logo-icon"><i class="fas fa-microchip"></i></span>
-            <span>MRRC-FT<span style="color: var(--accent);">8</span></span>
+<nav class="scope-site-nav">
+    <div class="container scope-site-nav-inner">
+        <a href="../index.html" class="scope-site-brand fx-glow">
+            <i class="fas fa-satellite-dish"></i>
+            <span>MRRC-FT<span style="color:var(--scope-primary)">8</span></span>
         </a>
-        <ul class="nav-links">
+        <ul class="scope-site-nav-links">
             <li><a href="../index.html#features">Features</a></li>
             <li><a href="../index.html#architecture">Architecture</a></li>
             <li><a href="index.html">SDD Docs</a></li>
-            <li><a href="https://github.com/cheenle/mrrc_ft8" target="_blank"><i class="fab fa-github"></i> GitHub</a></li>
+            <li><a href="https://github.com/cheenle/mrrc_ft8" target="_blank" rel="noopener"><i class="fab fa-github"></i> GitHub</a></li>
         </ul>
-        <div class="nav-actions">
-            <a href="../zh/index.html" class="lang-btn">中文</a>
-            <button class="mobile-menu-toggle" onclick="toggleMobileMenu()"><i class="fas fa-bars"></i></button>
+        <div style="display:flex;align-items:center;gap:0.75rem;">
+            <a href="../zh/index.html" class="scope-btn" style="padding:0.4rem 0.8rem;font-size:0.75rem;">中文</a>
+            <button class="scope-site-nav-toggle" aria-label="Toggle menu"><i class="fas fa-bars"></i></button>
         </div>
     </div>
 </nav>
@@ -147,7 +139,7 @@
 <li>Publishes a terminal state and audit event.</li>
 </ol>
 <p>If rigctld is unavailable, the system remains faulted/disarmed and repeats best-effort PTT-off on reconnect before allowing any new TX.</p>
-<p>The stop reason maps to sequencer semantics: operator-originated reasons (<code>manual</code>, the API’s <code>api:&lt;actor&gt;</code>) disarm as MANUAL; every other reason (dead-man, watchdogs, shutdown) disarms as FAULT, so downstream consumers such as the automatic CQ loop see the true origin and never re-arm after a system stop.</p>
+<p>The stop reason maps to sequencer semantics: operator-originated reasons (<code class="scope-code">manual</code>, the API’s <code class="scope-code">api:&lt;actor&gt;</code>) disarm as MANUAL; every other reason (dead-man, watchdogs, shutdown) disarms as FAULT, so downstream consumers such as the automatic CQ loop see the true origin and never re-arm after a system stop.</p>
 <h2 id="dead-man-and-watchdogs">15.4 Dead-man and Watchdogs</h2>
 <ul>
 <li>Lease heartbeat is every 5 s; TTL is 15 s.</li>
@@ -158,7 +150,7 @@
 </ul>
 <p>A deliberate lease RELEASE does not run the dead-man STOP; the dead-man path only covers expiry and controller disconnect. RELEASE instead disarms manually: the sequencer stops and the armed flag drops, without touching PTT, so an in-flight waveform plays out and its transmission ends with the normal PTT-off finalize.</p>
 <h2 id="fault-matrix">15.5 Fault Matrix</h2>
-<table>
+<table class="scope-table">
 <colgroup>
 <col style="width: 33%" />
 <col style="width: 33%" />
@@ -209,41 +201,25 @@
 </tr>
 </tbody>
 </table>
-<p>Faults latch per interlock: re-reporting an already-faulted interlock is a no-op, and only <code>clear_fault</code> clears it, so a dead Worker failing every slot faults once instead of once per slot. The DSP interlock is wired at both ends of the Worker path: TX-driver encode errors and orchestrator decode errors both call <code>report_fault(DSP)</code>. A <code>TxRefused</code> from the safety controller is not re-reported: refusal or abort by the safety authority (STOP-cancelled playback, disarm, watchdog, already-latched interlock) is the safety system working as designed, and genuine CAT/audio faults latch inside <code>transmit()</code> before it raises.</p>
-<p>The sole recovery channel is the lease-gated, idempotent <code>/operation/clear-fault</code> endpoint: with no body it clears every latched interlock, with <code>{"interlock": "&lt;name&gt;"}</code> only that one, and an unknown name is rejected. Clearing is a deliberate operator acknowledgment that the cause is repaired; it never re-arms, and any re-arm still crosses the full §15.2 chain through the operator’s CQ/Reply path.</p>
+<p>Faults latch per interlock: re-reporting an already-faulted interlock is a no-op, and only <code class="scope-code">clear_fault</code> clears it, so a dead Worker failing every slot faults once instead of once per slot. The DSP interlock is wired at both ends of the Worker path: TX-driver encode errors and orchestrator decode errors both call <code class="scope-code">report_fault(DSP)</code>. A <code class="scope-code">TxRefused</code> from the safety controller is not re-reported: refusal or abort by the safety authority (STOP-cancelled playback, disarm, watchdog, already-latched interlock) is the safety system working as designed, and genuine CAT/audio faults latch inside <code class="scope-code">transmit()</code> before it raises.</p>
+<p>The sole recovery channel is the lease-gated, idempotent <code class="scope-code">/operation/clear-fault</code> endpoint: with no body it clears every latched interlock, with <code class="scope-code">{"interlock": "&lt;name&gt;"}</code> only that one, and an unknown name is rejected. Clearing is a deliberate operator acknowledgment that the cause is repaired; it never re-arms, and any re-arm still crosses the full §15.2 chain through the operator’s CQ/Reply path.</p>
 <h2 id="sequencer-safety">15.6 Sequencer Safety</h2>
 <p>The sequencer allows one initial send plus at most three retransmissions of a QSO exchange message, then disarms; CQ calling repeats until answered or explicitly stopped. Completion also disarms: receiving RR73/73 logs the QSO, and the answerer still sends one courtesy 73, repeated only when the partner repeats its final message. It never automatically chooses the next station. Unsupported message branches fail closed. Selecting a station does not arm or transmit; Reply/CQ is explicit.</p>
 <p>The optional automatic CQ loop rides on these rules without weakening them. It starts only through the lease-gated CQ path, and every transmission still crosses the §15.2 chain immediately before PTT. A completed QSO re-arms CQ and resets the loop’s idle timer; retry exhaustion or partner loss re-arms without resetting it; manual or fault disarm stops the loop and is never re-armed automatically. Lease loss and the configurable idle timeout (60–3600 s, default 600 s) stop the loop, and TX off/STOP terminate it through the existing paths; every transition is audited.</p>
-<p>Transmissions are pumped by a slot-parity driver gated on the sequencer’s per-QSO <code>tx_phase</code> (UC-003 opposite slot); it pulls at most one sequencer message per eligible slot, encodes it through the supervised Worker and hands the waveform to the safety controller. The decision is provisional: while the sequencer is idle at slot start, the driver keeps the slot’s TX window open until <code>TX_DECISION_CUTOFF_SECONDS</code> (5.0), polling so a manual Reply transmits as soon as it is armed; a fit guard refuses any start past ~2.4 s into the slot (a 12.64 s waveform must fit a 15 s slot), deferring to the next eligible slot so no transmission overruns the slot boundary or deafens the partner’s next transmission. The driver never retries and never touches PTT itself; every failure is counted, encode failures are reported to the §15.5 fault matrix, and safety refusals are absorbed without faulting.</p>
+<p>Transmissions are pumped by a slot-parity driver gated on the sequencer’s per-QSO <code class="scope-code">tx_phase</code> (UC-003 opposite slot); it pulls at most one sequencer message per eligible slot, encodes it through the supervised Worker and hands the waveform to the safety controller. The decision is provisional: while the sequencer is idle at slot start, the driver keeps the slot’s TX window open until <code class="scope-code">TX_DECISION_CUTOFF_SECONDS</code> (5.0), polling so a manual Reply transmits as soon as it is armed; a fit guard refuses any start past ~2.4 s into the slot (a 12.64 s waveform must fit a 15 s slot), deferring to the next eligible slot so no transmission overruns the slot boundary or deafens the partner’s next transmission. The driver never retries and never touches PTT itself; every failure is counted, encode failures are reported to the §15.5 fault matrix, and safety refusals are absorbed without faulting.</p>
 <h2 id="verification">15.7 Verification</h2>
 <p>Automated tests cover lease loss, observer STOP, duplicate STOP, late slot, retry exhaustion, each interlock, worker crash and restart invariants. macOS real-radio acceptance observes actual PTT release for disconnect, CAT/audio failure and manual STOP scenarios.</p>
     </main>
 </div>
 
-<footer class="footer" style="margin-top: 0;">
+<footer class="scope-footer" style="margin-top: 0;">
     <div class="container">
-        <div class="footer-bottom">
-            <p>&copy; 2026 MRRC-FT8 Project · SDD V1.2 · <a href="https://github.com/cheenle/mrrc_ft8" style="color:var(--accent);">GitHub</a></p>
+        <div class="footer-bottom" style="border-top:none;padding-top:0;">
+            <p>&copy; 2026 MRRC-FT8 Project · SDD V1.2 · <a href="https://github.com/cheenle/mrrc_ft8">GitHub</a></p>
         </div>
     </div>
 </footer>
 
-<script>
-function toggleMobileMenu() {
-    document.querySelector('.nav-links').classList.toggle('active');
-}
-document.querySelectorAll('a[href^="#"]').forEach(a => {
-    a.addEventListener('click', function(e) {
-        e.preventDefault();
-        const t = document.querySelector(this.getAttribute('href'));
-        if (t) t.scrollIntoView({ behavior: 'smooth', block: 'start' });
-    });
-});
-const nav = document.querySelector('.navbar');
-window.addEventListener('scroll', () => {
-    nav.style.background = window.scrollY > 50 ? 'rgba(0,0,0,0.95)' : 'rgba(0,0,0,0.8)';
-});
-</script>
-    <script src="../js/global-nav.js?v=5" defer data-gn="1"></script>
+<script src="../js/scope.js?v=1" defer></script>
 </body>
 </html>
