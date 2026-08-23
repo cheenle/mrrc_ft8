@@ -35,14 +35,14 @@ echo "Checking required files..."
 REQUIRED_FILES=(
     "index.html"
     "zh/index.html"
-    "css/octen.css"
-    "css/ft8.css"
+    "css/scope.css"
+    "js/scope.js"
+    "images/qr-wechat-group.jpg"
     "sdd.html"
     "zh/sdd.html"
     "sdd/index.html"
     "sdd/01-executive-summary.html"
     "sdd/15-ptt-safety-architecture.html"
-    "js/global-nav.js"
 )
 for file in "${REQUIRED_FILES[@]}"; do
     if [ ! -f "$file" ]; then
