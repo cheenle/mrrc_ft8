@@ -11,96 +11,308 @@
       name="keywords"
       content="FT8, FT4, WSJT-X, headless, 业余无线电, 数字模式, DSP, OpenMP, FastAPI, rigctld, Caddy, PTT 安全, 瀑布图"
     />
-    <meta name="theme-color" content="#0a0a0a" />
+    <meta name="theme-color" content="#050a08" />
 
     <title>MRRC-FT8 — Headless FT8/FT4 服务器</title>
 
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
-      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap"
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&display=swap"
       rel="stylesheet"
     />
 
-    <link rel="stylesheet" href="../css/octen.css?v=4" />
-    <link rel="stylesheet" href="../css/sunsdrmobile.css?v=1" />
-    <link rel="stylesheet" href="../css/ft8.css" />
+    <link rel="stylesheet" href="../css/scope.css?v=1" />
     <link
       rel="stylesheet"
       href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css"
     />
 
+    <style>
+      .scope-hero {
+        position: relative;
+        padding: calc(var(--scope-gn-h) + 5rem) 0 5rem;
+        background:
+          radial-gradient(circle at 70% 30%, rgba(0, 255, 65, 0.08), transparent 40%),
+          var(--scope-bg);
+        overflow: hidden;
+      }
+      .scope-hero::before {
+        content: '';
+        position: absolute;
+        inset: 0;
+        background-image:
+          linear-gradient(rgba(0, 255, 65, 0.05) 1px, transparent 1px),
+          linear-gradient(90deg, rgba(0, 255, 65, 0.05) 1px, transparent 1px);
+        background-size: 32px 32px;
+        mask-image: radial-gradient(circle at 50% 0%, black 0%, transparent 70%);
+        -webkit-mask-image: radial-gradient(circle at 50% 0%, black 0%, transparent 70%);
+      }
+      .scope-site-brand {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.4rem;
+        font-family: var(--scope-font-mono);
+        font-size: 1.25rem;
+        font-weight: 700;
+        color: var(--scope-text);
+        white-space: nowrap;
+      }
+      .scope-site-brand i { color: var(--scope-primary); }
+      .hero-badge {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.5rem;
+        font-family: var(--scope-font-mono);
+        font-size: 0.8rem;
+        color: var(--scope-primary);
+        border: 1px solid var(--scope-border);
+        border-radius: 999px;
+        padding: 0.35rem 0.8rem;
+        margin-bottom: 1.25rem;
+        background: rgba(0, 255, 65, 0.05);
+      }
+      .features-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+        gap: 1.25rem;
+      }
+      .feature-icon {
+        width: 40px;
+        height: 40px;
+        border-radius: var(--scope-radius);
+        background: rgba(0, 255, 65, 0.08);
+        border: 1px solid var(--scope-border);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        color: var(--scope-primary);
+        font-size: 1.1rem;
+        margin-bottom: 0.75rem;
+      }
+      .feature-card h3 {
+        margin: 0 0 0.5rem;
+        font-family: var(--scope-font-mono);
+        font-size: 1.05rem;
+        color: var(--scope-text);
+      }
+      .feature-card p,
+      .feature-card li {
+        color: var(--scope-text-2);
+        font-size: 0.92rem;
+      }
+      .feature-card ul { margin: 0.5rem 0 0; padding-left: 1.1rem; }
+      .feature-card li { margin-bottom: 0.25rem; }
+      .steps {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+        gap: 1rem;
+      }
+      .step {
+        background: var(--scope-surface);
+        border: 1px solid var(--scope-border);
+        border-radius: var(--scope-radius);
+        padding: 1.25rem;
+      }
+      .step h4 {
+        margin: 0 0 0.5rem;
+        font-family: var(--scope-font-mono);
+        font-size: 0.95rem;
+        color: var(--scope-text);
+      }
+      .step p {
+        color: var(--scope-text-2);
+        font-size: 0.9rem;
+        margin: 0 0 0.5rem;
+      }
+      .step code {
+        display: block;
+        background: var(--scope-bg);
+        border: 1px solid var(--scope-border);
+        border-radius: var(--scope-radius);
+        padding: 0.5rem;
+        font-size: 0.8rem;
+        color: var(--scope-primary);
+        overflow-x: auto;
+      }
+      .arch-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+        gap: 1rem;
+        margin-top: 2rem;
+      }
+      .arch-card {
+        background: var(--scope-surface);
+        border: 1px solid var(--scope-border);
+        border-radius: var(--scope-radius);
+        padding: 1.25rem;
+      }
+      .arch-card .label {
+        font-family: var(--scope-font-mono);
+        font-weight: 600;
+        color: var(--scope-primary);
+        margin-bottom: 0.5rem;
+      }
+      .arch-card .endpoint,
+      .arch-card .dir,
+      .arch-card .payload {
+        font-size: 0.85rem;
+        color: var(--scope-text-2);
+        margin-bottom: 0.25rem;
+      }
+      .perf-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+        gap: 1rem;
+      }
+      .perf-card {
+        background: var(--scope-surface);
+        border: 1px solid var(--scope-border);
+        border-radius: var(--scope-radius);
+        padding: 1.5rem 1rem;
+        text-align: center;
+      }
+      .perf-card .metric {
+        font-family: var(--scope-font-mono);
+        font-size: 2rem;
+        font-weight: 700;
+        color: var(--scope-primary);
+      }
+      .perf-card .metric-label {
+        color: var(--scope-text-2);
+        font-size: 0.85rem;
+        margin-top: 0.5rem;
+      }
+      .tech-stack {
+        display: flex;
+        flex-wrap: wrap;
+        justify-content: center;
+        gap: 0.6rem;
+      }
+      .tech-tag {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.35rem;
+        font-family: var(--scope-font-mono);
+        font-size: 0.78rem;
+        color: var(--scope-text-2);
+        border: 1px solid var(--scope-border);
+        border-radius: 999px;
+        padding: 0.35rem 0.75rem;
+        background: rgba(0, 255, 65, 0.04);
+      }
+      .scope-footer {
+        background: var(--scope-surface);
+        border-top: 1px solid var(--scope-border);
+        padding: 3rem 0 1.5rem;
+      }
+      .footer-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+        gap: 2rem;
+        margin-bottom: 2rem;
+      }
+      .footer-section h4 {
+        margin: 0 0 0.75rem;
+        font-family: var(--scope-font-mono);
+        font-size: 0.95rem;
+        color: var(--scope-text);
+      }
+      .footer-section p,
+      .footer-section li,
+      .footer-section a {
+        color: var(--scope-text-2);
+        font-size: 0.88rem;
+      }
+      .footer-section ul { list-style: none; margin: 0; padding: 0; }
+      .footer-section li { margin-bottom: 0.35rem; }
+      .footer-bottom {
+        border-top: 1px solid var(--scope-border);
+        padding-top: 1.25rem;
+        text-align: center;
+        color: var(--scope-text-muted);
+        font-size: 0.8rem;
+      }
+      .qr-note { color: var(--scope-text-muted); font-size: 0.85rem; margin-top: 1rem; text-align: center; }
+      .download-box {
+        background: var(--scope-surface);
+        border: 1px solid var(--scope-primary);
+        border-radius: var(--scope-radius);
+        padding: 1.75rem 2rem;
+        max-width: 720px;
+        margin: 0 auto;
+      }
+    </style>
+
     <link
       rel="icon"
       type="image/svg+xml"
-      href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect fill='%2322d3ee' width='100' height='100' rx='20'/><text y='.9em' x='50%' text-anchor='middle' font-size='60'>📡</text></svg>"
+      href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect fill='%2300ff41' width='100' height='100' rx='20'/><text y='.9em' x='50%' text-anchor='middle' font-size='60'>📡</text></svg>"
     />
   </head>
-  <body data-site="mrrc_ft8">
-    <nav class="navbar">
-      <div class="container navbar-content">
-        <a href="#" class="logo">
-          <span class="logo-icon"><i class="fas fa-satellite-dish"></i></span>
-          <span>MRRC-FT<span style="color: var(--accent)">8</span></span>
+  <body data-site="mrrc_ft8" class="fx-grid">
+    <nav class="scope-site-nav">
+      <div class="container scope-site-nav-inner">
+        <a href="#" class="scope-site-brand fx-glow">
+          <i class="fas fa-satellite-dish"></i>
+          <span>MRRC-FT<span style="color:var(--scope-primary)">8</span></span>
         </a>
-        <ul class="nav-links">
+        <ul class="scope-site-nav-links">
           <li><a href="#download">下载</a></li>
           <li><a href="#features">功能特性</a></li>
           <li><a href="#live">在线电台</a></li>
           <li><a href="#start">快速上手</a></li>
           <li><a href="#architecture">系统架构</a></li>
-          <li><a href="new-dxcc-auto-call.html">新 DXCC</a></li>
           <li><a href="../sdd.html">SDD</a></li>
+          <li><a href="/mrrc_modern/">Modern</a></li>
           <li>
             <a
               href="https://github.com/cheenle/mrrc_ft8"
               target="_blank"
               rel="noopener"
             >
-              <i class="fab fa-github"></i> GitHub
+              <i class="fab fa-github"></i>
             </a>
           </li>
         </ul>
-        <div class="nav-actions">
-          <a href="../index.html" class="lang-btn">English</a>
-          <button class="mobile-menu-toggle" onclick="toggleMobileMenu()">
-            <i class="fas fa-bars"></i>
-          </button>
+        <div style="display:flex;align-items:center;gap:0.75rem;">
+          <a href="../index.html" class="scope-btn" style="padding:0.4rem 0.8rem;font-size:0.75rem;">English</a>
+          <button class="scope-site-nav-toggle" aria-label="切换菜单"><i class="fas fa-bars"></i></button>
         </div>
       </div>
     </nav>
 
-    <section class="hero">
-      <div class="hero-content">
+    <section class="scope-hero">
+      <div class="container" style="position:relative;z-index:1;">
         <div class="hero-badge">
           <i class="fas fa-check-circle"></i>
           <span>v1.1.0 · FT-710 电台在线运行</span>
         </div>
-        <h1 class="hero-title">
+        <h1 class="fx-glow" style="font-family:var(--scope-font-mono);font-size:clamp(2.2rem,6vw,4rem);font-weight:700;margin:0 0 1rem;line-height:1.1;">
           Headless FT8 服务器<br />
-          <span class="gradient">真实 DSP · 真实 QSO</span>
+          <span style="color:var(--scope-primary)">真实 DSP · 真实 QSO</span>
         </h1>
-        <p class="hero-subtitle">
+        <p style="color:var(--scope-text-2);font-size:1.15rem;max-width:640px;margin:0 0 2rem;">
           MRRC-FT8 将 WSJT-X 3.0.2 Improved DSP 核心（FT8/FT4 解码与编码）运行在
           受监督的独立 Worker 中，配合 Python FastAPI 控制面、rigctld 电台控制和
           横屏移动 Web 驾驶舱。打开浏览器——解码波段、选定电台、由 sequencer
           自动完成一场标准 QSO。
         </p>
-        <div class="hero-actions">
+        <div style="display:flex;flex-wrap:wrap;gap:1rem;">
           <a
             href="https://radio.vlsc.net:9988"
-            class="btn btn-primary btn-large"
+            class="scope-btn scope-btn-primary"
             target="_blank"
             rel="noopener"
           >
             <i class="fas fa-play"></i> 在线驾驶舱
           </a>
-          <a href="#features" class="btn btn-secondary btn-large">
+          <a href="#features" class="scope-btn">
             <i class="fas fa-arrow-down"></i> 了解功能
           </a>
           <a
             href="https://github.com/cheenle/mrrc_ft8"
-            class="btn btn-secondary btn-large"
+            class="scope-btn"
             target="_blank"
             rel="noopener"
           >
@@ -110,44 +322,42 @@
       </div>
     </section>
 
-    <!-- Download -->
-    <section
-      class="section"
-      id="download"
-      style="background: var(--bg-primary)"
-    >
-      <div class="container">
-        <div class="section-header">
-          <span class="section-label">下载</span>
-          <h2 class="section-title">Windows 桌面安装包</h2>
-          <p class="section-subtitle">
-            Windows 11/10 x64 —— 内置 Python 运行时 + WSJT-X FT8 解码/编码库 +
-            Hamlib rigctld，无需手动安装 Python 或 Node.js。首次运行自动生成
-            自签 HTTPS 证书；默认密码 abcd1234；支持局域网/远程 HTTPS 访问。
-          </p>
+    <!-- 社区 -->
+    <section class="scope-section" id="community">
+      <div class="container" style="text-align:center;">
+        <div class="section-label">社区</div>
+        <h2 class="section-title">加入 MRRC-HAM 微信群</h2>
+        <p class="section-subtitle" style="margin-left:auto;margin-right:auto;">微信扫码加入 MRRC-HAM 同好群。</p>
+        <div class="scope-card" style="display:inline-block;padding:1.25rem;max-width:280px;">
+          <img src="../images/qr-wechat-group.jpg" alt="MRRC-HAM 同好群微信二维码" style="border-radius:var(--scope-radius);">
         </div>
+        <p class="qr-note">该二维码 7 天内（8 月 29 日前）有效，重新进入将更新。</p>
+      </div>
+    </section>
 
-        <div
-          style="
-            background: var(--bg-secondary);
-            border: 1px solid var(--accent);
-            border-radius: 14px;
-            padding: 1.75rem 2rem;
-            max-width: 720px;
-            margin: 0 auto;
-          "
-        >
-          <p style="margin: 0 0 0.25rem; font-size: 1.15rem">
-            <i class="fab fa-windows" style="color: var(--accent)"></i>
+    <!-- Download -->
+    <section class="scope-section scope-section-alt" id="download">
+      <div class="container">
+        <div class="section-label">下载</div>
+        <h2 class="section-title">Windows 桌面安装包</h2>
+        <p class="section-subtitle">
+          Windows 11/10 x64 —— 内置 Python 运行时 + WSJT-X FT8 解码/编码库 +
+          Hamlib rigctld，无需手动安装 Python 或 Node.js。首次运行自动生成
+          自签 HTTPS 证书；默认密码 abcd1234；支持局域网/远程 HTTPS 访问。
+        </p>
+
+        <div class="download-box">
+          <p style="margin: 0 0 0.25rem; font-size: 1.15rem; color:var(--scope-text);">
+            <i class="fab fa-windows" style="color: var(--scope-primary)"></i>
             <strong> MRRC_FT8-Setup.exe — v1.1.0 稳定版</strong>
           </p>
-          <p style="color: var(--text-muted); margin: 0 0 1rem">
+          <p style="color: var(--scope-text-muted); margin: 0 0 1rem">
             60 MB · Windows 11/10 x64<br />
-            <code style="font-size: 0.76rem"
+            <code style="font-size: 0.76rem; color:var(--scope-primary);"
               >SHA-256: ee866947731ac2318f4c1c7dc14511ba8a67b67ffbb68a2f32c8d9a3f68318b2</code
             >
           </p>
-          <p style="color: var(--text-muted); margin: 0 0 1.25rem">
+          <p style="color: var(--scope-text-2); margin: 0 0 1.25rem">
             MRRC-FT8 整台站：FastAPI 服务器 + FT8 DSP（解码/编码）+ rigctld +
             Web/桌面客户端。Windows 构建 832 项测试通过；安装包启动与提供服务
             已验证。电台/音频的射频验收仍需在实体电台侧进行。
@@ -156,14 +366,14 @@
             style="display: flex; gap: 1rem; flex-wrap: wrap; justify-content: center"
           >
             <a
-              href="downloads/MRRC_FT8-Setup.exe"
-              class="btn btn-primary btn-large"
+              href="../downloads/MRRC_FT8-Setup.exe"
+              class="scope-btn scope-btn-primary"
             >
               <i class="fab fa-windows"></i> 下载 Windows 安装包
             </a>
             <a
-              href="downloads/MRRC_FT8-v1.1.0-Windows-x64-Setup.exe"
-              class="btn btn-secondary btn-large"
+              href="../downloads/MRRC_FT8-v1.1.0-Windows-x64-Setup.exe"
+              class="scope-btn"
             >
               <i class="fas fa-fingerprint"></i> 带版本号 v1.1.0
             </a>
@@ -173,23 +383,17 @@
     </section>
 
     <!-- Features -->
-    <section
-      class="section"
-      id="features"
-      style="background: var(--bg-secondary)"
-    >
+    <section class="scope-section" id="features">
       <div class="container">
-        <div class="section-header">
-          <span class="section-label">功能特性</span>
-          <h2 class="section-title">WSJT-X DSP，服务器级</h2>
-          <p class="section-subtitle">
-            你熟悉的 Improved 解码器，封装进 headless 服务器，配以安全、确定的时隙调度。
-          </p>
-        </div>
+        <div class="section-label">功能特性</div>
+        <h2 class="section-title">WSJT-X DSP，服务器级</h2>
+        <p class="section-subtitle">
+          你熟悉的 Improved 解码器，封装进 headless 服务器，配以安全、确定的时隙调度。
+        </p>
 
         <div class="features-grid">
-          <div class="feature-card animate">
-            <div class="icon"><i class="fas fa-microchip"></i></div>
+          <div class="scope-card scope-reveal feature-card">
+            <div class="feature-icon"><i class="fas fa-microchip"></i></div>
             <h3>WSJT-X 3.0.2 Improved DSP</h3>
             <p>
               将精选的 Improved <code>ft8var</code> 源码编译为 C ABI 共享库。
@@ -202,8 +406,8 @@
             </ul>
           </div>
 
-          <div class="feature-card animate">
-            <div class="icon"><i class="fas fa-shield-halved"></i></div>
+          <div class="scope-card scope-reveal feature-card">
+            <div class="feature-icon"><i class="fas fa-shield-halved"></i></div>
             <h3>受监督 DSP Worker</h3>
             <p>
               Fortran/OpenMP 状态只存在于独立 Worker 进程、经监督 IPC 访问。
@@ -217,8 +421,8 @@
             </ul>
           </div>
 
-          <div class="feature-card animate">
-            <div class="icon"><i class="fas fa-wave-square"></i></div>
+          <div class="scope-card scope-reveal feature-card">
+            <div class="feature-icon"><i class="fas fa-wave-square"></i></div>
             <h3>UTC 时隙纪律</h3>
             <p>
               每个调度决策都使用 <code>floor(epoch/TRperiod)</code>——唯一的时隙身份规则。
@@ -231,8 +435,8 @@
             </ul>
           </div>
 
-          <div class="feature-card animate">
-            <div class="icon"><i class="fas fa-tower-broadcast"></i></div>
+          <div class="scope-card scope-reveal feature-card">
+            <div class="feature-icon"><i class="fas fa-tower-broadcast"></i></div>
             <h3>Sequencer + PTT 安全</h3>
             <p>
               操作者选定目标——sequencer 在正确的对侧 TX 时隙自动完成一场标准 QSO，
@@ -245,8 +449,8 @@
             </ul>
           </div>
 
-          <div class="feature-card animate">
-            <div class="icon"><i class="fas fa-plug"></i></div>
+          <div class="scope-card scope-reveal feature-card">
+            <div class="feature-icon"><i class="fas fa-plug"></i></div>
             <h3>rigctld 电台控制</h3>
             <p>
               串口只有一个 owner：rigctld。服务器经 loopback TCP 走 CAT——
@@ -259,8 +463,8 @@
             </ul>
           </div>
 
-          <div class="feature-card animate">
-            <div class="icon"><i class="fas fa-database"></i></div>
+          <div class="scope-card scope-reveal feature-card">
+            <div class="feature-icon"><i class="fas fa-database"></i></div>
             <h3>持久化 QSO 日志 + ADIF</h3>
             <p>
               每场完成的 QSO 落入 canonical SQLite 存储，sequencer 完成时捕获
@@ -273,8 +477,8 @@
             </ul>
           </div>
 
-          <div class="feature-card animate">
-            <div class="icon"><i class="fas fa-globe-asia"></i></div>
+          <div class="scope-card scope-reveal feature-card">
+            <div class="feature-icon"><i class="fas fa-globe-asia"></i></div>
             <h3>DXCC 实时视图</h3>
             <p>
               在驾驶舱直接追踪已通联实体：全屏统计弹层解析内置
@@ -288,8 +492,8 @@
             </ul>
           </div>
 
-          <div class="feature-card animate">
-            <div class="icon"><i class="fas fa-robot"></i></div>
+          <div class="scope-card scope-reveal feature-card">
+            <div class="feature-icon"><i class="fas fa-robot"></i></div>
             <h3>新 DXCC 自动呼叫</h3>
             <p>
               打开 Auto-call 开关后，服务器在空闲时自动 safety-arm 并通联第一个
@@ -303,8 +507,8 @@
             </ul>
           </div>
 
-          <div class="feature-card animate">
-            <div class="icon"><i class="fas fa-chart-area"></i></div>
+          <div class="scope-card scope-reveal feature-card">
+            <div class="feature-icon"><i class="fas fa-chart-area"></i></div>
             <h3>3 kHz 瀑布图</h3>
             <p>
               FT8 通带约 0–3 kHz，因此频谱帧只输出 3 kHz 跨度——没有空白半画布、
@@ -317,8 +521,8 @@
             </ul>
           </div>
 
-          <div class="feature-card animate">
-            <div class="icon"><i class="fas fa-mobile-alt"></i></div>
+          <div class="scope-card scope-reveal feature-card">
+            <div class="feature-icon"><i class="fas fa-mobile-alt"></i></div>
             <h3>横屏移动驾驶舱</h3>
             <p>
               为横放在电台旁的手机打造的移动优先 PWA：横屏完整控制，
@@ -335,34 +539,32 @@
     </section>
 
     <!-- Live Station -->
-    <section class="section" id="live" style="background: var(--bg-primary)">
+    <section class="scope-section scope-section-alt" id="live">
       <div class="container" style="text-align: center">
-        <div class="section-header">
-          <span class="section-label">在线电台</span>
-          <h2 class="section-title">FT-710 电台实战</h2>
-          <p class="section-subtitle">
-            v1.1.0 正在真实 FT-710 电台上运行。2026-08-03 实战闭环了 RX/TX 根因——
-            UTC-ring 驱逐错位、Replay 对侧时隙相位、手动回复决策窗口——
-            真实 FT8 QSO 已通过移动驾驶舱持续完成。2026-08-04 补齐了 FT-710
-            电台控制：滤波器带宽与 ATT / PREAMP / AGC / RF 增益现改走原始 CAT 帧
-            （hamlib 的 FT-710 电平路径不可靠，且 AGC AUTO 编码有误），
-            已在站内电台实机验证。v1.1.0 新增 DXCC 实时视图（cty.dat 实体统计，
-            QSO 写入前走缓存）、新 DXCC 自动呼叫开关（空闲时自动通联首个新实体
-            CQ）、以及 JTDX ADIF 自动同步 + 7 天 LOG 窗口。
-          </p>
-        </div>
+        <div class="section-label">在线电台</div>
+        <h2 class="section-title">FT-710 电台实战</h2>
+        <p class="section-subtitle" style="margin-left:auto;margin-right:auto;">
+          v1.1.0 正在真实 FT-710 电台上运行。2026-08-03 实战闭环了 RX/TX 根因——
+          UTC-ring 驱逐错位、Replay 对侧时隙相位、手动回复决策窗口——
+          真实 FT8 QSO 已通过移动驾驶舱持续完成。2026-08-04 补齐了 FT-710
+          电台控制：滤波器带宽与 ATT / PREAMP / AGC / RF 增益现改走原始 CAT 帧
+          （hamlib 的 FT-710 电平路径不可靠，且 AGC AUTO 编码有误），
+          已在站内电台实机验证。v1.1.0 新增 DXCC 实时视图（cty.dat 实体统计，
+          QSO 写入前走缓存）、新 DXCC 自动呼叫开关（空闲时自动通联首个新实体
+          CQ）、以及 JTDX ADIF 自动同步 + 7 天 LOG 窗口。
+        </p>
         <img
           src="../images/cockpit-ft8.jpg"
           alt="MRRC-FT8 驾驶舱实况——20 米波段 14.074 MHz 的 FT8 频带活动与实时解码，含发射状态与时隙计时"
-          style="width: 100%; max-width: 900px; border-radius: 0.75rem; border: 1px solid var(--border); box-shadow: 0 10px 35px rgba(0,0,0,0.4); margin: 1.75rem auto 0; display: block;"
+          style="width: 100%; max-width: 900px; border-radius: var(--scope-radius); border: 1px solid var(--scope-border); box-shadow: 0 10px 35px rgba(0,0,0,0.4); margin: 1.75rem auto 0; display: block;"
         />
-        <p style="color: var(--text-muted); font-size: 0.85rem; margin-top: 0.6rem">
+        <p style="color: var(--scope-text-muted); font-size: 0.85rem; margin-top: 0.6rem">
           驾驶舱实况：20 米波段 14.074 MHz 的 FT8 频带活动与实时解码，含发射状态与时隙计时。
         </p>
         <div style="display: flex; gap: 1rem; justify-content: center; flex-wrap: wrap">
           <a
             href="https://radio.vlsc.net:9988"
-            class="btn btn-primary btn-large"
+            class="scope-btn scope-btn-primary"
             target="_blank"
             rel="noopener"
           >
@@ -370,54 +572,52 @@
           </a>
           <a
             href="https://github.com/cheenle/mrrc_ft8"
-            class="btn btn-secondary btn-large"
+            class="scope-btn"
             target="_blank"
             rel="noopener"
           >
             <i class="fab fa-github"></i> 源码
           </a>
         </div>
-        <p style="color: var(--text-muted); font-size: 0.85rem; margin-top: 1.25rem">
-          在线边缘：<code>https://radio.vlsc.net:9988</code>——Caddy TLS 配
+        <p style="color: var(--scope-text-muted); font-size: 0.85rem; margin-top: 1.25rem">
+          在线边缘：<code style="color:var(--scope-primary);">https://radio.vlsc.net:9988</code>——Caddy TLS 配
           acme.sh DNS-01 证书；FastAPI 与 rigctld 保持仅本机监听。
         </p>
       </div>
     </section>
 
     <!-- Quick Start -->
-    <section class="section" id="start" style="background: var(--bg-secondary)">
+    <section class="scope-section" id="start">
       <div class="container">
-        <div class="section-header">
-          <span class="section-label">快速上手</span>
-          <h2 class="section-title">五步构建并运行</h2>
-          <p class="section-subtitle">
-            macOS 或 Linux。DSP 核心需要 gfortran-mp-13 + FFTW3f，服务器本体一个
-            Python venv 即可。
-          </p>
-        </div>
+        <div class="section-label">快速上手</div>
+        <h2 class="section-title">五步构建并运行</h2>
+        <p class="section-subtitle">
+          macOS 或 Linux。DSP 核心需要 gfortran-mp-13 + FFTW3f，服务器本体一个
+          Python venv 即可。
+        </p>
 
         <div class="steps">
-          <div class="step">
+          <div class="step scope-reveal">
             <h4>1 · 构建 DSP 核心</h4>
             <p>CMake 将 Fortran shim + 精选 Improved 源码编译为 <code>wsjt_core</code>。</p>
             <code>cmake -S dsp -B dsp/build -DCMAKE_Fortran_COMPILER=gfortran-mp-13 && cmake --build dsp/build -j</code>
           </div>
-          <div class="step">
+          <div class="step scope-reveal">
             <h4>2 · 安装 Python 环境</h4>
             <p>Editable 安装拉取 FastAPI、uvicorn、numpy 与测试依赖。</p>
             <code>python3 -m venv venv && venv/bin/pip install -e '.[dev]'</code>
           </div>
-          <div class="step">
+          <div class="step scope-reveal">
             <h4>3 · 设置 OMP_STACKSIZE</h4>
             <p>Improved <code>sync8var</code> 在线程栈分配大型工作数组——10 MB，须在 NumPy/OpenMP 加载前设置。</p>
             <code>export OMP_STACKSIZE=10M</code>
           </div>
-          <div class="step">
+          <div class="step scope-reveal">
             <h4>4 · 配置并启动</h4>
             <p>设置 <code>MRRC_FT8_*</code> 环境变量（密码哈希用 <code>--hash-password</code> 生成、呼号、网格、音频设备、允许主机）。</p>
             <code>venv/bin/python -m server.main</code>
           </div>
-          <div class="step">
+          <div class="step scope-reveal">
             <h4>5 · 浏览器打开</h4>
             <p>打开驾驶舱、登录、选定电台并完成一场 QSO。完整部署模板（Caddy、LaunchAgent、systemd）在 <code>deploy/</code>。</p>
             <code>https://your-host:9988 → 登录 → 选波段 → 开打</code>
@@ -427,38 +627,36 @@
     </section>
 
     <!-- Deploy -->
-    <section class="section" id="deploy" style="background: var(--bg-primary)">
+    <section class="scope-section scope-section-alt" id="deploy">
       <div class="container">
-        <div class="section-header">
-          <span class="section-label">安装与部署</span>
-          <h2 class="section-title">生产部署指引</h2>
-          <p class="section-subtitle">
-            应用只绑定回环地址，公网入口由 Caddy 承担。macOS LaunchAgent、Linux
-            systemd 单元与 Caddy 配置都在 <code>deploy/</code>。
-          </p>
-        </div>
+        <div class="section-label">安装与部署</div>
+        <h2 class="section-title">生产部署指引</h2>
+        <p class="section-subtitle">
+          应用只绑定回环地址，公网入口由 Caddy 承担。macOS LaunchAgent、Linux
+          systemd 单元与 Caddy 配置都在 <code>deploy/</code>。
+        </p>
         <div class="steps">
-          <div class="step">
+          <div class="step scope-reveal">
             <h4>1 · 生成密码哈希</h4>
             <p>为 <code>MRRC_FT8_PASSWORD_HASH</code> 生成 Argon2id 哈希——交互式提示，密码不落入 shell 历史。</p>
             <code>venv/bin/python -m server.main --hash-password</code>
           </div>
-          <div class="step">
+          <div class="step scope-reveal">
             <h4>2 · 配置密钥</h4>
             <p><code>.env</code>（或服务环境文件）须定义哈希、呼号与网格；允许主机与音频设备可选。缺前三项服务拒绝启动。</p>
             <code>MRRC_FT8_PASSWORD_HASH=… MRRC_FT8_MY_CALL=YOURCALL MRRC_FT8_MY_GRID=…</code>
           </div>
-          <div class="step">
+          <div class="step scope-reveal">
             <h4>3 · 以服务方式运行</h4>
             <p>macOS：复制 <code>deploy/com.mrrc.ft8.plist</code> 到 <code>~/Library/LaunchAgents/</code> 并 bootstrap。Linux：安装 <code>deploy/mrrc-ft8.service</code>、创建 <code>/etc/mrrc-ft8.env</code>、<code>systemctl enable --now mrrc-ft8</code>。</p>
             <code>launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.mrrc.ft8.plist</code>
           </div>
-          <div class="step">
+          <div class="step scope-reveal">
             <h4>4 · 公网入口（Caddy）</h4>
             <p>复制 <code>deploy/Caddyfile</code> 到 <code>/etc/caddy/</code> 并以 LaunchDaemon 运行 Caddy；将 <code>MRRC_FT8_ALLOWED_HOSTS</code> 设为同一域名以通过 Host/Origin 校验。</p>
             <code>reverse_proxy 127.0.0.1:8000</code>
           </div>
-          <div class="step">
+          <div class="step scope-reveal">
             <h4>5 · 部署网站</h4>
             <p>本站在仓库内随附——<code>website/deploy.sh</code> 会备份、上传到 www.vlsc.net/mrrc_ft8 并重载 nginx。</p>
             <code>cd website &amp;&amp; ./deploy.sh</code>
@@ -468,16 +666,10 @@
     </section>
 
     <!-- Requirements -->
-    <section
-      class="section"
-      id="requirements"
-      style="background: var(--bg-primary)"
-    >
+    <section class="scope-section" id="requirements">
       <div class="container" style="text-align: center">
-        <div class="section-header">
-          <span class="section-label">环境要求</span>
-          <h2 class="section-title">你需要什么</h2>
-        </div>
+        <div class="section-label">环境要求</div>
+        <h2 class="section-title">你需要什么</h2>
         <div class="tech-stack" style="margin-bottom: 0">
           <span class="tech-tag"><i class="fas fa-broadcast-tower"></i> 任意带 CAT 的 HF 电台</span>
           <span class="tech-tag"><i class="fas fa-microchip"></i> rigctld（hamlib）</span>
@@ -492,23 +684,17 @@
     </section>
 
     <!-- Architecture -->
-    <section
-      class="section"
-      id="architecture"
-      style="background: var(--bg-primary)"
-    >
+    <section class="scope-section scope-section-alt" id="architecture">
       <div class="container">
-        <div class="section-header">
-          <span class="section-label">系统架构</span>
-          <h2 class="section-title">分层 · 受监督 · 确定</h2>
-          <p class="section-subtitle">
-            浏览器 → TLS 边缘 → FastAPI 控制面 → 受监督 DSP Worker → 共享原生库。
-            每个资源只有一个 owner。
-          </p>
-        </div>
+        <div class="section-label">系统架构</div>
+        <h2 class="section-title">分层 · 受监督 · 确定</h2>
+        <p class="section-subtitle">
+          浏览器 → TLS 边缘 → FastAPI 控制面 → 受监督 DSP Worker → 共享原生库。
+          每个资源只有一个 owner。
+        </p>
 
-        <div class="arch-diagram">
-          <svg viewBox="0 0 880 200" xmlns="http://www.w3.org/2000/svg">
+        <div class="arch-diagram" style="background:var(--scope-surface);border:1px solid var(--scope-border);border-radius:var(--scope-radius);padding:1rem;overflow-x:auto;">
+          <svg viewBox="0 0 880 200" xmlns="http://www.w3.org/2000/svg" style="min-width:880px;">
             <defs>
               <linearGradient id="gBoxApp" x1="0" y1="0" x2="1" y2="1">
                 <stop offset="0%" stop-color="rgba(34,211,238,0.08)" />
@@ -944,7 +1130,7 @@
         </div>
 
         <div class="arch-grid">
-          <div class="arch-card">
+          <div class="arch-card scope-reveal">
             <div class="label"><i class="fas fa-code-branch"></i> DSP 流水线</div>
             <div class="endpoint">12 kHz int16 单声道输入</div>
             <div class="dir">ft8var OpenMP 解码</div>
@@ -952,7 +1138,7 @@
               受监督 Worker → wsjt_core → 解码；TX 波形恒为 48 kHz
             </div>
           </div>
-          <div class="arch-card">
+          <div class="arch-card scope-reveal">
             <div class="label">
               <i class="fas fa-clock"></i> UTC 时隙网格
             </div>
@@ -962,7 +1148,7 @@
               UtcRing 按绝对采样序号寻址；无驱逐漂移
             </div>
           </div>
-          <div class="arch-card">
+          <div class="arch-card scope-reveal">
             <div class="label"><i class="fas fa-key"></i> 控制租约</div>
             <div class="endpoint">多观察者，单一控制</div>
             <div class="dir">5 秒心跳 / 15 秒 TTL</div>
@@ -970,7 +1156,7 @@
               任何已认证会话可 STOP TX；启动 TX 需持有租约
             </div>
           </div>
-          <div class="arch-card">
+          <div class="arch-card scope-reveal">
             <div class="label">
               <i class="fas fa-network-wired"></i> 公网边缘
             </div>
@@ -985,45 +1171,43 @@
     </section>
 
     <!-- Key Numbers -->
-    <section class="section" id="numbers" style="background: var(--bg-secondary)">
+    <section class="scope-section" id="numbers">
       <div class="container">
-        <div class="section-header">
-          <span class="section-label">关键数字</span>
-          <h2 class="section-title">DSP · 时隙 · 安全——量化一览</h2>
-        </div>
+        <div class="section-label">关键数字</div>
+        <h2 class="section-title">DSP · 时隙 · 安全——量化一览</h2>
 
         <div class="perf-grid">
-          <div class="perf-card">
+          <div class="perf-card scope-reveal">
             <div class="metric">12 kHz</div>
             <div class="metric-label">
               解码器输入<br /><small>int16 单声道——唯一允许的采样率</small>
             </div>
           </div>
-          <div class="perf-card">
+          <div class="perf-card scope-reveal">
             <div class="metric">48 kHz</div>
             <div class="metric-label">
               TX 波形<br /><small>固定 TX 采样率域</small>
             </div>
           </div>
-          <div class="perf-card">
+          <div class="perf-card scope-reveal">
             <div class="metric">15 s</div>
             <div class="metric-label">
               FT8 时隙周期<br /><small>floor(epoch/TRperiod) 身份</small>
             </div>
           </div>
-          <div class="perf-card">
+          <div class="perf-card scope-reveal">
             <div class="metric">1–12</div>
             <div class="metric-label">
               OpenMP 分带<br /><small>确定性分配</small>
             </div>
           </div>
-          <div class="perf-card">
+          <div class="perf-card scope-reveal">
             <div class="metric">3 kHz</div>
             <div class="metric-label">
               瀑布图跨度<br /><small>FT8 通带，无空白半幅</small>
             </div>
           </div>
-          <div class="perf-card">
+          <div class="perf-card scope-reveal">
             <div class="metric">40</div>
             <div class="metric-label">
               回归测试<br /><small>ft8sim/ft4sim 合成信号</small>
@@ -1034,9 +1218,10 @@
         <h3
           style="
             text-align: center;
-            color: var(--text-primary);
+            color: var(--scope-text);
             margin-top: 3rem;
             margin-bottom: 1.5rem;
+            font-family: var(--scope-font-mono);
           "
         >
           技术栈
@@ -1057,42 +1242,38 @@
     </section>
 
     <!-- SDD Chapters -->
-    <section class="section" id="sdd" style="background: var(--bg-primary)">
+    <section class="scope-section scope-section-alt" id="sdd">
       <div class="container">
-        <div class="section-header">
-          <span class="section-label">设计记录</span>
-          <h2 class="section-title">SDD 15 章</h2>
-          <p class="section-subtitle">
-            完整 IBM TeamSD 风格系统设计说明书——需求、架构决策、安全分析与版本演进。
-          </p>
-        </div>
+        <div class="section-label">设计记录</div>
+        <h2 class="section-title">SDD 15 章</h2>
+        <p class="section-subtitle">
+          完整 IBM TeamSD 风格系统设计说明书——需求、架构决策、安全分析与版本演进。
+        </p>
         <div class="steps">
-          <div class="step"><h4><a href="../sdd/01-executive-summary.html">01 执行摘要</a></h4></div>
-          <div class="step"><h4><a href="../sdd/02-business-direction.html">02 业务方向</a></h4></div>
-          <div class="step"><h4><a href="../sdd/03-project-definition.html">03 项目定义</a></h4></div>
-          <div class="step"><h4><a href="../sdd/04-system-context.html">04 系统上下文</a></h4></div>
-          <div class="step"><h4><a href="../sdd/05-non-functional-requirements.html">05 非功能需求</a></h4></div>
-          <div class="step"><h4><a href="../sdd/06-use-case-model.html">06 用例模型</a></h4></div>
-          <div class="step"><h4><a href="../sdd/07-subject-area-model.html">07 主题域模型</a></h4></div>
-          <div class="step"><h4><a href="../sdd/08-architecture-decisions.html">08 架构决策</a></h4></div>
-          <div class="step"><h4><a href="../sdd/09-architecture-overview.html">09 架构总览</a></h4></div>
-          <div class="step"><h4><a href="../sdd/10-service-model.html">10 服务模型</a></h4></div>
-          <div class="step"><h4><a href="../sdd/11-component-model.html">11 组件模型</a></h4></div>
-          <div class="step"><h4><a href="../sdd/12-operational-model.html">12 运行模型</a></h4></div>
-          <div class="step"><h4><a href="../sdd/13-feasibility-assessment.html">13 可行性评估</a></h4></div>
-          <div class="step"><h4><a href="../sdd/14-version-history.html">14 版本历史</a></h4></div>
-          <div class="step"><h4><a href="../sdd/15-ptt-safety-architecture.html">15 PTT 安全架构</a></h4></div>
+          <div class="step scope-reveal"><h4><a href="../sdd/01-executive-summary.html">01 执行摘要</a></h4></div>
+          <div class="step scope-reveal"><h4><a href="../sdd/02-business-direction.html">02 业务方向</a></h4></div>
+          <div class="step scope-reveal"><h4><a href="../sdd/03-project-definition.html">03 项目定义</a></h4></div>
+          <div class="step scope-reveal"><h4><a href="../sdd/04-system-context.html">04 系统上下文</a></h4></div>
+          <div class="step scope-reveal"><h4><a href="../sdd/05-non-functional-requirements.html">05 非功能需求</a></h4></div>
+          <div class="step scope-reveal"><h4><a href="../sdd/06-use-case-model.html">06 用例模型</a></h4></div>
+          <div class="step scope-reveal"><h4><a href="../sdd/07-subject-area-model.html">07 主题域模型</a></h4></div>
+          <div class="step scope-reveal"><h4><a href="../sdd/08-architecture-decisions.html">08 架构决策</a></h4></div>
+          <div class="step scope-reveal"><h4><a href="../sdd/09-architecture-overview.html">09 架构总览</a></h4></div>
+          <div class="step scope-reveal"><h4><a href="../sdd/10-service-model.html">10 服务模型</a></h4></div>
+          <div class="step scope-reveal"><h4><a href="../sdd/11-component-model.html">11 组件模型</a></h4></div>
+          <div class="step scope-reveal"><h4><a href="../sdd/12-operational-model.html">12 运行模型</a></h4></div>
+          <div class="step scope-reveal"><h4><a href="../sdd/13-feasibility-assessment.html">13 可行性评估</a></h4></div>
+          <div class="step scope-reveal"><h4><a href="../sdd/14-version-history.html">14 版本历史</a></h4></div>
+          <div class="step scope-reveal"><h4><a href="../sdd/15-ptt-safety-architecture.html">15 PTT 安全架构</a></h4></div>
         </div>
       </div>
     </section>
 
     <!-- Architecture Decisions -->
-    <section class="section" id="decisions" style="background: var(--bg-secondary)">
+    <section class="scope-section" id="decisions">
       <div class="container">
-        <div class="section-header">
-          <span class="section-label">架构决策</span>
-          <h2 class="section-title">AD-001 … AD-015</h2>
-        </div>
+        <div class="section-label">架构决策</div>
+        <h2 class="section-title">AD-001 … AD-015</h2>
         <div class="tech-stack">
           <span class="tech-tag">AD-001 Headless 分层服务器</span>
           <span class="tech-tag">AD-002 WSJT-X C ABI</span>
@@ -1113,7 +1294,7 @@
       </div>
     </section>
 
-    <footer class="footer">
+    <footer class="scope-footer">
       <div class="container">
         <div class="footer-grid">
           <div class="footer-section">
@@ -1121,7 +1302,7 @@
             <p>
               基于 WSJT-X 3.0.2 Improved DSP 核心的 headless FT8/FT4 服务器。
               作者
-              <a href="https://github.com/cheenle" style="color: var(--accent)"
+              <a href="https://github.com/cheenle" target="_blank" rel="noopener"
                 >cheenle</a
               >。
             </p>
@@ -1183,6 +1364,16 @@
               </li>
             </ul>
           </div>
+          <div class="footer-section">
+            <h4>VLSC</h4>
+            <ul>
+              <li><a href="/">VLSC 项目</a></li>
+              <li><a href="/mrrc_modern/">MRRC Modern</a></li>
+              <li><a href="/mrrc_ft710/">MRRC FT-710</a></li>
+              <li><a href="/efhw/">EFHW</a></li>
+              <li><a href="../index.html">English</a></li>
+            </ul>
+          </div>
         </div>
         <div class="footer-bottom">
           <p>
@@ -1193,23 +1384,6 @@
       </div>
     </footer>
 
-    <script>
-      function toggleMobileMenu() {
-        document.querySelector(".nav-links").classList.toggle("active");
-      }
-      document.querySelectorAll('a[href^="#"]').forEach((a) => {
-        a.addEventListener("click", function (e) {
-          e.preventDefault();
-          const t = document.querySelector(this.getAttribute("href"));
-          if (t) t.scrollIntoView({ behavior: "smooth", block: "start" });
-        });
-      });
-      const nav = document.querySelector(".navbar");
-      window.addEventListener("scroll", () => {
-        nav.style.background =
-          window.scrollY > 50 ? "rgba(10,10,10,0.98)" : "rgba(10,10,10,0.92)";
-      });
-    </script>
-    <script src="../js/global-nav.js?v=5" defer data-gn="1"></script>
+    <script src="../js/scope.js?v=1" defer></script>
   </body>
 </html>

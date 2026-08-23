@@ -11,96 +11,309 @@
       name="keywords"
       content="FT8, FT4, WSJT-X, headless, amateur radio, digital modes, DSP, OpenMP, FastAPI, rigctld, Caddy, PTT safety, waterfall"
     />
-    <meta name="theme-color" content="#0a0a0a" />
+    <meta name="theme-color" content="#050a08" />
 
     <title>MRRC-FT8 — Headless FT8/FT4 Server</title>
 
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
-      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap"
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&display=swap"
       rel="stylesheet"
     />
 
-    <link rel="stylesheet" href="css/octen.css?v=4" />
-    <link rel="stylesheet" href="css/sunsdrmobile.css?v=1" />
-    <link rel="stylesheet" href="css/ft8.css" />
+    <link rel="stylesheet" href="css/scope.css?v=1" />
     <link
       rel="stylesheet"
       href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css"
     />
 
+    <style>
+      .scope-hero {
+        position: relative;
+        padding: calc(var(--scope-gn-h) + 5rem) 0 5rem;
+        background:
+          radial-gradient(circle at 70% 30%, rgba(0, 255, 65, 0.08), transparent 40%),
+          var(--scope-bg);
+        overflow: hidden;
+      }
+      .scope-hero::before {
+        content: '';
+        position: absolute;
+        inset: 0;
+        background-image:
+          linear-gradient(rgba(0, 255, 65, 0.05) 1px, transparent 1px),
+          linear-gradient(90deg, rgba(0, 255, 65, 0.05) 1px, transparent 1px);
+        background-size: 32px 32px;
+        mask-image: radial-gradient(circle at 50% 0%, black 0%, transparent 70%);
+        -webkit-mask-image: radial-gradient(circle at 50% 0%, black 0%, transparent 70%);
+      }
+      .scope-site-brand {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.4rem;
+        font-family: var(--scope-font-mono);
+        font-size: 1.25rem;
+        font-weight: 700;
+        color: var(--scope-text);
+        white-space: nowrap;
+      }
+      .scope-site-brand i { color: var(--scope-primary); }
+      .hero-badge {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.5rem;
+        font-family: var(--scope-font-mono);
+        font-size: 0.8rem;
+        color: var(--scope-primary);
+        border: 1px solid var(--scope-border);
+        border-radius: 999px;
+        padding: 0.35rem 0.8rem;
+        margin-bottom: 1.25rem;
+        background: rgba(0, 255, 65, 0.05);
+      }
+      .features-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+        gap: 1.25rem;
+      }
+      .feature-icon {
+        width: 40px;
+        height: 40px;
+        border-radius: var(--scope-radius);
+        background: rgba(0, 255, 65, 0.08);
+        border: 1px solid var(--scope-border);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        color: var(--scope-primary);
+        font-size: 1.1rem;
+        margin-bottom: 0.75rem;
+      }
+      .feature-card h3 {
+        margin: 0 0 0.5rem;
+        font-family: var(--scope-font-mono);
+        font-size: 1.05rem;
+        color: var(--scope-text);
+      }
+      .feature-card p,
+      .feature-card li {
+        color: var(--scope-text-2);
+        font-size: 0.92rem;
+      }
+      .feature-card ul { margin: 0.5rem 0 0; padding-left: 1.1rem; }
+      .feature-card li { margin-bottom: 0.25rem; }
+      .steps {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+        gap: 1rem;
+      }
+      .step {
+        background: var(--scope-surface);
+        border: 1px solid var(--scope-border);
+        border-radius: var(--scope-radius);
+        padding: 1.25rem;
+      }
+      .step h4 {
+        margin: 0 0 0.5rem;
+        font-family: var(--scope-font-mono);
+        font-size: 0.95rem;
+        color: var(--scope-text);
+      }
+      .step p {
+        color: var(--scope-text-2);
+        font-size: 0.9rem;
+        margin: 0 0 0.5rem;
+      }
+      .step code {
+        display: block;
+        background: var(--scope-bg);
+        border: 1px solid var(--scope-border);
+        border-radius: var(--scope-radius);
+        padding: 0.5rem;
+        font-size: 0.8rem;
+        color: var(--scope-primary);
+        overflow-x: auto;
+      }
+      .arch-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+        gap: 1rem;
+        margin-top: 2rem;
+      }
+      .arch-card {
+        background: var(--scope-surface);
+        border: 1px solid var(--scope-border);
+        border-radius: var(--scope-radius);
+        padding: 1.25rem;
+      }
+      .arch-card .label {
+        font-family: var(--scope-font-mono);
+        font-weight: 600;
+        color: var(--scope-primary);
+        margin-bottom: 0.5rem;
+      }
+      .arch-card .endpoint,
+      .arch-card .dir,
+      .arch-card .payload {
+        font-size: 0.85rem;
+        color: var(--scope-text-2);
+        margin-bottom: 0.25rem;
+      }
+      .perf-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+        gap: 1rem;
+      }
+      .perf-card {
+        background: var(--scope-surface);
+        border: 1px solid var(--scope-border);
+        border-radius: var(--scope-radius);
+        padding: 1.5rem 1rem;
+        text-align: center;
+      }
+      .perf-card .metric {
+        font-family: var(--scope-font-mono);
+        font-size: 2rem;
+        font-weight: 700;
+        color: var(--scope-primary);
+      }
+      .perf-card .metric-label {
+        color: var(--scope-text-2);
+        font-size: 0.85rem;
+        margin-top: 0.5rem;
+      }
+      .tech-stack {
+        display: flex;
+        flex-wrap: wrap;
+        justify-content: center;
+        gap: 0.6rem;
+      }
+      .tech-tag {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.35rem;
+        font-family: var(--scope-font-mono);
+        font-size: 0.78rem;
+        color: var(--scope-text-2);
+        border: 1px solid var(--scope-border);
+        border-radius: 999px;
+        padding: 0.35rem 0.75rem;
+        background: rgba(0, 255, 65, 0.04);
+      }
+      .scope-footer {
+        background: var(--scope-surface);
+        border-top: 1px solid var(--scope-border);
+        padding: 3rem 0 1.5rem;
+      }
+      .footer-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+        gap: 2rem;
+        margin-bottom: 2rem;
+      }
+      .footer-section h4 {
+        margin: 0 0 0.75rem;
+        font-family: var(--scope-font-mono);
+        font-size: 0.95rem;
+        color: var(--scope-text);
+      }
+      .footer-section p,
+      .footer-section li,
+      .footer-section a {
+        color: var(--scope-text-2);
+        font-size: 0.88rem;
+      }
+      .footer-section ul { list-style: none; margin: 0; padding: 0; }
+      .footer-section li { margin-bottom: 0.35rem; }
+      .footer-bottom {
+        border-top: 1px solid var(--scope-border);
+        padding-top: 1.25rem;
+        text-align: center;
+        color: var(--scope-text-muted);
+        font-size: 0.8rem;
+      }
+      .qr-note { color: var(--scope-text-muted); font-size: 0.85rem; margin-top: 1rem; text-align: center; }
+      .download-box {
+        background: var(--scope-surface);
+        border: 1px solid var(--scope-primary);
+        border-radius: var(--scope-radius);
+        padding: 1.75rem 2rem;
+        max-width: 720px;
+        margin: 0 auto;
+      }
+    </style>
+
     <link
       rel="icon"
       type="image/svg+xml"
-      href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect fill='%2322d3ee' width='100' height='100' rx='20'/><text y='.9em' x='50%' text-anchor='middle' font-size='60'>📡</text></svg>"
+      href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect fill='%2300ff41' width='100' height='100' rx='20'/><text y='.9em' x='50%' text-anchor='middle' font-size='60'>📡</text></svg>"
     />
   </head>
-  <body data-site="mrrc_ft8">
-    <nav class="navbar">
-      <div class="container navbar-content">
-        <a href="#" class="logo">
-          <span class="logo-icon"><i class="fas fa-satellite-dish"></i></span>
-          <span>MRRC-FT<span style="color: var(--accent)">8</span></span>
+  <body data-site="mrrc_ft8" class="fx-grid">
+    <nav class="scope-site-nav">
+      <div class="container scope-site-nav-inner">
+        <a href="#" class="scope-site-brand fx-glow">
+          <i class="fas fa-satellite-dish"></i>
+          <span>MRRC-FT<span style="color:var(--scope-primary)">8</span></span>
         </a>
-        <ul class="nav-links">
+        <ul class="scope-site-nav-links">
           <li><a href="#download">Download</a></li>
           <li><a href="#features">Features</a></li>
           <li><a href="#live">Live Station</a></li>
           <li><a href="#start">Quick Start</a></li>
           <li><a href="#architecture">Architecture</a></li>
           <li><a href="sdd.html">SDD</a></li>
+          <li><a href="/mrrc_modern/">Modern</a></li>
           <li>
             <a
               href="https://github.com/cheenle/mrrc_ft8"
               target="_blank"
               rel="noopener"
             >
-              <i class="fab fa-github"></i> GitHub
+              <i class="fab fa-github"></i>
             </a>
           </li>
         </ul>
-        <div class="nav-actions">
-          <a href="zh/index.html" class="lang-btn">中文</a>
-          <button class="mobile-menu-toggle" onclick="toggleMobileMenu()">
-            <i class="fas fa-bars"></i>
-          </button>
+        <div style="display:flex;align-items:center;gap:0.75rem;">
+          <a href="zh/index.html" class="scope-btn" style="padding:0.4rem 0.8rem;font-size:0.75rem;">中文</a>
+          <button class="scope-site-nav-toggle" aria-label="Toggle menu"><i class="fas fa-bars"></i></button>
         </div>
       </div>
     </nav>
 
-    <section class="hero">
-      <div class="hero-content">
+    <section class="scope-hero">
+      <div class="container" style="position:relative;z-index:1;">
         <div class="hero-badge">
           <i class="fas fa-check-circle"></i>
           <span>v1.1.0 · Live on the FT-710 station</span>
         </div>
-        <h1 class="hero-title">
+        <h1 class="fx-glow" style="font-family:var(--scope-font-mono);font-size:clamp(2.2rem,6vw,4rem);font-weight:700;margin:0 0 1rem;line-height:1.1;">
           Headless FT8 Server<br />
-          <span class="gradient">Real DSP. Real QSOs.</span>
+          <span style="color:var(--scope-primary)">Real DSP. Real QSOs.</span>
         </h1>
-        <p class="hero-subtitle">
+        <p style="color:var(--scope-text-2);font-size:1.15rem;max-width:640px;margin:0 0 2rem;">
           MRRC-FT8 runs the WSJT-X 3.0.2 Improved DSP core (FT8/FT4 decode and
           encode) behind a supervised worker, with a Python FastAPI control
           plane, rigctld radio control and a landscape mobile Web cockpit.
           Point a browser at it — decode the band, pick a station, and let the
           sequencer close one standard QSO.
         </p>
-        <div class="hero-actions">
+        <div style="display:flex;flex-wrap:wrap;gap:1rem;">
           <a
             href="https://radio.vlsc.net:9988"
-            class="btn btn-primary btn-large"
+            class="scope-btn scope-btn-primary"
             target="_blank"
             rel="noopener"
           >
             <i class="fas fa-play"></i> Live Cockpit
           </a>
-          <a href="#features" class="btn btn-secondary btn-large">
+          <a href="#features" class="scope-btn">
             <i class="fas fa-arrow-down"></i> Explore Features
           </a>
           <a
             href="https://github.com/cheenle/mrrc_ft8"
-            class="btn btn-secondary btn-large"
+            class="scope-btn"
             target="_blank"
             rel="noopener"
           >
@@ -110,45 +323,43 @@
       </div>
     </section>
 
-    <!-- Download -->
-    <section
-      class="section"
-      id="download"
-      style="background: var(--bg-primary)"
-    >
-      <div class="container">
-        <div class="section-header">
-          <span class="section-label">Download</span>
-          <h2 class="section-title">Windows Desktop Installer</h2>
-          <p class="section-subtitle">
-            Windows 11/10 x64 — embedded Python runtime + WSJT-X DSP decoder +
-            Hamlib rigctld, no manual Python or Node.js install. First run
-            generates a self-signed HTTPS certificate; default password
-            abcd1234; LAN/remote access over HTTPS.
-          </p>
+    <!-- Community -->
+    <section class="scope-section" id="community">
+      <div class="container" style="text-align:center;">
+        <div class="section-label">Community</div>
+        <h2 class="section-title">Join the MRRC-HAM WeChat group</h2>
+        <p class="section-subtitle" style="margin-left:auto;margin-right:auto;">Scan the QR code with WeChat to join the MRRC-HAM group.</p>
+        <div class="scope-card" style="display:inline-block;padding:1.25rem;max-width:280px;">
+          <img src="images/qr-wechat-group.jpg" alt="WeChat QR code for MRRC-HAM group" style="border-radius:var(--scope-radius);">
         </div>
+        <p class="qr-note">QR code valid until Aug 29, 2026. Will be updated when refreshed.</p>
+      </div>
+    </section>
 
-        <div
-          style="
-            background: var(--bg-secondary);
-            border: 1px solid var(--accent);
-            border-radius: 14px;
-            padding: 1.75rem 2rem;
-            max-width: 720px;
-            margin: 0 auto;
-          "
-        >
-          <p style="margin: 0 0 0.25rem; font-size: 1.15rem">
-            <i class="fab fa-windows" style="color: var(--accent)"></i>
+    <!-- Download -->
+    <section class="scope-section scope-section-alt" id="download">
+      <div class="container">
+        <div class="section-label">Download</div>
+        <h2 class="section-title">Windows Desktop Installer</h2>
+        <p class="section-subtitle">
+          Windows 11/10 x64 — embedded Python runtime + WSJT-X DSP decoder +
+          Hamlib rigctld, no manual Python or Node.js install. First run
+          generates a self-signed HTTPS certificate; default password
+          abcd1234; LAN/remote access over HTTPS.
+        </p>
+
+        <div class="download-box">
+          <p style="margin: 0 0 0.25rem; font-size: 1.15rem; color:var(--scope-text);">
+            <i class="fab fa-windows" style="color: var(--scope-primary)"></i>
             <strong> MRRC_FT8-Setup.exe — v1.1.0 Stable</strong>
           </p>
-          <p style="color: var(--text-muted); margin: 0 0 1rem">
+          <p style="color: var(--scope-text-muted); margin: 0 0 1rem">
             60 MB · Windows 11/10 x64<br />
-            <code style="font-size: 0.76rem"
+            <code style="font-size: 0.76rem; color:var(--scope-primary);"
               >SHA-256: ee866947731ac2318f4c1c7dc14511ba8a67b67ffbb68a2f32c8d9a3f68318b2</code
             >
           </p>
-          <p style="color: var(--text-muted); margin: 0 0 1.25rem">
+          <p style="color: var(--scope-text-2); margin: 0 0 1.25rem">
             Full MRRC-FT8 station: FastAPI server + FT8 DSP (decode/encode) +
             rigctld + web/desktop client. Windows build: 832 tests passed;
             installer boot and serve verified. Radio/audio RF acceptance remains
@@ -159,13 +370,13 @@
           >
             <a
               href="downloads/MRRC_FT8-Setup.exe"
-              class="btn btn-primary btn-large"
+              class="scope-btn scope-btn-primary"
             >
               <i class="fab fa-windows"></i> Download for Windows
             </a>
             <a
               href="downloads/MRRC_FT8-v1.1.0-Windows-x64-Setup.exe"
-              class="btn btn-secondary btn-large"
+              class="scope-btn"
             >
               <i class="fas fa-fingerprint"></i> Versioned v1.1.0
             </a>
@@ -175,27 +386,21 @@
     </section>
 
     <!-- Features -->
-    <section
-      class="section"
-      id="features"
-      style="background: var(--bg-secondary)"
-    >
+    <section class="scope-section" id="features">
       <div class="container">
-        <div class="section-header">
-          <span class="section-label">Features</span>
-          <h2 class="section-title">WSJT-X DSP, Server-Grade</h2>
-          <p class="section-subtitle">
-            The same improved decoder you know from WSJT-X, wrapped in a
-            headless server with safe, deterministic scheduling.
-          </p>
-        </div>
+        <div class="section-label">Features</div>
+        <h2 class="section-title">WSJT-X DSP, Server-Grade</h2>
+        <p class="section-subtitle">
+          The same improved decoder you know from WSJT-X, wrapped in a
+          headless server with safe, deterministic scheduling.
+        </p>
 
         <div class="features-grid">
-          <div class="feature-card animate">
-            <div class="icon"><i class="fas fa-microchip"></i></div>
+          <div class="scope-card scope-reveal feature-card">
+            <div class="feature-icon"><i class="fas fa-microchip"></i></div>
             <h3>WSJT-X 3.0.2 Improved DSP</h3>
             <p>
-              Compiled selected Improved `ft8var` sources behind a C ABI into a
+              Compiled selected Improved <code>ft8var</code> sources behind a C ABI into a
               shared library. FT8 standard + Improved decoding with OpenMP
               Auto/1–12 sub-bands, FT4 following the FT8 acceptance.
             </p>
@@ -206,8 +411,8 @@
             </ul>
           </div>
 
-          <div class="feature-card animate">
-            <div class="icon"><i class="fas fa-shield-halved"></i></div>
+          <div class="scope-card scope-reveal feature-card">
+            <div class="feature-icon"><i class="fas fa-shield-halved"></i></div>
             <h3>Supervised DSP Worker</h3>
             <p>
               Fortran/OpenMP state lives only in a dedicated worker process
@@ -222,8 +427,8 @@
             </ul>
           </div>
 
-          <div class="feature-card animate">
-            <div class="icon"><i class="fas fa-wave-square"></i></div>
+          <div class="scope-card scope-reveal feature-card">
+            <div class="feature-icon"><i class="fas fa-wave-square"></i></div>
             <h3>UTC Slot Discipline</h3>
             <p>
               Every schedule decision uses <code>floor(epoch/TRperiod)</code> —
@@ -237,8 +442,8 @@
             </ul>
           </div>
 
-          <div class="feature-card animate">
-            <div class="icon"><i class="fas fa-tower-broadcast"></i></div>
+          <div class="scope-card scope-reveal feature-card">
+            <div class="feature-icon"><i class="fas fa-tower-broadcast"></i></div>
             <h3>Sequencer + PTT Safety</h3>
             <p>
               Human selects the target — the sequencer drives one standard QSO
@@ -253,8 +458,8 @@
             </ul>
           </div>
 
-          <div class="feature-card animate">
-            <div class="icon"><i class="fas fa-plug"></i></div>
+          <div class="scope-card scope-reveal feature-card">
+            <div class="feature-icon"><i class="fas fa-plug"></i></div>
             <h3>rigctld Radio Control</h3>
             <p>
               The serial port has exactly one owner: rigctld. The server talks
@@ -268,8 +473,8 @@
             </ul>
           </div>
 
-          <div class="feature-card animate">
-            <div class="icon"><i class="fas fa-database"></i></div>
+          <div class="scope-card scope-reveal feature-card">
+            <div class="feature-icon"><i class="fas fa-database"></i></div>
             <h3>Durable QSO Logging + ADIF</h3>
             <p>
               Every completed QSO lands in the canonical SQLite store with
@@ -283,8 +488,8 @@
             </ul>
           </div>
 
-          <div class="feature-card animate">
-            <div class="icon"><i class="fas fa-globe-asia"></i></div>
+          <div class="scope-card scope-reveal feature-card">
+            <div class="feature-icon"><i class="fas fa-globe-asia"></i></div>
             <h3>DXCC Live View</h3>
             <p>
               Track worked entities straight from the cockpit: a full-screen
@@ -300,8 +505,8 @@
             </ul>
           </div>
 
-          <div class="feature-card animate">
-            <div class="icon"><i class="fas fa-robot"></i></div>
+          <div class="scope-card scope-reveal feature-card">
+            <div class="feature-icon"><i class="fas fa-robot"></i></div>
             <h3>New-DXCC Auto-Call</h3>
             <p>
               With the Auto-call toggle on, the server safety-arms and
@@ -316,8 +521,8 @@
             </ul>
           </div>
 
-          <div class="feature-card animate">
-            <div class="icon"><i class="fas fa-chart-area"></i></div>
+          <div class="scope-card scope-reveal feature-card">
+            <div class="feature-icon"><i class="fas fa-chart-area"></i></div>
             <h3>3 kHz Waterfall</h3>
             <p>
               The FT8 passband is ~0–3 kHz, so the spectrum frame emits exactly
@@ -331,8 +536,8 @@
             </ul>
           </div>
 
-          <div class="feature-card animate">
-            <div class="icon"><i class="fas fa-mobile-alt"></i></div>
+          <div class="scope-card scope-reveal feature-card">
+            <div class="feature-icon"><i class="fas fa-mobile-alt"></i></div>
             <h3>Landscape Mobile Cockpit</h3>
             <p>
               A mobile-first PWA built for a phone lying in landscape next to
@@ -350,38 +555,36 @@
     </section>
 
     <!-- Live Station -->
-    <section class="section" id="live" style="background: var(--bg-primary)">
+    <section class="scope-section scope-section-alt" id="live">
       <div class="container" style="text-align: center">
-        <div class="section-header">
-          <span class="section-label">Live Station</span>
-          <h2 class="section-title">FT-710 Field Sessions</h2>
-          <p class="section-subtitle">
-            v1.1.0 is running the real FT-710 station. The 2026-08-03 field
-            session closed the RX/TX root causes — UTC-ring eviction
-            misalignment, Replay opposite-slot phase and the manual-Reply
-            decision window — and real FT8 QSOs are being worked through the
-            mobile cockpit. On 2026-08-04 the FT-710 rig controls were
-            completed: filter bandwidth and ATT / PREAMP / AGC / RF gain now
-            switch through raw CAT frames (hamlib's FT-710 level path is
-            unreliable, and the AGC AUTO code was wrong), verified live on the
-            station radio. v1.1.0 adds the DXCC live view (cty.dat entity
-            stats, cached until a QSO write), the new-DXCC auto-call toggle
-            (first new-entity CQ auto-worked when idle), and JTDX ADIF
-            auto-sync with a 7-day LOG window.
-          </p>
-        </div>
+        <div class="section-label">Live Station</div>
+        <h2 class="section-title">FT-710 Field Sessions</h2>
+        <p class="section-subtitle" style="margin-left:auto;margin-right:auto;">
+          v1.1.0 is running the real FT-710 station. The 2026-08-03 field
+          session closed the RX/TX root causes — UTC-ring eviction
+          misalignment, Replay opposite-slot phase and the manual-Reply
+          decision window — and real FT8 QSOs are being worked through the
+          mobile cockpit. On 2026-08-04 the FT-710 rig controls were
+          completed: filter bandwidth and ATT / PREAMP / AGC / RF gain now
+          switch through raw CAT frames (hamlib's FT-710 level path is
+          unreliable, and the AGC AUTO code was wrong), verified live on the
+          station radio. v1.1.0 adds the DXCC live view (cty.dat entity
+          stats, cached until a QSO write), the new-DXCC auto-call toggle
+          (first new-entity CQ auto-worked when idle), and JTDX ADIF
+          auto-sync with a 7-day LOG window.
+        </p>
         <img
           src="images/cockpit-ft8.jpg"
           alt="MRRC-FT8 web cockpit — live FT8 band activity and decodes on 14.074 MHz (20 m), with TX state and slot timing"
-          style="width: 100%; max-width: 900px; border-radius: 0.75rem; border: 1px solid var(--border); box-shadow: 0 10px 35px rgba(0,0,0,0.4); margin: 1.75rem auto 0; display: block;"
+          style="width: 100%; max-width: 900px; border-radius: var(--scope-radius); border: 1px solid var(--scope-border); box-shadow: 0 10px 35px rgba(0,0,0,0.4); margin: 1.75rem auto 0; display: block;"
         />
-        <p style="color: var(--text-muted); font-size: 0.85rem; margin-top: 0.6rem">
+        <p style="color: var(--scope-text-muted); font-size: 0.85rem; margin-top: 0.6rem">
           The live cockpit: 20 m FT8 band activity and decodes on 14.074 MHz, TX state and slot timing.
         </p>
         <div style="display: flex; gap: 1rem; justify-content: center; flex-wrap: wrap">
           <a
             href="https://radio.vlsc.net:9988"
-            class="btn btn-primary btn-large"
+            class="scope-btn scope-btn-primary"
             target="_blank"
             rel="noopener"
           >
@@ -389,54 +592,52 @@
           </a>
           <a
             href="https://github.com/cheenle/mrrc_ft8"
-            class="btn btn-secondary btn-large"
+            class="scope-btn"
             target="_blank"
             rel="noopener"
           >
             <i class="fab fa-github"></i> Source Code
           </a>
         </div>
-        <p style="color: var(--text-muted); font-size: 0.85rem; margin-top: 1.25rem">
-          Live edge: <code>https://radio.vlsc.net:9988</code> — Caddy TLS with
+        <p style="color: var(--scope-text-muted); font-size: 0.85rem; margin-top: 1.25rem">
+          Live edge: <code style="color:var(--scope-primary);">https://radio.vlsc.net:9988</code> — Caddy TLS with
           acme.sh DNS-01 certificates; FastAPI and rigctld stay loopback-only.
         </p>
       </div>
     </section>
 
     <!-- Quick Start -->
-    <section class="section" id="start" style="background: var(--bg-secondary)">
+    <section class="scope-section" id="start">
       <div class="container">
-        <div class="section-header">
-          <span class="section-label">Quick Start</span>
-          <h2 class="section-title">Build and Run in Five Steps</h2>
-          <p class="section-subtitle">
-            macOS or Linux. Requires gfortran-mp-13 + FFTW3f for the DSP core,
-            then a plain Python venv for the server.
-          </p>
-        </div>
+        <div class="section-label">Quick Start</div>
+        <h2 class="section-title">Build and Run in Five Steps</h2>
+        <p class="section-subtitle">
+          macOS or Linux. Requires gfortran-mp-13 + FFTW3f for the DSP core,
+          then a plain Python venv for the server.
+        </p>
 
         <div class="steps">
-          <div class="step">
+          <div class="step scope-reveal">
             <h4>1 · Build the DSP Core</h4>
             <p>CMake builds the Fortran shim + selected Improved sources into <code>wsjt_core</code>.</p>
             <code>cmake -S dsp -B dsp/build -DCMAKE_Fortran_COMPILER=gfortran-mp-13 && cmake --build dsp/build -j</code>
           </div>
-          <div class="step">
+          <div class="step scope-reveal">
             <h4>2 · Install Python Environment</h4>
             <p>Editable install pulls FastAPI, uvicorn, numpy and the test deps.</p>
             <code>python3 -m venv venv && venv/bin/pip install -e '.[dev]'</code>
           </div>
-          <div class="step">
+          <div class="step scope-reveal">
             <h4>3 · Set OMP_STACKSIZE</h4>
             <p>Improved <code>sync8var</code> allocates large work arrays on the thread stack — 10 MB, set before NumPy/OpenMP load.</p>
             <code>export OMP_STACKSIZE=10M</code>
           </div>
-          <div class="step">
+          <div class="step scope-reveal">
             <h4>4 · Configure and Launch</h4>
             <p>Set <code>MRRC_FT8_*</code> env vars (password hash via <code>--hash-password</code>, call, grid, audio device, allowed hosts).</p>
             <code>venv/bin/python -m server.main</code>
           </div>
-          <div class="step">
+          <div class="step scope-reveal">
             <h4>5 · Point a Browser at It</h4>
             <p>Open the cockpit, log in, select a station and run a QSO. Full deployment templates (Caddy, LaunchAgent, systemd) live in <code>deploy/</code>.</p>
             <code>https://your-host:9988 → login → band select → work the pileup</code>
@@ -446,39 +647,37 @@
     </section>
 
     <!-- Deploy -->
-    <section class="section" id="deploy" style="background: var(--bg-primary)">
+    <section class="scope-section scope-section-alt" id="deploy">
       <div class="container">
-        <div class="section-header">
-          <span class="section-label">Install &amp; Deploy</span>
-          <h2 class="section-title">Production Deployment</h2>
-          <p class="section-subtitle">
-            The app binds loopback-only; Caddy owns the public edge. macOS
-            LaunchAgent and Linux systemd units plus Caddy configs live in
-            <code>deploy/</code>.
-          </p>
-        </div>
+        <div class="section-label">Install &amp; Deploy</div>
+        <h2 class="section-title">Production Deployment</h2>
+        <p class="section-subtitle">
+          The app binds loopback-only; Caddy owns the public edge. macOS
+          LaunchAgent and Linux systemd units plus Caddy configs live in
+          <code>deploy/</code>.
+        </p>
         <div class="steps">
-          <div class="step">
+          <div class="step scope-reveal">
             <h4>1 · Generate the password hash</h4>
             <p>Argon2id hash for <code>MRRC_FT8_PASSWORD_HASH</code> — prompts so the password never lands in shell history.</p>
             <code>venv/bin/python -m server.main --hash-password</code>
           </div>
-          <div class="step">
+          <div class="step scope-reveal">
             <h4>2 · Configure secrets</h4>
             <p>A <code>.env</code> (or the service env file) must define the hash, call sign and grid; optional overrides for allowed hosts and the audio device. The server refuses to start without the first three.</p>
             <code>MRRC_FT8_PASSWORD_HASH=… MRRC_FT8_MY_CALL=YOURCALL MRRC_FT8_MY_GRID=…</code>
           </div>
-          <div class="step">
+          <div class="step scope-reveal">
             <h4>3 · Run as a service</h4>
             <p>macOS: copy <code>deploy/com.mrrc.ft8.plist</code> to <code>~/Library/LaunchAgents/</code> and bootstrap it. Linux: install <code>deploy/mrrc-ft8.service</code>, create <code>/etc/mrrc-ft8.env</code>, and <code>systemctl enable --now mrrc-ft8</code>.</p>
             <code>launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.mrrc.ft8.plist</code>
           </div>
-          <div class="step">
+          <div class="step scope-reveal">
             <h4>4 · Public edge (Caddy)</h4>
             <p>Copy <code>deploy/Caddyfile</code> to <code>/etc/caddy/</code> and run Caddy as a LaunchDaemon; set <code>MRRC_FT8_ALLOWED_HOSTS</code> to the same domain so the Host/Origin checks pass.</p>
             <code>reverse_proxy 127.0.0.1:8000</code>
           </div>
-          <div class="step">
+          <div class="step scope-reveal">
             <h4>5 · Deploy the website</h4>
             <p>This site ships from the repo — <code>website/deploy.sh</code> backs up, uploads to www.vlsc.net/mrrc_ft8 and reloads nginx.</p>
             <code>cd website &amp;&amp; ./deploy.sh</code>
@@ -488,16 +687,10 @@
     </section>
 
     <!-- Requirements -->
-    <section
-      class="section"
-      id="requirements"
-      style="background: var(--bg-primary)"
-    >
+    <section class="scope-section" id="requirements">
       <div class="container" style="text-align: center">
-        <div class="section-header">
-          <span class="section-label">Requirements</span>
-          <h2 class="section-title">What You Need</h2>
-        </div>
+        <div class="section-label">Requirements</div>
+        <h2 class="section-title">What You Need</h2>
         <div class="tech-stack" style="margin-bottom: 0">
           <span class="tech-tag"><i class="fas fa-broadcast-tower"></i> Any CAT-capable HF rig</span>
           <span class="tech-tag"><i class="fas fa-microchip"></i> rigctld (hamlib)</span>
@@ -512,23 +705,17 @@
     </section>
 
     <!-- Architecture -->
-    <section
-      class="section"
-      id="architecture"
-      style="background: var(--bg-primary)"
-    >
+    <section class="scope-section scope-section-alt" id="architecture">
       <div class="container">
-        <div class="section-header">
-          <span class="section-label">Architecture</span>
-          <h2 class="section-title">Layered, Supervised, Deterministic</h2>
-          <p class="section-subtitle">
-            Browser → TLS edge → FastAPI control plane → supervised DSP worker
-            → shared native library. One owner per resource.
-          </p>
-        </div>
+        <div class="section-label">Architecture</div>
+        <h2 class="section-title">Layered, Supervised, Deterministic</h2>
+        <p class="section-subtitle">
+          Browser → TLS edge → FastAPI control plane → supervised DSP worker
+          → shared native library. One owner per resource.
+        </p>
 
-        <div class="arch-diagram">
-          <svg viewBox="0 0 880 200" xmlns="http://www.w3.org/2000/svg">
+        <div class="arch-diagram" style="background:var(--scope-surface);border:1px solid var(--scope-border);border-radius:var(--scope-radius);padding:1rem;overflow-x:auto;">
+          <svg viewBox="0 0 880 200" xmlns="http://www.w3.org/2000/svg" style="min-width:880px;">
             <defs>
               <linearGradient id="gBoxApp" x1="0" y1="0" x2="1" y2="1">
                 <stop offset="0%" stop-color="rgba(34,211,238,0.08)" />
@@ -652,13 +839,6 @@
               SQLite · ADIF · waterfall
             </text>
 
-            <rect
-              x="260"
-              y="145"
-              width="0"
-              height="0"
-              fill="none"
-            />
             <rect
               x="260"
               y="30"
@@ -971,7 +1151,7 @@
         </div>
 
         <div class="arch-grid">
-          <div class="arch-card">
+          <div class="arch-card scope-reveal">
             <div class="label"><i class="fas fa-code-branch"></i> DSP Pipeline</div>
             <div class="endpoint">12 kHz int16 mono in</div>
             <div class="dir">ft8var OpenMP decode</div>
@@ -979,7 +1159,7 @@
               Supervised worker → wsjt_core → decodes; TX waveform always 48 kHz
             </div>
           </div>
-          <div class="arch-card">
+          <div class="arch-card scope-reveal">
             <div class="label">
               <i class="fas fa-clock"></i> UTC Slot Grid
             </div>
@@ -989,7 +1169,7 @@
               UtcRing keyed by absolute sample index; no eviction drift
             </div>
           </div>
-          <div class="arch-card">
+          <div class="arch-card scope-reveal">
             <div class="label"><i class="fas fa-key"></i> Control Lease</div>
             <div class="endpoint">Many observers, one control</div>
             <div class="dir">5 s heartbeat / 15 s TTL</div>
@@ -997,7 +1177,7 @@
               Any authenticated session may STOP TX; lease required to start
             </div>
           </div>
-          <div class="arch-card">
+          <div class="arch-card scope-reveal">
             <div class="label">
               <i class="fas fa-network-wired"></i> Public Edge
             </div>
@@ -1012,45 +1192,43 @@
     </section>
 
     <!-- Key Numbers -->
-    <section class="section" id="numbers" style="background: var(--bg-secondary)">
+    <section class="scope-section" id="numbers">
       <div class="container">
-        <div class="section-header">
-          <span class="section-label">Key Numbers</span>
-          <h2 class="section-title">DSP, Timing, Safety — by the Numbers</h2>
-        </div>
+        <div class="section-label">Key Numbers</div>
+        <h2 class="section-title">DSP, Timing, Safety — by the Numbers</h2>
 
         <div class="perf-grid">
-          <div class="perf-card">
+          <div class="perf-card scope-reveal">
             <div class="metric">12 kHz</div>
             <div class="metric-label">
               Decoder Input<br /><small>int16 mono — the only allowed rate</small>
             </div>
           </div>
-          <div class="perf-card">
+          <div class="perf-card scope-reveal">
             <div class="metric">48 kHz</div>
             <div class="metric-label">
               TX Waveform<br /><small>Fixed TX rate domain</small>
             </div>
           </div>
-          <div class="perf-card">
+          <div class="perf-card scope-reveal">
             <div class="metric">15 s</div>
             <div class="metric-label">
               FT8 Slot Period<br /><small>floor(epoch/TRperiod) identity</small>
             </div>
           </div>
-          <div class="perf-card">
+          <div class="perf-card scope-reveal">
             <div class="metric">1–12</div>
             <div class="metric-label">
               OpenMP Sub-Bands<br /><small>Deterministic partition</small>
             </div>
           </div>
-          <div class="perf-card">
+          <div class="perf-card scope-reveal">
             <div class="metric">3 kHz</div>
             <div class="metric-label">
               Waterfall Span<br /><small>FT8 passband, no blank half</small>
             </div>
           </div>
-          <div class="perf-card">
+          <div class="perf-card scope-reveal">
             <div class="metric">40</div>
             <div class="metric-label">
               Regression Tests<br /><small>ft8sim/ft4sim synthetic signals</small>
@@ -1061,9 +1239,10 @@
         <h3
           style="
             text-align: center;
-            color: var(--text-primary);
+            color: var(--scope-text);
             margin-top: 3rem;
             margin-bottom: 1.5rem;
+            font-family: var(--scope-font-mono);
           "
         >
           Technology Stack
@@ -1084,43 +1263,39 @@
     </section>
 
     <!-- SDD Chapters -->
-    <section class="section" id="sdd" style="background: var(--bg-primary)">
+    <section class="scope-section scope-section-alt" id="sdd">
       <div class="container">
-        <div class="section-header">
-          <span class="section-label">Design Record</span>
-          <h2 class="section-title">15 SDD Chapters</h2>
-          <p class="section-subtitle">
-            Full IBM TeamSD-style System Design Description — requirements,
-            architecture decisions, safety analysis and version history.
-          </p>
-        </div>
+        <div class="section-label">Design Record</div>
+        <h2 class="section-title">15 SDD Chapters</h2>
+        <p class="section-subtitle">
+          Full IBM TeamSD-style System Design Description — requirements,
+          architecture decisions, safety analysis and version history.
+        </p>
         <div class="steps">
-          <div class="step"><h4><a href="sdd/01-executive-summary.html">01 Executive Summary</a></h4></div>
-          <div class="step"><h4><a href="sdd/02-business-direction.html">02 Business Direction</a></h4></div>
-          <div class="step"><h4><a href="sdd/03-project-definition.html">03 Project Definition</a></h4></div>
-          <div class="step"><h4><a href="sdd/04-system-context.html">04 System Context</a></h4></div>
-          <div class="step"><h4><a href="sdd/05-non-functional-requirements.html">05 Non-Functional Requirements</a></h4></div>
-          <div class="step"><h4><a href="sdd/06-use-case-model.html">06 Use Case Model</a></h4></div>
-          <div class="step"><h4><a href="sdd/07-subject-area-model.html">07 Subject Area Model</a></h4></div>
-          <div class="step"><h4><a href="sdd/08-architecture-decisions.html">08 Architecture Decisions</a></h4></div>
-          <div class="step"><h4><a href="sdd/09-architecture-overview.html">09 Architecture Overview</a></h4></div>
-          <div class="step"><h4><a href="sdd/10-service-model.html">10 Service Model</a></h4></div>
-          <div class="step"><h4><a href="sdd/11-component-model.html">11 Component Model</a></h4></div>
-          <div class="step"><h4><a href="sdd/12-operational-model.html">12 Operational Model</a></h4></div>
-          <div class="step"><h4><a href="sdd/13-feasibility-assessment.html">13 Feasibility Assessment</a></h4></div>
-          <div class="step"><h4><a href="sdd/14-version-history.html">14 Version History</a></h4></div>
-          <div class="step"><h4><a href="sdd/15-ptt-safety-architecture.html">15 PTT Safety Architecture</a></h4></div>
+          <div class="step scope-reveal"><h4><a href="sdd/01-executive-summary.html">01 Executive Summary</a></h4></div>
+          <div class="step scope-reveal"><h4><a href="sdd/02-business-direction.html">02 Business Direction</a></h4></div>
+          <div class="step scope-reveal"><h4><a href="sdd/03-project-definition.html">03 Project Definition</a></h4></div>
+          <div class="step scope-reveal"><h4><a href="sdd/04-system-context.html">04 System Context</a></h4></div>
+          <div class="step scope-reveal"><h4><a href="sdd/05-non-functional-requirements.html">05 Non-Functional Requirements</a></h4></div>
+          <div class="step scope-reveal"><h4><a href="sdd/06-use-case-model.html">06 Use Case Model</a></h4></div>
+          <div class="step scope-reveal"><h4><a href="sdd/07-subject-area-model.html">07 Subject Area Model</a></h4></div>
+          <div class="step scope-reveal"><h4><a href="sdd/08-architecture-decisions.html">08 Architecture Decisions</a></h4></div>
+          <div class="step scope-reveal"><h4><a href="sdd/09-architecture-overview.html">09 Architecture Overview</a></h4></div>
+          <div class="step scope-reveal"><h4><a href="sdd/10-service-model.html">10 Service Model</a></h4></div>
+          <div class="step scope-reveal"><h4><a href="sdd/11-component-model.html">11 Component Model</a></h4></div>
+          <div class="step scope-reveal"><h4><a href="sdd/12-operational-model.html">12 Operational Model</a></h4></div>
+          <div class="step scope-reveal"><h4><a href="sdd/13-feasibility-assessment.html">13 Feasibility Assessment</a></h4></div>
+          <div class="step scope-reveal"><h4><a href="sdd/14-version-history.html">14 Version History</a></h4></div>
+          <div class="step scope-reveal"><h4><a href="sdd/15-ptt-safety-architecture.html">15 PTT Safety Architecture</a></h4></div>
         </div>
       </div>
     </section>
 
     <!-- Architecture Decisions -->
-    <section class="section" id="decisions" style="background: var(--bg-secondary)">
+    <section class="scope-section" id="decisions">
       <div class="container">
-        <div class="section-header">
-          <span class="section-label">Architecture Decisions</span>
-          <h2 class="section-title">AD-001 ... AD-015</h2>
-        </div>
+        <div class="section-label">Architecture Decisions</div>
+        <h2 class="section-title">AD-001 ... AD-015</h2>
         <div class="tech-stack">
           <span class="tech-tag">AD-001 Headless Layered Server</span>
           <span class="tech-tag">AD-002 WSJT-X C ABI</span>
@@ -1141,7 +1316,7 @@
       </div>
     </section>
 
-    <footer class="footer">
+    <footer class="scope-footer">
       <div class="container">
         <div class="footer-grid">
           <div class="footer-section">
@@ -1149,7 +1324,7 @@
             <p>
               Headless FT8/FT4 server powered by the WSJT-X 3.0.2 Improved DSP
               core. Built by
-              <a href="https://github.com/cheenle" style="color: var(--accent)"
+              <a href="https://github.com/cheenle" target="_blank" rel="noopener"
                 >cheenle</a
               >.
             </p>
@@ -1211,6 +1386,16 @@
               </li>
             </ul>
           </div>
+          <div class="footer-section">
+            <h4>VLSC</h4>
+            <ul>
+              <li><a href="/">VLSC Projects</a></li>
+              <li><a href="/mrrc_modern/">MRRC Modern</a></li>
+              <li><a href="/mrrc_ft710/">MRRC FT-710</a></li>
+              <li><a href="/efhw/">EFHW</a></li>
+              <li><a href="zh/index.html">中文</a></li>
+            </ul>
+          </div>
         </div>
         <div class="footer-bottom">
           <p>
@@ -1221,23 +1406,6 @@
       </div>
     </footer>
 
-    <script>
-      function toggleMobileMenu() {
-        document.querySelector(".nav-links").classList.toggle("active");
-      }
-      document.querySelectorAll('a[href^="#"]').forEach((a) => {
-        a.addEventListener("click", function (e) {
-          e.preventDefault();
-          const t = document.querySelector(this.getAttribute("href"));
-          if (t) t.scrollIntoView({ behavior: "smooth", block: "start" });
-        });
-      });
-      const nav = document.querySelector(".navbar");
-      window.addEventListener("scroll", () => {
-        nav.style.background =
-          window.scrollY > 50 ? "rgba(10,10,10,0.98)" : "rgba(10,10,10,0.92)";
-      });
-    </script>
-    <script src="js/global-nav.js?v=5" defer data-gn="1"></script>
+    <script src="js/scope.js?v=1" defer></script>
   </body>
 </html>
