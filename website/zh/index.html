@@ -1294,7 +1294,32 @@
       </div>
     </section>
 
-    <footer class="scope-footer">
+<section class="scope-section scope-section-alt" id="division">
+ <div class="container">
+  <div class="section-label">工程环</div>
+  <h2 class="section-title">分工与沉淀契约</h2>
+  <p class="section-subtitle">本工程环在编辑前加载什么、哪些仍由人签字、事后留下什么可读的东西。</p>
+  <div class="fx-grid">
+  <div class="scope-card">
+    <div style="font-family:var(--scope-font-mono);font-size:.72rem;letter-spacing:.08em;text-transform:uppercase;color:var(--scope-primary);margin-bottom:.6rem;">01 · 编辑前加载</div>
+    <div style="font-size:1.02rem;font-weight:600;margin-bottom:.55rem;">AGENTS.md + 14 条注册表 + 钩子</div>
+    <div style="color:var(--scope-text-muted);font-size:.9rem;line-height:1.7;"><code>AGENTS.md</code>、<code>constraints.json</code>（14 条）、prime 步骤与编辑钩子在本仓库全部生效：违反已注册规则的改动在写盘之前即被拦下。</div>
+  </div>
+  <div class="scope-card">
+    <div style="font-family:var(--scope-font-mono);font-size:.72rem;letter-spacing:.08em;text-transform:uppercase;color:var(--scope-primary);margin-bottom:.6rem;">02 · 人来签字</div>
+    <div style="font-size:1.02rem;font-weight:600;margin-bottom:.55rem;">真实波段解码与 UTC 时隙</div>
+    <div style="color:var(--scope-text-muted);font-size:.9rem;line-height:1.7;">真实波段条件下的解码保真度，以及 UTC 时隙的时机判断，由台前的人签字。</div>
+  </div>
+  <div class="scope-card">
+    <div style="font-family:var(--scope-font-mono);font-size:.72rem;letter-spacing:.08em;text-transform:uppercase;color:var(--scope-primary);margin-bottom:.6rem;">03 · 沉淀的契约</div>
+    <div style="font-size:1.02rem;font-weight:600;margin-bottom:.55rem;">vendor-readonly 即契约</div>
+    <div style="color:var(--scope-text-muted);font-size:.9rem;line-height:1.7;"><code>wsjtx-3.0.2/</code> 保持只读，改动一律走 <code>dsp/patched/</code>，因此相对厂商树的差异始终可复审。</div>
+  </div>
+  </div>
+ </div>
+</section>
+
+        <footer class="scope-footer">
       <div class="container">
         <div class="footer-grid">
           <div class="footer-section">

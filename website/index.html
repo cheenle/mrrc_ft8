@@ -1316,7 +1316,32 @@
       </div>
     </section>
 
-    <footer class="scope-footer">
+<section class="scope-section scope-section-alt" id="division">
+ <div class="container">
+  <div class="section-label">Engineering Loop</div>
+  <h2 class="section-title">Division of Work and Contracts Left Behind</h2>
+  <p class="section-subtitle">What this project loads before editing, what a human still signs off, and what stays readable afterwards.</p>
+  <div class="fx-grid">
+  <div class="scope-card">
+    <div style="font-family:var(--scope-font-mono);font-size:.72rem;letter-spacing:.08em;text-transform:uppercase;color:var(--scope-primary);margin-bottom:.6rem;">01 · Loaded before editing</div>
+    <div style="font-size:1.02rem;font-weight:600;margin-bottom:.55rem;">AGENTS.md with a 14-Rule Registry and Hooks</div>
+    <div style="color:var(--scope-text-muted);font-size:.9rem;line-height:1.7;"><code>AGENTS.md</code>, <code>constraints.json</code> (14 rules), the prime step and the edit hooks are all live in this repository: an edit that contradicts a registered rule is refused before it is written.</div>
+  </div>
+  <div class="scope-card">
+    <div style="font-family:var(--scope-font-mono);font-size:.72rem;letter-spacing:.08em;text-transform:uppercase;color:var(--scope-primary);margin-bottom:.6rem;">02 · Human sign-off</div>
+    <div style="font-size:1.02rem;font-weight:600;margin-bottom:.55rem;">On-Air Decoding and UTC Slots</div>
+    <div style="color:var(--scope-text-muted);font-size:.9rem;line-height:1.7;">Decoding fidelity under real band conditions, and the UTC slot timing judgements, stay with a human at the station.</div>
+  </div>
+  <div class="scope-card">
+    <div style="font-family:var(--scope-font-mono);font-size:.72rem;letter-spacing:.08em;text-transform:uppercase;color:var(--scope-primary);margin-bottom:.6rem;">03 · Contract left behind</div>
+    <div style="font-size:1.02rem;font-weight:600;margin-bottom:.55rem;">vendor-readonly as a Contract</div>
+    <div style="color:var(--scope-text-muted);font-size:.9rem;line-height:1.7;"><code>wsjtx-3.0.2/</code> stays read-only and changes go through <code>dsp/patched/</code>, so the delta against the vendor tree remains reviewable.</div>
+  </div>
+  </div>
+ </div>
+</section>
+
+        <footer class="scope-footer">
       <div class="container">
         <div class="footer-grid">
           <div class="footer-section">
