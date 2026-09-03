@@ -1324,8 +1324,8 @@
   <div class="fx-grid">
   <div class="scope-card">
     <div style="font-family:var(--scope-font-mono);font-size:.72rem;letter-spacing:.08em;text-transform:uppercase;color:var(--scope-primary);margin-bottom:.6rem;">01 · Loaded before editing</div>
-    <div style="font-size:1.02rem;font-weight:600;margin-bottom:.55rem;">AGENTS.md with a 14-Rule Registry and Hooks</div>
-    <div style="color:var(--scope-text-muted);font-size:.9rem;line-height:1.7;"><code>AGENTS.md</code>, <code>constraints.json</code> (14 rules), the prime step and the edit hooks are all live in this repository: an edit that contradicts a registered rule is refused before it is written.</div>
+    <div style="font-size:1.02rem;font-weight:600;margin-bottom:.55rem;">AGENTS.md with a 14-Rule Registry (Hook Not Wired)</div>
+    <div style="color:var(--scope-text-muted);font-size:.9rem;line-height:1.7;"><code>AGENTS.md</code>, <code>constraints.json</code> (14 rules), the pre-edit hook ships as an installable snippet (install_hooks.py) and is not wired in this checkout, so no automated pre-edit gate is claimed here.</div>
   </div>
   <div class="scope-card">
     <div style="font-family:var(--scope-font-mono);font-size:.72rem;letter-spacing:.08em;text-transform:uppercase;color:var(--scope-primary);margin-bottom:.6rem;">02 · Human sign-off</div>
