@@ -75,7 +75,15 @@ ssh "$REMOTE_USER@$REMOTE_HOST" << 'REMOTE_EOF'
     set -e
     if [ -d "/var/www/vlsc.net/mrrc_ft8" ] && [ "$(ls -A /var/www/vlsc.net/mrrc_ft8 2>/dev/null)" ]; then
         sudo mkdir -p /var/tmp
-        sudo cp -r /var/www/vlsc.net/mrrc_ft8 /var/tmp/mrrc_ft8_backup_$(date +%Y%m%d_%H%M%S)
+        # downloads/ and videos/ are server-managed binaries no HTML deploy touches,
+        # but they are ~120-140MB of the site: a full cp -r per release piled 1.7G/2.0G
+        # into /var/tmp, which is never reaped. Same fix mrrc_modern already ships.
+        sudo rsync -a --exclude='downloads' --exclude='videos' \
+            /var/www/vlsc.net/mrrc_ft8/ \
+            /var/tmp/mrrc_ft8_backup_$(date +%Y%m%d_%H%M%S)/
+        # retention: keep the 3 newest (|| true: none exist on the first deploy)
+        ls -1dt /var/tmp/mrrc_ft8_backup_* 2>/dev/null | tail -n +4 \
+            | xargs -r -d '\n' sudo rm -rf || true
         echo "Backup created."
     fi
     sudo mkdir -p /var/www/vlsc.net/mrrc_ft8
@@ -108,4 +116,7 @@ echo -e "${GREEN}Deployment Complete!${NC}"
 echo "https://www.vlsc.net/mrrc_ft8/"
 echo ""
 echo "Rollback: ssh $REMOTE_USER@$REMOTE_HOST"
-echo "  sudo rm -rf $REMOTE_WEBROOT && sudo cp -r /var/tmp/mrrc_ft8_backup_* $REMOTE_WEBROOT"
+echo "  # Restore this site only. The DocumentRoot is shared: rm -rf on it would"
+echo "  # destroy the portal and every other sub-site. rsync-merge keeps downloads/."
+echo "  B=\$(ls -1dt /var/tmp/mrrc_ft8_backup_* | head -1)"
+echo "  sudo rsync -a \$B/ $REMOTE_WEBROOT/mrrc_ft8/"
