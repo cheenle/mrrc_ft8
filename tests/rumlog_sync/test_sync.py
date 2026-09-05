@@ -290,3 +290,59 @@ def test_dedupe_pending_keeps_distinct_qsos() -> None:
         _pending_rec("TL8GD", "40m", 100.0, 3),  # different band
     ]
     assert [r["id"] for r in _dedupe_pending(distinct)] == [0, 1, 2, 3]
+
+
+def test_push_skips_record_already_confirmed_via_sibling_row(
+    ft8_db_path, tmp_path: Path, make_rumlog_db
+) -> None:
+    """A pending duplicate of a QSO already in RUMLogNG must not be pushed.
+
+    Regression: JTDX re-imports insert a second FT8 row (source=jtdx,
+    pushed=0) for a QSO already pulled from RUMLogNG (source=rumlog,
+    pushed=1).  _dedupe_pending only collapses duplicates inside the
+    pending batch, so the pending copy was pushed anyway and RUMLogNG
+    received a second row for the same QSO.
+    """
+
+    epoch = 1_795_384_049.0
+    rumlog = tmp_path / "log.sqlite"
+    make_rumlog_db(rumlog, [_rumlog_row("TL8GD", 27139, epoch)])
+    pusher = FakePusher()
+    cfg = _cfg(ft8_db_path, rumlog)
+
+    # Round 1: RUMLogNG holds the QSO → pulled row is confirmed, never pushed.
+    report1 = run_sync_once(cfg, pusher=pusher)
+    assert report1.inserted == 1
+    assert pusher.calls == []
+
+    # The hourly JTDX import later inserts a second row for the same QSO
+    # (completion time within 0.1 s, started_utc derived differently).
+    db = Ft8Db(ft8_db_path)
+    db.ensure_schema()
+    db.insert_record(
+        {
+            "my_call": "BG1SB", "my_grid": "ON80DA", "dx_call": "TL8GD",
+            "dx_grid": "", "report_sent": -12, "report_rcvd": -12,
+            "started_utc": "231546", "mode": "FT8", "freq_hz": 14_074_684,
+            "band": "20m", "status": "completed",
+            "completed_epoch": epoch + 0.049, "rumlog_uuid": "", "source": "jtdx",
+        }
+    )
+    db.commit()
+    db.close()
+
+    # Round 2: nothing new on the RUMLogNG side; the pending copy must be
+    # confirmed without being pushed.
+    report2 = run_sync_once(cfg, pusher=pusher)
+    assert report2.pushed == 0
+    assert report2.confirmed_without_push == 1
+    assert pusher.calls == []
+
+    db = Ft8Db(ft8_db_path)
+    db.ensure_schema()
+    row = db.get_record(2)
+    assert row is not None
+    assert row["pushed_to_rumlog"] == 1
+    assert row["rumlog_uuid"] == f"{27139:032x}".upper()
+    assert json.loads(db.state_get("push_pending") or "{}") == {}
+    db.close()

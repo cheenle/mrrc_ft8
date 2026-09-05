@@ -1,5 +1,19 @@
 # 14. Version History
 
+## Unreleased — 2026-08-31 — RUMLogNG duplicates: JTDX copy re-push + import completion-window dedupe
+
+现场：08-30 一天内 RUMLogNG 又出现 18 对重复（EX7CQ 于 08-23 同因）。逐对核对 FT8 库与日志，根因两层：
+
+- **导入侧**：`sync_jtdx_log` 去重键 `(dx_call, 开始日期, TIME_ON, band)` 与 RUMLogNG 拉取行不一致——拉取行 `started_utc` 由 `completed_epoch` 派生（≈完成时刻），与 ADIF `TIME_ON`（真实开始，早 60–74 s）永不相等，同一条 QSO 被每小时再导入成第二条 FT8 行（`source='jtdx'`, `pushed=0`）。
+- **推送侧**：`_dedupe_pending` 只折叠本批待推送副本，看不到已确认的兄弟行（`source='rumlog'`, `pushed=1`），把第二条照推进 RUMLogNG；pull 轮次事后才 `find_all_existing` 确认全部（日志特征：`pulled new QSO X` → `applescript push ok` → `updated QSO X (2 row(s))`，08-30 出现 16 次 + EX7CQ + UB0SMX/P）。
+
+修复：
+
+- **导入侧**：新增 `Repository.qso_epoch_index` + `adif_import._near_window`——精确键之外按 sync 同谓词（dx_call + band 相等或空通配 + |Δcompleted_epoch| ≤120 s）跨源去重；同一批次内已接受的记录同步加入窗口索引，避免同批两条互相漏判。
+- **推送侧**：新增 `Ft8Db.confirmed_sibling`，`run_sync_once` push 步骤先查同 QSO 已确认兄弟行（`pushed_to_rumlog=1`，排除自身），存在则 `confirm_pushed`（回填兄弟行 rumlog_uuid）不推送；`SyncReport` 新增 `confirmed_without_push` 计数进入 audit。
+
+Regressions: `tests/rumlog_sync/test_sync.py::test_push_skips_record_already_confirmed_via_sibling_row`（全流程：round1 拉取确认 → round2 副本不再推送）；`tests/engine/test_adif_import.py` 新增完成窗口内跳过 / 窗口外仍导入 2 用例；相关套件 52 passed。全量套件中 `test_rig`/`test_dsp_*` 的 socket/shmem `PermissionError` 为沙箱环境限制，与本次改动无关。
+
 ## Unreleased — 2026-08-22 — 切频时重设操作模式（tune_with_mode）
 
 用户现场要求：无论手动（`/radio/band` 顶栏波段选择）还是自动（band_hunt 切频），切频后都要把电台模式重设为配置模式（`rig_mode`，默认 USB，2400 Hz）。电台换波段常恢复 band-stacked 模式（如切到 40m 回到 LSB），FT8 需要 USB。新增 `server/engine/rig.py::tune_with_mode`：先 `set_frequency`（失败照常抛 502/中断 band_hunt 该轮），成功后 best-effort `set_mode` + FT-710 原始路径 `set_filter_width`（hamlib 4.6.2 M 命令不落宽度的既有 workaround），模式/宽度失败仅记日志不掩盖已完成的切频；`AppState.rig_mode` 由 `create_server` 从 `ServerConfig.rig_mode` 注入。UC-006 波段选择流程同步注明。Regressions: `tests/engine/test_rig.py` 新增 5 用例（顺序/空模式跳过/模式失败不掩盖/非 FT-710 宽度 best-effort/频率失败传播）；`tests/web/test_api.py::test_radio_band_rules` 断言切频后 mode=(USB,2400)。
@@ -26,6 +40,7 @@
 - **追猎预算降级**：`band_hunt_loop` 维护 `band_strikes`（band → 被拉回次数），纯函数 `filter_exhausted` 剔除预算耗尽的 band（默认 3 次，`MRRC_FT8_BAND_HUNT_MAX_STRIKES`）；band 不再被 pskreporter 报告或实体已通联时自动重置预算。
 - 顺带修复预存健壮性：`rank_bands` 签名改 `Optional`（本就处理 None）；`_spot_count` 安全 int；`_valid_lines_rate` 校验 helper；`_parse_freq` float 保护；`uvicorn_kwargs` 返回 `dict[str, Any]`；AppState 声明 `_rig_level_cache` 字段；`is not True`/`is True` 语义保留并加 pi-lens-ignore。
 - Regressions: `tests/engine/test_band_hunter.py` 新增 5 用例（手动守卫/超时/无手动 + filter_exhausted 剔除/保留）；全量 926 passed。
+
 ## Unreleased — 2026-08-11 — Decode rows show DXCC entity (country) + wider Band Activity
 
 - **服务器**：`decode_message_view` 新增 `entity` 字段（英文 DXCC 实体名，来自仓库 cty.dat）；`on_decode` 对每个非 mine 且含呼号的解码行做 lookup（独立于 DXCC cache 就绪状态），unknown/own-echo 为空字符串。`is_new_dxcc` 判定不变。
@@ -33,9 +48,11 @@
 - **桌面客户端**：`mrrcStreams.ts` 透传 `entity`；`App.tsx` Band Activity 行消息后显示国家（淡色小字）；左侧日志栏 `lg:col-span-5 → 6`（解码区更宽，网格取整 +20%）。
 - 顺带修复 server/main.py 预存健壮性问题：`MRRC_FT8_RIGCTLD` 端口/`AUDIO_IN_CHANNEL`/`AUDIO_DEVICE` 的 int 转换加保护、`cq_loop_idle_timeout` 冗余 int、`recover_capture` 的 capture 空值窄化、`on_slot_start` 回调改为显式命名函数（原 lambda 返回 Task 与签名不符）。
 - Regressions: `tests/web/test_main.py` 新增 `entity` 字段断言（透传 + 默认空）；全量 880 passed；桌面 `tsc --noEmit` 与 `npm run build` 通过。
+
 ## Unreleased — 2026-08-11 — RUMLogNG sync: first-run merge + cleanup (AD-016 follow-up)
 
 首轮全量合并已执行并验证：RUMLogNG 14750 条并入 FT8 db（SSB/FT4 落 qso 表，以 RUMLogNG 为准覆盖字段）；FT8 db 独有历史经 AppleScript 分批推入 RUMLogNG，闭环确认全部完成。过程中发现并修复两处设计缺陷：①RUMLogNG 6.5 未激活 WSJT-X UDP 2237 解析（socket 收包不处理，HEARTBEAT 无响应）→ 推送通道改为 RUMLogNG 官方 AppleScript API（kHz/UTC，15 条/批）；②FT8 db 历史重复行（JTDX 导入遗留 5 份相同）会重复推入 → 推送前去重 + 拉取确认时全量确认（find_all_existing）。运维（用户指示、一次性、已备份 /tmp/CoreQsoModel_1-backup-*）：清理 RUMLogNG 侧重复 125 条 + AppleScript 验证测试记录 4 条，RUMLogNG 15005→14886 条；同步程序保持只读 RUMLogNG。crontab `*/5` 已安装（flock 防重入）。
+
 ## Unreleased — 2026-08-11 — RUMLogNG bidirectional QSO sync (AD-016)
 
 独立 `rumlog_sync` 包：RUMLogNG 官方 AppleScript 推送（application 属性 + logQSO，kHz/UTC，15 条/批）+ 只读 Core Data 轮询；Z_PK 游标增量、rumlog_uuid 幂等、120 s 去重窗口（推送前去重 + 确认时全量确认，防历史重复行无限 requeue）、以 RUMLogNG 为准的字段冲突规则、推送闭环确认与超轮重推；crontab */5 驱动 + flock 防重入；qso 表新增 rumlog_uuid/pushed_to_rumlog 列（幂等迁移）。WSJT-X UDP 2237 实现保留为备用（实测 RUMLogNG 6.5 未激活 UDP 解析）。规格：docs/superpowers/specs/2026-08-11-rumlogng-sync-design.md。

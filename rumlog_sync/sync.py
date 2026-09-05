@@ -5,7 +5,10 @@ dedupe against the FT8 db (UUID first, then dx_call+band with a 120 s
 window), insert new or update existing with RUMLogNG winning.  Push:
 records with ``pushed_to_rumlog=0`` go out via the RUMLogNG AppleScript
 API (``apple_push``); unconfirmed pushes are requeued after
-``confirm_retries`` rounds.  Every step is transactional per record; failures are logged and
+``confirm_retries`` rounds.  A pending record whose QSO is already
+confirmed in RUMLogNG through another row (JTDX re-import duplicates) is
+confirmed without being pushed — pushing it would duplicate the QSO in
+RUMLogNG.  Every step is transactional per record; failures are logged and
 skip that record, never aborting the round mid-way.
 """
 
@@ -93,6 +96,7 @@ class SyncReport:
     inserted: int = 0
     updated: int = 0
     pushed: int = 0
+    confirmed_without_push: int = 0
     requeued: int = 0
     errors: list[str] = field(default_factory=list)
 
@@ -152,6 +156,28 @@ def run_sync_once(
         report.requeued = ft8.tick_unconfirmed(cfg["confirm_retries"])
         pending = _dedupe_pending(ft8.pending_push_records())
         if pending:
+            to_push: list[dict[str, object]] = []
+            for rec in pending:
+                qso_id = _qso_id(rec)
+                sibling = ft8.confirmed_sibling(
+                    str(rec.get("dx_call") or ""),
+                    str(rec.get("band") or ""),
+                    _rec_epoch(rec),
+                    qso_id,
+                )
+                if sibling is not None:
+                    ft8.confirm_pushed(qso_id, str(sibling.get("rumlog_uuid") or ""))
+                    report.confirmed_without_push += 1
+                    log.info(
+                        "qso %s (%s %s) already in RUMLogNG via row %s;"
+                        " confirmed without push",
+                        qso_id, rec.get("dx_call"), rec.get("band"),
+                        sibling.get("id"),
+                    )
+                else:
+                    to_push.append(rec)
+            pending = to_push
+        if pending:
             pushed_records = pusher(pending)
             for rec in pushed_records:
                 ft8.mark_pushed(_qso_id(rec))
@@ -167,6 +193,7 @@ def run_sync_once(
             "rumlog_sync",
             f"pulled={report.pulled} inserted={report.inserted}"
             f" updated={report.updated} pushed={report.pushed}"
+            f" confirmed_without_push={report.confirmed_without_push}"
             f" requeued={report.requeued}",
         )
         ft8.commit()

@@ -5,6 +5,10 @@ parser must tolerate a half-written trailing line (no ``<eor>`` yet) and
 malformed records.  Dedupe key ``(dx_call, utc date, started_utc, band)``
 collapses JTDX's same-second duplicate attempts and keeps re-syncs
 idempotent; cross-source by default so a live QSO is never re-imported.
+Records are additionally matched against stored rows by the sync's
+completion-time window (dx_call + equal-or-empty band + ±120 s), so a QSO
+that RUMLogNG already holds is never re-imported even when the ADIF
+``TIME_ON`` differs from the stored ``started_utc`` by a minute or so.
 """
 
 from __future__ import annotations
@@ -111,6 +115,29 @@ def dedupe_key(
     return (record.dx_call, date, record.started_utc, record.band)
 
 
+def _near_window(
+    index: dict[str, list[tuple[str, float]]],
+    dx_call: str,
+    band: str,
+    epoch: float,
+    window: float = 120.0,
+) -> bool:
+    """True when a stored QSO matches dx_call + band within the window.
+
+    Same predicate as the sync's cross-source dedupe: band equal or empty on
+    either side is a wildcard, and completion times within ``window`` seconds
+    describe one QSO.
+    """
+
+    for stored_band, stored_epoch in index.get(dx_call, ()):
+        if (
+            (not stored_band or not band or stored_band == band)
+            and abs(stored_epoch - epoch) <= window
+        ):
+            return True
+    return False
+
+
 @dataclass
 class SyncReport:
     parsed: int
@@ -140,6 +167,7 @@ def sync_jtdx_log(
 
     records = parse_adif(text)
     existing = repository.dedupe_keys()
+    near = repository.qso_epoch_index()
     seen: set[tuple[str, str, str, str]] = set()
     to_insert: list[tuple[QSORecord, float]] = []
     skipped = 0
@@ -150,10 +178,15 @@ def sync_jtdx_log(
             continue
         record, epoch = mapped
         key = dedupe_key(record, epoch, fields.get("qso_date", ""))
-        if key in existing or key in seen:
+        if (
+            key in existing
+            or key in seen
+            or _near_window(near, record.dx_call, record.band, epoch)
+        ):
             skipped += 1
             continue
         seen.add(key)
+        near.setdefault(record.dx_call, []).append((record.band, epoch))
         to_insert.append((record, epoch))
 
     inserted = repository.import_qsos(to_insert) if to_insert else 0

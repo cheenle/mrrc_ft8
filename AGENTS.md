@@ -40,7 +40,7 @@ venv/bin/python -m pytest tests/
 | `dsp/wsjt_improved.f90` | Improved profiles 0–4、确定性 A8 owner、严格 OpenMP team 校验和纯 Fortran batch 调度 |
 | `dsp/wsjt_test_hooks.f90` | 仅 `MRRC_FT8_TEST_HOOKS=ON` 时编译的非生产 direct-A8 测试入口 |
 | `server/core/` | DSP Worker/supervisor；ctypes 绑定 wsjt_core；全局 DSP lock |
-| `server/engine/adif_import.py` | JTDX `wsjtx_log.adi` 容错解析（容忍半行写入）+ 去重键 `(dx_call, utc开始日期, started_utc, band)`（跨午夜 QSO 以开始日为准）+ `sync_jtdx_log` 幂等增量导入；启动 + 每小时由 main.py 调度 |
+| `server/engine/adif_import.py` | JTDX `wsjtx_log.adi` 容错解析（容忍半行写入）+ 去重键 `(dx_call, utc开始日期, started_utc, band)`（跨午夜 QSO 以开始日为准）+ 完成时刻 ±120 s 跨源窗口去重（防 RUMLogNG 拉取行因 TIME_ON 偏差被再导入）+ `sync_jtdx_log` 幂等增量导入；启动 + 每小时由 main.py 调度 |
 | `server/engine/dxcc.py` | 仓库内 `cty.dat`（country-files ADIF 格式）解析 + 呼号→DXCC 实体 lookup（`=`精确 / `(23)`数字替换 / 最长前缀）+ `dxcc_summary` 全量统计（总数/实体列表/波段矩阵） |
 | `server/main.py` 自动呼叫 | decode 消息带 `is_new_dxcc`（实体已通联判定）；开关 `auto_call_new_dxcc` 开启后服务端对第一个新 DXCC CQ 自动通联（`auto_call_candidate` 纯函数 + `safety.arm` + `sequencer.reply_to`，不打断当前 QSO） |
 | `server/engine/band_hunter.py` | NFR-088 波段猎人：轮询外部 `/api/band_hunt`（HTTP 唯一跨库边界，pskreporter 侧），`rank_bands`/`decide_switch` 纯函数过滤已通联实体并排序（pskreporter 实体名→cty 规范名归一化：Germany/Malaysia/Turkey 别名）；`MRRC_FT8_BAND_HUNT_URL`（默认空=关闭）+ 设置 `auto_band_hunt` 双闸门；空闲时经现有 rig 调谐路径切频，再由自动呼叫闭环 |
@@ -49,7 +49,7 @@ venv/bin/python -m pytest tests/
 | `desktop/ft8web/` | 桌面客户端（ft8web 壳 + 服务器大脑，GPL v3 派生）：React 19 + Vite + Tailwind；**浏览器零 DSP/音频/PTT** — 解码/waterfall/收发/日志全部走服务器 REST + 三路 WS（`/api/v1`、`/ws/v1/{state,decodes,waterfall}`）；适配层 `mrrcClient.ts`/`mrrcStreams.ts`/`useServerFT8.ts`（隐式控制租约 + 5 s 心跳对齐 §15.4）；登录门 + `last_tx` 快照显示发出的消息。`dist/` 与 `node_modules/` gitignore — **电台部署须本地 `npm run build`**（见其 README）。单击解码行=select（永不发射）、双击=回复（移动 PWA 惯例） |
 | `deploy/` | Caddyfile（模板+live 实例）、Caddy root LaunchDaemon、systemd unit、macOS LaunchAgent（密码哈希经 `python -m server.main --hash-password` bootstrap）；`restart.sh` 串口占用守卫（AD-008：rigctld 启动前检测非 rigctld 持有者，冲突 fail-fast，`MRRC_FT8_SKIP_SERIAL_GUARD=1` 应急跳过）；注意 `restart.sh` 会杀掉本站 `rigctld`（`pgrep -x rigctld`）但会**自动保活其他电台的共享 daemon**（按 `-t $RIGCTLD_PORT` 区分：非本站 rigctld 快照命令、本站 rigctld 就绪后原样恢复，如旧 MRRC 项目共用的 IC-M710@4531）；启动前读 `data/device-config.json`（存在时覆盖 RIG_* 参数） |
 | `acceptance/` | 硬件验收脚本（FT-710 real-radio：preflight/monitor/`--tx`，不进 pytest） |
-| `rumlog_sync/` | 独立 QSO 双向同步（AD-016）：FT8 db ↔ RUMLogNG；AppleScript 推送（WSJT-X UDP 2237 保留为备用）+ 只读 Core Data 轮询；Z_PK 游标、rumlog_uuid 幂等、±120 s 去重窗口（滑窗 + 空 band 通配，与拉取确认同谓词）、RUMLogNG 为准、推送闭环重推；`python -m rumlog_sync` + crontab `*/5` + flock |
+| `rumlog_sync/` | 独立 QSO 双向同步（AD-016）：FT8 db ↔ RUMLogNG；AppleScript 推送（WSJT-X UDP 2237 保留为备用）+ 只读 Core Data 轮询；Z_PK 游标、rumlog_uuid 幂等、±120 s 去重窗口（滑窗 + 空 band 通配，与拉取确认同谓词）、待推送副本若同 QSO 已有已确认兄弟行则直接确认不推送、RUMLogNG 为准、推送闭环重推；`python -m rumlog_sync` + crontab `*/5` + flock |
 | `rumlog_dedup/` | RUMLogNG 重复清理工具（AD-016 受控一次性例外）：只读扫描重复（同同步谓词 + 簇时间跨度≤窗口防链式误并）；默认 `--dry-run`，`--apply --yes --backup DIR` 才写（SQLite online-backup 快照校验 + 拒绝 RUMLogNG 运行中写入）；保留最早时刻行 + merge-then-delete；`python -m rumlog_dedup` |
 | `wsjtx-3.0.2/` | vendor 参考源码（只读，禁止修改；gitignore，仅本地构建/校验用，不入库） |
 | `tests/` | pytest；ft8sim/ft4sim 合成信号回归 |

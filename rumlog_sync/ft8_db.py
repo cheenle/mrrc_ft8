@@ -121,6 +121,27 @@ class Ft8Db:
         ).fetchall()
         return [r["id"] for r in rows]
 
+    def confirmed_sibling(
+        self, dx_call: str, band: str, epoch: float, exclude_id: int
+    ) -> dict[str, object] | None:
+        """A pushed/confirmed row for the same QSO, or None.
+
+        Mirrors ``find_existing`` (equal-or-empty band wildcard, 120 s
+        window) but only considers rows already confirmed on the RUMLogNG
+        side and never the record itself.  The push step uses this to skip
+        a pending duplicate whose QSO RUMLogNG already holds.
+        """
+
+        row = self._con.execute(
+            "SELECT id, rumlog_uuid FROM qso WHERE dx_call = ?"
+            " AND status = 'completed' AND pushed_to_rumlog = 1 AND id != ?"
+            " AND abs(completed_epoch - ?) <= 120"
+            " AND (band = ? OR band = '' OR ? = '')"
+            " ORDER BY id LIMIT 1",
+            (dx_call, exclude_id, epoch, band, band),
+        ).fetchone()
+        return dict(row) if row else None
+
     def find_by_uuid(self, uuid_hex: str) -> int | None:
         row = self._con.execute(
             "SELECT id FROM qso WHERE rumlog_uuid = ?", (uuid_hex,)
@@ -245,12 +266,22 @@ class Ft8Db:
         self._set_pending(pending)
         return requeued
 
-    def confirm_pushed(self, qso_id: int) -> None:
-        """RUMLogNG now holds this QSO: mark pushed and clear pending."""
+    def confirm_pushed(self, qso_id: int, rumlog_uuid: str = "") -> None:
+        """RUMLogNG now holds this QSO: mark pushed and clear pending.
 
-        self._con.execute(
-            "UPDATE qso SET pushed_to_rumlog = 1 WHERE id = ?", (qso_id,)
-        )
+        ``rumlog_uuid`` optionally backfills the confirmed RUMLogNG row's
+        UUID (used when a sibling row already carries it).
+        """
+
+        if rumlog_uuid:
+            self._con.execute(
+                "UPDATE qso SET pushed_to_rumlog = 1, rumlog_uuid = ? WHERE id = ?",
+                (rumlog_uuid, qso_id),
+            )
+        else:
+            self._con.execute(
+                "UPDATE qso SET pushed_to_rumlog = 1 WHERE id = ?", (qso_id,)
+            )
         pending = self._pending()
         pending.pop(qso_id, None)
         self._set_pending(pending)

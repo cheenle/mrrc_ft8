@@ -335,6 +335,27 @@ class Repository:
             keys.add((row["dx_call"], completed.strftime("%Y%m%d"), started, row["band"]))
         return keys
 
+    def qso_epoch_index(self) -> dict[str, list[tuple[str, float]]]:
+        """dx_call → ``[(band, completed_epoch)]`` of stored QSOs.
+
+        Feeds the JTDX import's cross-source dedupe so it matches the sync
+        predicate (dx_call + equal-or-empty band + ±120 s completion time),
+        not just the exact ``(date, started_utc)`` key — RUMLogNG-pulled
+        rows derive ``started_utc`` from the completion time, so the key
+        alone misses them and re-imports the same QSO.
+        """
+
+        with self._lock:
+            rows = self._db.execute(
+                "SELECT dx_call, band, completed_epoch FROM qso"
+            ).fetchall()
+        index: dict[str, list[tuple[str, float]]] = {}
+        for row in rows:
+            index.setdefault(str(row["dx_call"]), []).append(
+                (str(row["band"] or ""), float(row["completed_epoch"]))
+            )
+        return index
+
     def list_qsos(
         self, *, include_void: bool = True, since_days: float | None = None
     ) -> list[StoredQSO]:
