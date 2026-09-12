@@ -110,7 +110,7 @@ def build_page(body_html: str) -> str:
     </div>
 </footer>
 
-<script src="../js/scope.js?v=1" defer></script>
+<script src="../js/scope.js?v=3" defer></script>
 </body>
 </html>"""
 

@@ -176,7 +176,7 @@ def build_page(body_html: str, title: str, current_file: str) -> str:
     </div>
 </footer>
 
-<script src="../js/scope.js?v=1" defer></script>
+<script src="../js/scope.js?v=3" defer></script>
 </body>
 </html>"""
 
